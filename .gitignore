@@ -1,0 +1,58 @@
+# Microsoft Office temporary files
+~$*
+
+# Local installers and recovered input/tooling
+Docs/*.exe
+Recovery/Input/
+Recovery/Tools/
+Recovery/Extracted/
+Recovery/RecoveredSource/
+Recovery/RecoveredProject/*/AuxiliaryFiles/
+Recovery/Analysis/*.log
+
+# Unity generated folders
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+**/[Mm]emoryCaptures/
+**/[Rr]ecordings/
+
+# IDE and generated solution files
+**/.vs/
+**/.vscode/
+**/.idea/
+**/node_modules/
+**/*.csproj
+**/*.sln
+**/*.user
+**/*.suo
+**/*.tmp
+
+# The new exhibition system contains intentional .NET project files.
+!TGZhanTingControlSystem/**/*.csproj
+!TGZhanTingControlSystem/TGZhanTingControlSystem.sln
+
+# Build and test outputs
+**/[Bb]in/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Oo]ut/
+**/[Oo]utput/
+**/TestResults/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Exhibition deployment target is Windows 10 x64 only.
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/Linux/
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/Linux.meta
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/Mac/
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/Mac.meta
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/WebGL/
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/WebGL.meta
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/Win/x86/
+TGZhanTingControlSystem/src/LedPlayer/Assets/UniversalMediaPlayer/Plugins/Win/x86.meta

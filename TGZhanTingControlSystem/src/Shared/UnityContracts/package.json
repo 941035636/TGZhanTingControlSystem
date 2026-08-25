@@ -1,0 +1,7 @@
+{
+  "name": "com.tg.control.contracts",
+  "displayName": "TG Control Contracts",
+  "version": "0.1.0",
+  "unity": "2020.3",
+  "description": "Shared HTTP command and content DTOs for the exhibition clients."
+}

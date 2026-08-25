@@ -1,0 +1,33 @@
+# .NET
+**/bin/
+**/obj/
+**/publish/
+
+# Node
+**/node_modules/
+**/dist/
+src/Server/TG.Control.Server/wwwroot/
+
+# Unity generated
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+src/TouchClient/*.csproj
+src/TouchClient/*.sln
+src/LedPlayer/*.csproj
+src/LedPlayer/*.sln
+
+# Local runtime data and logs
+**/Data/
+*.log
+.env
+.env.*
+
+# IDE / OS
+.vs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

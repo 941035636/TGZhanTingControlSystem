@@ -1,0 +1,14 @@
+{
+  "name": "TG.Control.Touch",
+  "rootNamespace": "TG.Control.Touch",
+  "references": ["TG.Control.UnityContracts"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

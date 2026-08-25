@@ -1,0 +1,14 @@
+{
+  "name": "TG.Control.UnityContracts",
+  "rootNamespace": "TG.Control.UnityContracts",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
