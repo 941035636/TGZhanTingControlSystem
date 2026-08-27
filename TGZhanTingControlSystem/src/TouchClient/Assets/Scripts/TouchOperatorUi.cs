@@ -42,10 +42,7 @@ namespace TG.Control.Touch
         private PageState pageState;
 
         private Image background;
-        private Text title;
-        private Text subtitle;
-        private Text connection;
-        private Image connectionPill;
+        private TouchAppShell appShell;
         private InputField routeInput;
         private Text routeCaption;
         private Text selectionSummary;
@@ -107,8 +104,11 @@ namespace TG.Control.Touch
             Refresh();
         }
 
+        private void Update() => appShell?.Tick(DateTime.Now);
+
         private void OnDestroy()
         {
+            if (appShell != null) appShell.NavigationRequested -= OnShellNavigationRequested;
             if (presenter == null) return;
             presenter.ConnectionChanged -= OnConnectionChanged;
             presenter.ContentLoaded -= OnContentLoaded;
@@ -137,26 +137,12 @@ namespace TG.Control.Touch
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = .5f;
 
-            background = Image("Background", canvas.transform, Hex("#EEF3F0"));
-            Stretch(background.rectTransform);
-            background.raycastTarget = false;
-            var veil = Image("Veil", canvas.transform, new Color(.94f, .96f, .95f, .93f));
-            Stretch(veil.rectTransform);
-            veil.raycastTarget = false;
+            appShell = new TouchAppShell(uiFactory, theme);
+            appShell.Build(canvas.transform);
+            appShell.NavigationRequested += OnShellNavigationRequested;
+            background = appShell.Background;
 
-            var header = Image("Header", canvas.transform, Hex("#12372D"));
-            Anchor(header.rectTransform, 0, 1, 1, 1, 0, -112, 0, 0);
-            title = Label("Title", header.transform, "展厅自动讲解系统", 28, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
-            Anchor(title.rectTransform, 0, .43f, .65f, 1, 42, 0, -20, -12);
-            subtitle = Label("Subtitle", header.transform, "TG EXHIBITION · 智慧展陈中控终端", 14, FontStyle.Normal, Hex("#CADAD3"), TextAnchor.UpperLeft);
-            Anchor(subtitle.rectTransform, 0, 0, .65f, .48f, 43, 6, -20, -2);
-            connectionPill = Image("Connection", header.transform, Hex("#7E552D"));
-            Anchor(connectionPill.rectTransform, 1, .5f, 1, .5f, -315, -22, -42, 22);
-            connection = Label("Connection Label", connectionPill.transform, "● 正在连接", 15, FontStyle.Normal, Color.white, TextAnchor.MiddleCenter);
-            Stretch(connection.rectTransform, 10, 4, -10, -4);
-
-            var body = Rect("Body", canvas.transform);
-            Anchor(body, 0, 0, 1, 1, 20, 18, -20, -124);
+            var body = appShell.ContentRoot;
             homePage = BuildHomePage(body).gameObject;
             editorPage = BuildEditorPage(body).gameObject;
             playbackPage = BuildPlaybackPage(body).gameObject;
@@ -175,8 +161,11 @@ namespace TG.Control.Touch
             layout.childControlHeight = true;
             layout.childForceExpandHeight = false;
 
-            var hero = Panel("Reception Actions", page, Color.white);
-            hero.gameObject.AddComponent<LayoutElement>().preferredHeight = 100;
+            var hero = Panel("Reception Actions", page, theme.SurfaceElevated);
+            var heroElement = hero.gameObject.AddComponent<LayoutElement>();
+            heroElement.minHeight = 112;
+            heroElement.preferredHeight = 112;
+            heroElement.flexibleHeight = 0;
             var heroLayout = hero.gameObject.AddComponent<HorizontalLayoutGroup>();
             heroLayout.padding = new RectOffset(24, 24, 16, 16);
             heroLayout.spacing = 14;
@@ -198,7 +187,7 @@ namespace TG.Control.Touch
             startAllButton = Button(hero, "全部主题讲解", true, () => facade.StartAll());
             startAllButton.gameObject.AddComponent<LayoutElement>().preferredWidth = 230;
 
-            var routesPanel = Panel("Saved Route Area", page, new Color(1, 1, 1, .42f));
+            var routesPanel = Panel("Saved Route Area", page, theme.SurfaceElevated);
             routesPanel.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1;
             var routesLayout = routesPanel.gameObject.AddComponent<VerticalLayoutGroup>();
             routesLayout.padding = new RectOffset(18, 18, 14, 14);
@@ -207,10 +196,13 @@ namespace TG.Control.Touch
             routesLayout.childControlHeight = true;
             routesLayout.childForceExpandHeight = false;
             LayoutLabel(routesPanel, "常用讲解路线", 21, FontStyle.Bold, Ink, 38);
-            routeCards = ScrollGrid(routesPanel, "Route", 3, new Vector2(592, 225), new Vector2(18, 18));
+            routeCards = ScrollGrid(routesPanel, "Route", 3, theme.RouteGridCellSize,
+                new Vector2(theme.CardSpacing, theme.CardSpacing));
 
             homeStatusLabel = LayoutLabel(page, status, 14, FontStyle.Normal, Muted, 54);
-            homeStatusLabel.GetComponent<LayoutElement>().preferredHeight = 54;
+            var homeStatusElement = homeStatusLabel.GetComponent<LayoutElement>();
+            homeStatusElement.preferredHeight = 54;
+            homeStatusElement.flexibleHeight = 0;
             return page;
         }
 
@@ -223,7 +215,7 @@ namespace TG.Control.Touch
             pageLayout.childControlHeight = true;
             pageLayout.childForceExpandHeight = false;
 
-            var toolbar = Panel("Route Editor Toolbar", page, Color.white);
+            var toolbar = Panel("Route Editor Toolbar", page, theme.SurfaceElevated);
             toolbar.gameObject.AddComponent<LayoutElement>().preferredHeight = 176;
             var toolbarLayout = toolbar.gameObject.AddComponent<VerticalLayoutGroup>();
             toolbarLayout.padding = new RectOffset(14, 14, 10, 10);
@@ -274,7 +266,7 @@ namespace TG.Control.Touch
             startButton = Button(actionRow, "开始此路线", true, StartSelected);
             startButton.gameObject.AddComponent<LayoutElement>().preferredWidth = 220;
 
-            var modules = Panel("Theme Editor", page, new Color(1, 1, 1, .36f));
+            var modules = Panel("Theme Editor", page, theme.SurfaceElevated);
             modules.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1;
             var moduleLayout = modules.gameObject.AddComponent<VerticalLayoutGroup>();
             moduleLayout.padding = new RectOffset(10, 10, 10, 10);
@@ -283,14 +275,15 @@ namespace TG.Control.Touch
             moduleLayout.childControlHeight = true;
             moduleLayout.childForceExpandHeight = false;
             LayoutLabel(modules, "选择并编排讲解主题", 21, FontStyle.Bold, Ink, 34);
-            moduleCards = ScrollGrid(modules, "Module", 4, new Vector2(447, 185), new Vector2(12, 12));
+            moduleCards = ScrollGrid(modules, "Module", 4, theme.ModuleGridCellSize,
+                new Vector2(theme.CardSpacing, theme.CardSpacing));
             moduleScroll = moduleCards.parent.GetComponent<ScrollRect>();
             return page;
         }
 
         private RectTransform BuildPlaybackPage(Transform parent)
         {
-            var page = Panel("Playback Page", parent, Color.white);
+            var page = Panel("Playback Page", parent, theme.SurfaceElevated);
             var layout = page.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(150, 150, 90, 70);
             layout.spacing = 14;
@@ -309,7 +302,7 @@ namespace TG.Control.Touch
             spacer.gameObject.AddComponent<LayoutElement>().preferredHeight = 70;
             playbackProgressLabel = LayoutLabel(page, "0 / 0", 18, FontStyle.Bold, Ink, 34);
             playbackProgressLabel.alignment = TextAnchor.MiddleCenter;
-            var progressTrack = Image("Playback Progress", page, Hex("#E3EAE6"));
+            var progressTrack = Image("Playback Progress", page, theme.Border);
             progressTrack.gameObject.AddComponent<LayoutElement>().preferredHeight = 18;
             playbackProgressFill = Image("Progress Fill", progressTrack.transform, accent);
             Anchor(playbackProgressFill.rectTransform, 0, 0, 0, 1, 0, 0, 0, 0);
@@ -593,11 +586,50 @@ namespace TG.Control.Touch
             if (homePage != null) homePage.SetActive(state == PageState.Home);
             if (editorPage != null) editorPage.SetActive(state == PageState.RouteEditor);
             if (playbackPage != null) playbackPage.SetActive(state == PageState.Playback);
+            if (appShell != null)
+            {
+                var section = state == PageState.Playback ? TouchShellSection.Playback
+                    : state == PageState.RouteEditor
+                        ? (string.IsNullOrWhiteSpace(activeRouteId) ? TouchShellSection.Combination : TouchShellSection.Routes)
+                        : TouchShellSection.ReceptionHome;
+                appShell.SetActiveSection(section);
+            }
             if (changed && state == PageState.RouteEditor && moduleScroll != null)
             {
                 Canvas.ForceUpdateCanvases();
                 moduleScroll.verticalNormalizedPosition = 1;
             }
+        }
+
+        private void OnShellNavigationRequested(TouchShellSection section)
+        {
+            if (section == TouchShellSection.Playback)
+            {
+                if (facade.HasActiveSession) ShowPage(PageState.Playback);
+                return;
+            }
+            if (section == TouchShellSection.Combination)
+            {
+                if (facade.HasActiveSession)
+                {
+                    status = "当前讲解尚未结束，请先完成或终止后再编辑主题组合。";
+                    Refresh();
+                    return;
+                }
+                NewTemporaryRoute();
+                return;
+            }
+
+            if (pageState == PageState.RouteEditor)
+            {
+                ReturnHome();
+                if (pageState != PageState.Home) return;
+            }
+            else
+            {
+                ShowPage(PageState.Home);
+            }
+            appShell.SetActiveSection(section);
         }
 
         private void RebuildRoutes()
@@ -606,7 +638,7 @@ namespace TG.Control.Touch
             Clear(routeCards);
             if (routes.Length == 0)
             {
-                var empty = Panel("No Saved Routes", routeCards, Color.white);
+                var empty = Panel("No Saved Routes", routeCards, theme.Surface);
                 var emptyLayout = empty.gameObject.AddComponent<VerticalLayoutGroup>();
                 emptyLayout.padding = new RectOffset(26, 26, 24, 24);
                 emptyLayout.spacing = 10;
@@ -622,7 +654,8 @@ namespace TG.Control.Touch
             foreach (var item in routes)
             {
                 var route = item;
-                var card = Panel("Route " + route.name, routeCards, route.id == activeRouteId ? Hex("#E1EEE7") : Color.white);
+                var card = Panel("Route " + route.name, routeCards,
+                    route.id == activeRouteId ? theme.PrimaryMuted : theme.Surface);
                 var element = card.gameObject.AddComponent<LayoutElement>();
                 element.preferredWidth = 592;
                 element.preferredHeight = 225;
@@ -655,7 +688,8 @@ namespace TG.Control.Touch
             {
                 var module = item;
                 var isSelected = selected.Contains(module.id);
-                var card = Panel("Module " + module.order, moduleCards, isSelected ? Hex("#DDEDE4") : Color.white);
+                var card = Panel("Module " + module.order, moduleCards,
+                    isSelected ? theme.PrimaryMuted : theme.Surface);
                 var element = card.gameObject.AddComponent<LayoutElement>();
                 element.preferredWidth = 447;
                 element.preferredHeight = 185;
@@ -694,9 +728,8 @@ namespace TG.Control.Touch
 
         private void Refresh()
         {
-            if (connection == null) return;
-            connection.text = connected ? "● 服务在线" : "● 正在连接";
-            connectionPill.color = connected ? Hex("#266F57") : Hex("#7E552D");
+            if (appShell == null) return;
+            appShell.SetGlobalState(connected, readiness, facade.HasActiveSession);
             if (readinessLabel != null)
             {
                 readinessLabel.text = readiness?.message ?? "正在检查LED播放端和内容版本…";
@@ -750,12 +783,12 @@ namespace TG.Control.Touch
         private void ApplyUiExperience(UiExperienceConfig config)
         {
             if (config == null) return;
-            if (!string.IsNullOrWhiteSpace(config.touchTitle)) title.text = config.touchTitle;
-            if (!string.IsNullOrWhiteSpace(config.touchSubtitle)) subtitle.text = config.touchSubtitle;
+            appShell.SetBranding(config.touchTitle, config.touchSubtitle);
             if (ColorUtility.TryParseHtmlString(config.touchAccentColor, out var color))
             {
                 theme.SetAccent(color);
                 accent = theme.Accent;
+                appShell.RefreshTheme();
             }
             if (ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out color)) background.color = color;
             if (!string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) StartCoroutine(LoadBackground(apiClient.NormalizeUrl(config.touchBackgroundUrl)));
@@ -810,6 +843,5 @@ namespace TG.Control.Touch
         private static void Clear(Transform root) => TouchUiFactory.Clear(root);
         private static void Stretch(RectTransform rect, float left = 0, float bottom = 0, float right = 0, float top = 0) => TouchUiFactory.Stretch(rect, left, bottom, right, top);
         private static void Anchor(RectTransform rect, float minX, float minY, float maxX, float maxY, float left, float bottom, float right, float top) => TouchUiFactory.Anchor(rect, minX, minY, maxX, maxY, left, bottom, right, top);
-        private static Color Hex(string value) => TouchTheme.ParseColor(value);
     }
 }

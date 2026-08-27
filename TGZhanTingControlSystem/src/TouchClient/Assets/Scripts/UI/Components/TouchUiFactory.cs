@@ -66,9 +66,10 @@ namespace TG.Control.Touch.UI.Components
             var colors = button.colors;
             colors.highlightedColor = primary ? theme.PrimaryHighlight : theme.SecondaryHighlight;
             colors.pressedColor = primary ? theme.PrimaryPressed : theme.SecondaryPressed;
-            colors.disabledColor = new Color(.75f, .79f, .77f, .55f);
+            colors.disabledColor = theme.Disabled;
             button.colors = colors;
-            var label = Label("Label", image.transform, text, 14, FontStyle.Bold, primary ? Color.white : theme.Ink, TextAnchor.MiddleCenter);
+            var label = Label("Label", image.transform, text, theme.ButtonText, FontStyle.Bold,
+                theme.TextPrimary, TextAnchor.MiddleCenter);
             Stretch(label.rectTransform, 6, 3, -6, -3);
             return button;
         }
@@ -84,7 +85,9 @@ namespace TG.Control.Touch.UI.Components
             var text = Label("Text", image.transform, string.Empty, size, FontStyle.Normal, theme.Ink, TextAnchor.MiddleLeft);
             Stretch(text.rectTransform, 16, 5, -16, -5);
             text.supportRichText = false;
-            var hint = Label("Placeholder", image.transform, placeholder, size, FontStyle.Normal, new Color(.45f, .52f, .49f, .65f), TextAnchor.MiddleLeft);
+            var hintColor = theme.TextSecondary;
+            hintColor.a = .65f;
+            var hint = Label("Placeholder", image.transform, placeholder, size, FontStyle.Normal, hintColor, TextAnchor.MiddleLeft);
             Stretch(hint.rectTransform, 16, 5, -16, -5);
             field.textComponent = text;
             field.placeholder = hint;
