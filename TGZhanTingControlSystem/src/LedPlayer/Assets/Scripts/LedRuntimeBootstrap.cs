@@ -21,6 +21,10 @@ namespace TG.Control.LedPlayer
             mediaPlayer.AutoPlay = false;
             mediaPlayer.Loop = false;
             var adapter = root.AddComponent<UniversalMediaPlaybackAdapter>();
+            var narrationAudio = root.AddComponent<AudioSource>();
+            narrationAudio.playOnAwake = false;
+            narrationAudio.loop = false;
+            narrationAudio.spatialBlend = 0f;
             var controller = root.AddComponent<LedPlaybackController>();
             var overlay = root.AddComponent<LedStatusOverlay>();
             var videoOutput = CreateVideoCanvas(root.transform);
@@ -28,7 +32,14 @@ namespace TG.Control.LedPlayer
             SetReference(adapter, "mediaPlayer", mediaPlayer);
             SetReference(controller, "apiClient", api);
             SetReference(controller, "playbackAdapter", adapter);
+            SetReference(controller, "narrationAudioSource", narrationAudio);
             SetReference(overlay, "apiClient", api);
+            SetReference(overlay, "playbackController", controller);
+            foreach (var camera in Object.FindObjectsOfType<Camera>())
+            {
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Color.black;
+            }
             root.SetActive(true);
         }
 

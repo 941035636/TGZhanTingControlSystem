@@ -15,7 +15,8 @@ public enum PlaybackAction
     Resume,
     Stop,
     Seek,
-    Skip
+    Skip,
+    Retry
 }
 
 public enum PlaybackState
@@ -29,7 +30,13 @@ public enum PlaybackState
     Skipped
 }
 
-public sealed record ClientRegistration(string ClientId, ClientKind Kind, string AppVersion);
+public sealed record ClientRegistration(
+    string ClientId,
+    ClientKind Kind,
+    string AppVersion,
+    long ContentVersion = 0,
+    bool Ready = true,
+    string? Status = null);
 
 public sealed record StartNarrationRequest(IReadOnlyList<string> ModuleIds, string RequestedBy);
 
@@ -49,7 +56,11 @@ public sealed record PlaybackCommand(
     string? MediaUrl,
     DateTimeOffset ExecuteAtUtc,
     double PositionSeconds,
-    long ContentVersion);
+    long ContentVersion,
+    string? NarrationAudioUrl = null,
+    AudioMixPolicy AudioMixPolicy = AudioMixPolicy.Duck,
+    double VideoVolume = 0.25,
+    double NarrationVolume = 1.0);
 
 public sealed record PlaybackStatusReport(
     string ClientId,
@@ -59,7 +70,8 @@ public sealed record PlaybackStatusReport(
     PlaybackState State,
     double PositionSeconds,
     string? Error,
-    DateTimeOffset ReportedAtUtc);
+    DateTimeOffset ReportedAtUtc,
+    double Progress = 0);
 
 public sealed record ClientRuntimeStatus(
     string ClientId,
@@ -67,7 +79,10 @@ public sealed record ClientRuntimeStatus(
     string AppVersion,
     DateTimeOffset RegisteredAtUtc,
     DateTimeOffset LastSeenUtc,
-    bool Online);
+    bool Online,
+    long ContentVersion = 0,
+    bool Ready = true,
+    string? Status = null);
 
 public sealed record PlaybackSessionStatus(
     string SessionId,
@@ -82,8 +97,48 @@ public sealed record PlaybackSessionStatus(
     bool PlayPublished,
     IReadOnlyList<string> ExpectedClients,
     IReadOnlyList<string> ReadyClients,
-    IReadOnlyList<string> CompletedClients);
+    IReadOnlyList<string> CompletedClients,
+    double PreparationProgress = 0);
 
 public sealed record TtsSynthesisRequest(string Text, string Voice, double Rate, double Volume, double Pitch);
 
 public sealed record TtsSynthesisResult(string AudioUrl, double DurationSeconds, string ProviderRequestId);
+
+public sealed record ContentSyncAsset(string Url, string Sha256, long SizeBytes);
+
+public sealed record ContentSyncManifest(long Version, IReadOnlyList<ContentSyncAsset> Assets);
+
+public sealed record NarrationRoute(
+    string Id,
+    string Name,
+    IReadOnlyList<string> ModuleIds,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record SaveNarrationRouteRequest(string? Id, string Name, IReadOnlyList<string> ModuleIds);
+
+public sealed record SystemReadiness(
+    bool CanStart,
+    long ContentVersion,
+    bool LedOnline,
+    bool LedReady,
+    long LedContentVersion,
+    string Message,
+    DateTimeOffset CheckedAtUtc);
+
+public sealed record ContentVersionSummary(
+    long Version,
+    DateTimeOffset PublishedAtUtc,
+    string PublishedBy,
+    int ModuleCount,
+    int NodeCount,
+    bool Current);
+
+public sealed record OperationalEvent(
+    string Id,
+    DateTimeOffset OccurredAtUtc,
+    string Level,
+    string Category,
+    string Action,
+    string Message,
+    string? SessionId = null,
+    string? Detail = null);

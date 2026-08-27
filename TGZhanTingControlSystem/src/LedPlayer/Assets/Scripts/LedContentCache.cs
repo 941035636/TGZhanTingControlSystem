@@ -10,9 +10,10 @@ namespace TG.Control.LedPlayer
 {
     public sealed class LedContentCache
     {
+        public static LedContentCache Shared { get; } = new LedContentCache();
         private string contentDirectory;
 
-        public IEnumerator Resolve(string mediaUrl, Action<string> success, Action<string> failure)
+        public IEnumerator Resolve(string mediaUrl, Action<string> success, Action<string> failure, long expectedSize = 0, Action<float> progress = null)
         {
             if (string.IsNullOrWhiteSpace(mediaUrl))
             {
@@ -36,11 +37,14 @@ namespace TG.Control.LedPlayer
             var extension = Path.GetExtension(new Uri(mediaUrl).AbsolutePath);
             if (string.IsNullOrWhiteSpace(extension)) extension = ".mp4";
             var finalPath = Path.Combine(directory, Hash(mediaUrl) + extension);
-            if (File.Exists(finalPath) && new FileInfo(finalPath).Length > 0)
+            if (File.Exists(finalPath) && new FileInfo(finalPath).Length > 0 &&
+                (expectedSize <= 0 || new FileInfo(finalPath).Length == expectedSize))
             {
                 success(new Uri(finalPath).AbsoluteUri);
                 yield break;
             }
+
+            if (File.Exists(finalPath)) File.Delete(finalPath);
 
             var partialPath = finalPath + ".partial";
             var existingLength = File.Exists(partialPath) ? new FileInfo(partialPath).Length : 0;
@@ -48,10 +52,26 @@ namespace TG.Control.LedPlayer
             {
                 request.downloadHandler = new DownloadHandlerFile(partialPath, existingLength > 0);
                 if (existingLength > 0) request.SetRequestHeader("Range", "bytes=" + existingLength + "-");
-                yield return request.SendWebRequest();
+                var operation = request.SendWebRequest();
+                while (!operation.isDone)
+                {
+                    progress?.Invoke(request.downloadProgress);
+                    yield return null;
+                }
+                progress?.Invoke(1f);
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     failure(request.error);
+                    yield break;
+                }
+
+                // Some static file servers ignore Range and return the complete file.
+                // Never append a complete response to an existing partial file.
+                if (existingLength > 0 && request.responseCode == 200)
+                {
+                    request.Dispose();
+                    if (File.Exists(partialPath)) File.Delete(partialPath);
+                    yield return Resolve(mediaUrl, success, failure, expectedSize, progress);
                     yield break;
                 }
             }

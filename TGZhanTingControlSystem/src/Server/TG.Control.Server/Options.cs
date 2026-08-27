@@ -14,6 +14,7 @@ public sealed class PlaybackOptions
     public int PrepareLeadMilliseconds { get; init; } = 1500;
     public int SyncToleranceMilliseconds { get; init; } = 500;
     public int LongPollSeconds { get; init; } = 20;
+    public bool RequireLedReadyBeforeStart { get; init; } = true;
 }
 
 public sealed class TtsOptions
@@ -29,4 +30,10 @@ public sealed class AdminOptions
     public string Username { get; init; } = "admin";
     public string Password { get; init; } = "TG@2026";
     public int SessionHours { get; init; } = 12;
+}
+
+public sealed class TerminalOptions
+{
+    public const string SectionName = "Terminal";
+    public string ApiKey { get; init; } = "TG-TERMINAL-2026";
 }

@@ -14,6 +14,13 @@ public enum FailurePolicy
     Stop
 }
 
+public enum AudioMixPolicy
+{
+    Duck,
+    KeepOriginal,
+    MuteVideo
+}
+
 public sealed record ContentAsset(
     string Id,
     string Name,
@@ -30,7 +37,10 @@ public sealed record NarrationNode(
     string NarrationText,
     string? TtsAudioUrl,
     IReadOnlyList<ContentAsset> Assets,
-    FailurePolicy FailurePolicy = FailurePolicy.Skip);
+    FailurePolicy FailurePolicy = FailurePolicy.Skip,
+    AudioMixPolicy AudioMixPolicy = AudioMixPolicy.Duck,
+    double VideoVolume = 0.25,
+    double NarrationVolume = 1.0);
 
 public sealed record ExhibitionModule(
     string Id,
@@ -46,3 +56,20 @@ public sealed record PublishedContent(
     DateTimeOffset PublishedAtUtc,
     string PublishedBy,
     IReadOnlyList<ExhibitionModule> Modules);
+
+public sealed record UiExperienceConfig(
+    long Version,
+    string TouchTitle,
+    string TouchSubtitle,
+    string? TouchBackgroundUrl,
+    string TouchBackgroundColor,
+    string TouchAccentColor,
+    string LedTitle,
+    string LedSubtitle,
+    string? LedIdleMediaUrl,
+    string LedIdleMediaKind,
+    string LedBackgroundColor,
+    bool LedShowBranding,
+    bool LedShowStatus,
+    DateTimeOffset UpdatedAtUtc,
+    string UpdatedBy);

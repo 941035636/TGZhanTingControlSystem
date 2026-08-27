@@ -21,6 +21,7 @@ src/LedPlayer/*.sln
 
 # Local runtime data and logs
 **/Data/
+.codex-test-data/
 *.log
 .env
 .env.*

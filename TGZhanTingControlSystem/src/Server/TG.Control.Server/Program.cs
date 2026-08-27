@@ -10,12 +10,17 @@ builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(Stor
 builder.Services.Configure<PlaybackOptions>(builder.Configuration.GetSection(PlaybackOptions.SectionName));
 builder.Services.Configure<TtsOptions>(builder.Configuration.GetSection(TtsOptions.SectionName));
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.SectionName));
+builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection(TerminalOptions.SectionName));
 builder.Services.AddSingleton<IContentRepository, JsonContentRepository>();
 builder.Services.AddSingleton<ICommandBroker, CommandBroker>();
 builder.Services.AddSingleton<PlaybackCoordinator>();
 builder.Services.AddSingleton<ITtsService, UnconfiguredTtsService>();
 builder.Services.AddSingleton<AdminSessionStore>();
 builder.Services.AddSingleton<AssetStorage>();
+builder.Services.AddSingleton<NarrationRouteRepository>();
+builder.Services.AddSingleton<UiExperienceRepository>();
+builder.Services.AddSingleton<PlaybackSessionStore>();
+builder.Services.AddSingleton<OperationalEventRepository>();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin()));
 builder.Services.AddProblemDetails();
 
@@ -43,12 +48,75 @@ app.MapPost("/api/auth/logout", (HttpRequest request, AdminSessionStore sessions
     return Results.NoContent();
 });
 app.MapGet("/api/content/current", (IContentRepository repository, CancellationToken ct) => repository.GetAsync(ct));
-app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishContentRequest request, AdminSessionStore sessions, IContentRepository repository, CancellationToken ct) =>
+app.MapGet("/api/ui/current", (UiExperienceRepository repository, CancellationToken ct) => repository.GetAsync(ct));
+app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig config, AdminSessionStore sessions, UiExperienceRepository repository, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
+    return Results.Ok(await repository.SaveAsync(config, username, ct));
+});
+app.MapGet("/api/content/manifest", async (IContentRepository repository, CancellationToken ct) =>
+{
+    var content = await repository.GetAsync(ct);
+    var assets = content.Modules
+        .SelectMany(module => module.Nodes ?? [])
+        .SelectMany(node =>
+        {
+            var nodeAssets = (node.Assets ?? []).Select(asset => new ContentSyncAsset(asset.Url, asset.Sha256, asset.SizeBytes)).ToList();
+            if (!string.IsNullOrWhiteSpace(node.TtsAudioUrl))
+                nodeAssets.Add(new ContentSyncAsset(node.TtsAudioUrl, string.Empty, 0));
+            return nodeAssets;
+        })
+        .Where(asset => !string.IsNullOrWhiteSpace(asset.Url))
+        .GroupBy(asset => asset.Url, StringComparer.OrdinalIgnoreCase)
+        .Select(group => group.First())
+        .ToArray();
+    return Results.Ok(new ContentSyncManifest(content.Version, assets));
+});
+app.MapGet("/api/routes", async (NarrationRouteRepository repository, CancellationToken ct) =>
+    Results.Ok(new { routes = await repository.GetAllAsync(ct) }));
+app.MapPost("/api/routes", async (HttpRequest httpRequest, SaveNarrationRouteRequest request, NarrationRouteRepository repository,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, OperationalEventRepository events, CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(httpRequest, sessions, terminal, out var actor)) return Results.Unauthorized();
+    try
+    {
+        var route = await repository.SaveAsync(request, ct);
+        await events.AppendAsync("Information", "Route", "Save", $"{actor} 保存了讲解路线“{route.Name}”。", detail: route.Id, cancellationToken: ct);
+        return Results.Ok(route);
+    }
+    catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
+});
+app.MapDelete("/api/routes/{id}", async (string id, HttpRequest httpRequest, NarrationRouteRepository repository,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, OperationalEventRepository events, CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(httpRequest, sessions, terminal, out var actor)) return Results.Unauthorized();
+    if (!await repository.DeleteAsync(id, ct)) return Results.NotFound();
+    await events.AppendAsync("Warning", "Route", "Delete", $"{actor} 删除了讲解路线。", detail: id, cancellationToken: ct);
+    return Results.NoContent();
+});
+app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishContentRequest request, AdminSessionStore sessions,
+    IContentRepository repository, OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
     var validation = ContentValidator.Validate(request.Modules);
     if (validation.Count > 0) return Results.ValidationProblem(validation);
-    return Results.Ok(await repository.SaveAsync(request.Modules, username, ct));
+    var content = await repository.SaveAsync(request.Modules, username, ct);
+    await events.AppendAsync("Information", "Content", "Publish", $"{username} 发布了内容版本 V{content.Version}。", cancellationToken: ct);
+    return Results.Ok(content);
+});
+app.MapGet("/api/content/versions", async (HttpRequest request, AdminSessionStore sessions, IContentRepository repository, CancellationToken ct) =>
+    sessions.TryValidate(request, out _) ? Results.Ok(await repository.GetHistoryAsync(ct)) : Results.Unauthorized());
+app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpRequest request, AdminSessionStore sessions,
+    IContentRepository repository, OperationalEventRepository events, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
+    try
+    {
+        var content = await repository.RollbackAsync(version, username, ct);
+        await events.AppendAsync("Warning", "Content", "Rollback", $"{username} 将内容回滚至 V{version}，生成新版本 V{content.Version}。", cancellationToken: ct);
+        return Results.Ok(content);
+    }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 app.MapPost("/api/assets/upload", async (HttpContext context, AdminSessionStore sessions, AssetStorage storage, CancellationToken ct) =>
 {
@@ -75,13 +143,17 @@ app.MapGet("/api/tts/status", (HttpRequest request, AdminSessionStore sessions, 
     sessions.TryValidate(request, out _)
         ? Results.Ok(new { provider = options.Value.Provider, voice = options.Value.Voice, configured = !string.Equals(options.Value.Provider, "NotConfigured", StringComparison.OrdinalIgnoreCase) })
         : Results.Unauthorized());
-app.MapPost("/api/clients/register", (ClientRegistration registration, ICommandBroker broker) =>
+app.MapPost("/api/clients/register", (HttpRequest request, ClientRegistration registration, ICommandBroker broker,
+    IOptions<TerminalOptions> terminal) =>
 {
+    if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
     broker.Register(registration);
     return Results.Ok(new { registered = true });
 });
-app.MapGet("/api/commands/next", async (string clientId, ICommandBroker broker, IOptions<PlaybackOptions> options, CancellationToken ct) =>
+app.MapGet("/api/commands/next", async (string clientId, HttpRequest request, ICommandBroker broker,
+    IOptions<PlaybackOptions> options, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
 {
+    if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
     var command = await broker.WaitAsync(clientId, TimeSpan.FromSeconds(options.Value.LongPollSeconds), ct);
     return command is null ? Results.NoContent() : Results.Ok(command);
 });
@@ -89,10 +161,34 @@ app.MapGet("/api/clients/status", (HttpRequest request, AdminSessionStore sessio
     sessions.TryValidate(request, out _)
         ? Results.Ok(broker.GetClientStatuses(TimeSpan.FromSeconds(Math.Max(10, options.Value.LongPollSeconds * 2 + 5))))
         : Results.Unauthorized());
-app.MapPost("/api/playback/start", async (StartNarrationRequest request, PlaybackCoordinator coordinator, CancellationToken ct) =>
-    Results.Ok(await coordinator.StartAsync(request, ct)));
-app.MapPost("/api/playback/control", async (ControlNarrationRequest request, PlaybackCoordinator coordinator, CancellationToken ct) =>
+app.MapGet("/api/readiness", async (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
+    ICommandBroker broker, IOptions<PlaybackOptions> playback, IContentRepository repository, CancellationToken ct) =>
 {
+    if (!HasOperatorAccess(request, sessions, terminal, out _)) return Results.Unauthorized();
+    var content = await repository.GetAsync(ct);
+    var threshold = TimeSpan.FromSeconds(Math.Max(10, playback.Value.LongPollSeconds * 2 + 5));
+    var led = broker.GetClientStatuses(threshold)
+        .FirstOrDefault(item => string.Equals(item.ClientId, playback.Value.LedClientId, StringComparison.OrdinalIgnoreCase));
+    var online = led?.Online == true;
+    var ready = online && led?.Ready == true && led.ContentVersion == content.Version;
+    var message = !online ? "LED播放端离线" : led?.Ready != true ? led?.Status ?? "LED正在准备素材"
+        : led.ContentVersion != content.Version ? $"LED正在同步内容 V{content.Version}（当前 V{led.ContentVersion}）"
+        : "服务器、LED和讲解内容均已就绪";
+    return Results.Ok(new SystemReadiness(ready, content.Version, online, led?.Ready == true,
+        led?.ContentVersion ?? 0, message, DateTimeOffset.UtcNow));
+});
+app.MapPost("/api/playback/start", async (HttpRequest httpRequest, StartNarrationRequest request,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(httpRequest, sessions, terminal, out _)) return Results.Unauthorized();
+    try { return Results.Ok(await coordinator.StartAsync(request, ct)); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+    catch (KeyNotFoundException exception) { return Results.BadRequest(new { message = exception.Message }); }
+});
+app.MapPost("/api/playback/control", async (HttpRequest httpRequest, ControlNarrationRequest request,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(httpRequest, sessions, terminal, out _)) return Results.Unauthorized();
     var result = await coordinator.ControlAsync(request, ct);
     return result.Accepted ? Results.Ok(result) : Results.NotFound(result);
 });
@@ -100,19 +196,33 @@ app.MapGet("/api/playback/sessions", async (HttpRequest request, AdminSessionSto
     sessions.TryValidate(request, out _)
         ? Results.Ok(await coordinator.GetSessionsAsync(ct))
         : Results.Unauthorized());
-app.MapGet("/api/playback/sessions/{sessionId}", async (string sessionId, PlaybackCoordinator coordinator, CancellationToken ct) =>
+app.MapGet("/api/playback/active", async (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
+    PlaybackCoordinator coordinator, CancellationToken ct) =>
 {
+    if (!HasOperatorAccess(request, sessions, terminal, out _)) return Results.Unauthorized();
+    var active = (await coordinator.GetSessionsAsync(ct)).FirstOrDefault();
+    return Results.Ok(new { active = active is not null, session = active });
+});
+app.MapGet("/api/playback/sessions/{sessionId}", async (string sessionId, HttpRequest request,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(request, sessions, terminal, out _)) return Results.Unauthorized();
     var session = await coordinator.GetSessionAsync(sessionId, ct);
     return Results.Ok(new { active = session is not null, session });
 });
-app.MapPost("/api/playback/status", async (PlaybackStatusReport report, PlaybackCoordinator coordinator, ILoggerFactory loggerFactory, CancellationToken ct) =>
+app.MapPost("/api/playback/status", async (HttpRequest request, PlaybackStatusReport report,
+    IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, ILoggerFactory loggerFactory, CancellationToken ct) =>
 {
+    if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
     loggerFactory.CreateLogger("PlaybackStatus").LogInformation(
         "Client {ClientId} command {CommandId} state {State} position {Position} error {Error}",
         report.ClientId, report.CommandId, report.State, report.PositionSeconds, report.Error);
     await coordinator.ReportAsync(report, ct);
     return Results.Accepted();
 });
+app.MapGet("/api/operations", async (HttpRequest request, int? count, AdminSessionStore sessions,
+    OperationalEventRepository events, CancellationToken ct) =>
+    sessions.TryValidate(request, out _) ? Results.Ok(await events.GetRecentAsync(count ?? 200, ct)) : Results.Unauthorized());
 app.MapPost("/api/tts/synthesize", async (HttpRequest httpRequest, TtsSynthesisRequest request, AdminSessionStore sessions, ITtsService tts, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(httpRequest, out _)) return Results.Unauthorized();
@@ -121,5 +231,17 @@ app.MapPost("/api/tts/synthesize", async (HttpRequest httpRequest, TtsSynthesisR
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+static bool HasTerminalAccess(HttpRequest request, IOptions<TerminalOptions> options) =>
+    !string.IsNullOrWhiteSpace(options.Value.ApiKey) &&
+    string.Equals(request.Headers["X-TG-Terminal-Key"].ToString(), options.Value.ApiKey, StringComparison.Ordinal);
+
+static bool HasOperatorAccess(HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal, out string actor)
+{
+    if (sessions.TryValidate(request, out actor)) return true;
+    if (HasTerminalAccess(request, terminal)) { actor = "touch-terminal"; return true; }
+    actor = string.Empty;
+    return false;
+}
 
 public sealed record PublishContentRequest(IReadOnlyList<ExhibitionModule> Modules);

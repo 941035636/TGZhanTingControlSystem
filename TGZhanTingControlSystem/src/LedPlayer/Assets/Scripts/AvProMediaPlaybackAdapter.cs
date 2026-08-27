@@ -98,5 +98,13 @@ namespace TG.Control.LedPlayer
                 mediaPlayer.Control.Seek((float)Math.Max(0.0, positionSeconds * 1000.0));
             }
         }
+
+        public void SetVolume(double volume01)
+        {
+            if (mediaPlayer != null && mediaPlayer.Control != null)
+            {
+                mediaPlayer.Control.SetVolume(Mathf.Clamp01((float)volume01));
+            }
+        }
     }
 }

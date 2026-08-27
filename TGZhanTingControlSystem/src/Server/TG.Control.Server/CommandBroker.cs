@@ -23,8 +23,17 @@ public sealed class CommandBroker : ICommandBroker
     {
         var now = DateTimeOffset.UtcNow;
         clients.AddOrUpdate(registration.ClientId,
-            _ => new ClientPresence(registration.ClientId, registration.Kind, registration.AppVersion, now, now),
-            (_, current) => current with { Kind = registration.Kind, AppVersion = registration.AppVersion, LastSeenUtc = now });
+            _ => new ClientPresence(registration.ClientId, registration.Kind, registration.AppVersion, now, now,
+                registration.ContentVersion, registration.Ready, registration.Status),
+            (_, current) => current with
+            {
+                Kind = registration.Kind,
+                AppVersion = registration.AppVersion,
+                LastSeenUtc = now,
+                ContentVersion = registration.ContentVersion,
+                Ready = registration.Ready,
+                Status = registration.Status
+            });
         GetChannel(registration.ClientId);
     }
 
@@ -34,7 +43,8 @@ public sealed class CommandBroker : ICommandBroker
         return clients.Values
             .OrderBy(client => client.ClientId, StringComparer.OrdinalIgnoreCase)
             .Select(client => new ClientRuntimeStatus(client.ClientId, client.Kind, client.AppVersion,
-                client.RegisteredAtUtc, client.LastSeenUtc, client.LastSeenUtc >= onlineAfter))
+                client.RegisteredAtUtc, client.LastSeenUtc, client.LastSeenUtc >= onlineAfter,
+                client.ContentVersion, client.Ready, client.Status))
             .ToArray();
     }
 
@@ -73,5 +83,5 @@ public sealed class CommandBroker : ICommandBroker
         Channel.CreateUnbounded<PlaybackCommand>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false }));
 
     private sealed record ClientPresence(string ClientId, ClientKind Kind, string AppVersion,
-        DateTimeOffset RegisteredAtUtc, DateTimeOffset LastSeenUtc);
+        DateTimeOffset RegisteredAtUtc, DateTimeOffset LastSeenUtc, long ContentVersion, bool Ready, string? Status);
 }

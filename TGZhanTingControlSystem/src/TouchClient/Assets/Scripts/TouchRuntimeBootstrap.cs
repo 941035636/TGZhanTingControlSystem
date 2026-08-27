@@ -7,20 +7,23 @@ namespace TG.Control.Touch
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void CreateRuntime()
         {
+            Application.targetFrameRate = 60;
+            Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
             if (Object.FindObjectOfType<TouchApiClient>() != null) return;
             var root = new GameObject("TG Touch Runtime");
             root.SetActive(false);
             Object.DontDestroyOnLoad(root);
             var api = root.AddComponent<TouchApiClient>();
-            var audio = root.AddComponent<AudioSource>();
-            audio.playOnAwake = false;
-            var player = root.AddComponent<NarrationAudioPlayer>();
             var facade = root.AddComponent<TouchControlFacade>();
             var ui = root.AddComponent<TouchOperatorUi>();
-            SetReference(player, "apiClient", api);
             SetReference(facade, "apiClient", api);
             SetReference(ui, "apiClient", api);
             SetReference(ui, "facade", facade);
+            foreach (var camera in Object.FindObjectsOfType<Camera>())
+            {
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Color.black;
+            }
             root.SetActive(true);
         }
 

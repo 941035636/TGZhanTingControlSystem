@@ -13,5 +13,6 @@ namespace TG.Control.LedPlayer
         void Resume();
         void Stop();
         void Seek(double positionSeconds);
+        void SetVolume(double volume01);
     }
 }

@@ -98,6 +98,11 @@ namespace TG.Control.LedPlayer
             mediaPlayer.Time = (long)Math.Round(Math.Max(0.0, positionSeconds) * 1000.0);
         }
 
+        public void SetVolume(double volume01)
+        {
+            if (mediaPlayer != null) mediaPlayer.Volume = Mathf.Clamp01((float)volume01) * 100f;
+        }
+
         private IEnumerator PrepareTimeoutRoutine()
         {
             yield return new WaitForSecondsRealtime(prepareTimeoutSeconds);

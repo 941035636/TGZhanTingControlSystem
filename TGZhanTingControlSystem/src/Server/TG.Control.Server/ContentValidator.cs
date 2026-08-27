@@ -33,6 +33,8 @@ public static class ContentValidator
                 if (string.IsNullOrWhiteSpace(node.Name)) Add(nodeKey, "节点名称不能为空。");
                 if (string.IsNullOrWhiteSpace(node.NarrationText) && string.IsNullOrWhiteSpace(node.TtsAudioUrl))
                     Add(nodeKey, "讲解文案和讲解音频至少填写一项。");
+                if (node.VideoVolume is < 0 or > 1) Add(nodeKey, "讲解时视频音量必须在0到1之间。");
+                if (node.NarrationVolume is < 0 or > 1) Add(nodeKey, "讲解音量必须在0到1之间。");
                 foreach (var asset in node.Assets ?? [])
                 {
                     if (string.IsNullOrWhiteSpace(asset.Name) || string.IsNullOrWhiteSpace(asset.Url)) Add(nodeKey, "素材名称和地址不能为空。");
