@@ -2,6 +2,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using TG.Control.Touch.UI;
+using TG.Control.Touch.UI.Components;
+using TG.Control.Touch.UI.Theme;
 using TG.Control.UnityContracts;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -32,7 +35,9 @@ namespace TG.Control.Touch
         private bool confirmDelete;
         private bool confirmLeaveEditor;
         private string status = "正在连接展厅服务…";
-        private Font font;
+        private TouchUiPresenter presenter;
+        private TouchTheme theme;
+        private TouchUiFactory uiFactory;
         private Color accent;
         private PageState pageState;
 
@@ -69,44 +74,51 @@ namespace TG.Control.Touch
         private Button retryButton;
         private Button stopButton;
 
-        private static Color Ink => Hex("#19372E");
-        private static Color Muted => Hex("#70827B");
-        private static Color Gold => Hex("#BE974F");
+        private Color Ink => theme.Ink;
+        private Color Muted => theme.Muted;
+        private Color Gold => theme.Gold;
 
         private void Awake()
         {
-            accent = Hex("#1C5B46");
-            font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei UI", "Microsoft YaHei", "Arial" }, 32);
+            theme = TouchTheme.CreateDefault();
+            accent = theme.Accent;
+            uiFactory = new TouchUiFactory(theme.CreateFont(), () => accent, theme);
             BuildUi();
         }
 
         private void Start()
         {
-            connected = apiClient.IsConnected;
-            apiClient.ConnectionChanged += OnConnectionChanged;
-            facade.ContentLoaded += OnContentLoaded;
-            facade.Status += OnStatus;
-            facade.SessionChanged += OnSessionChanged;
-            facade.RoutesLoaded += OnRoutesLoaded;
-            facade.RouteSaved += OnRouteSaved;
-            facade.ReadinessChanged += OnReadinessChanged;
-            facade.Error += OnError;
+            presenter = new TouchUiPresenter(apiClient, facade);
+            presenter.ConnectionChanged += OnConnectionChanged;
+            presenter.ContentLoaded += OnContentLoaded;
+            presenter.StatusChanged += OnStatus;
+            presenter.SessionChanged += OnSessionChanged;
+            presenter.RoutesLoaded += OnRoutesLoaded;
+            presenter.RouteSaved += OnRouteSaved;
+            presenter.ReadinessChanged += OnReadinessChanged;
+            presenter.Error += OnError;
+            presenter.Attach();
+
+            connected = presenter.State.Connected;
+            routes = presenter.State.Routes;
+            readiness = presenter.State.Readiness;
             StartCoroutine(UiExperienceLoop());
-            if (facade.CurrentContent != null) OnContentLoaded(facade.CurrentContent);
+            if (presenter.State.Content != null) OnContentLoaded(presenter.State.Content);
             Refresh();
         }
 
         private void OnDestroy()
         {
-            if (apiClient != null) apiClient.ConnectionChanged -= OnConnectionChanged;
-            if (facade == null) return;
-            facade.ContentLoaded -= OnContentLoaded;
-            facade.Status -= OnStatus;
-            facade.SessionChanged -= OnSessionChanged;
-            facade.RoutesLoaded -= OnRoutesLoaded;
-            facade.RouteSaved -= OnRouteSaved;
-            facade.ReadinessChanged -= OnReadinessChanged;
-            facade.Error -= OnError;
+            if (presenter == null) return;
+            presenter.ConnectionChanged -= OnConnectionChanged;
+            presenter.ContentLoaded -= OnContentLoaded;
+            presenter.StatusChanged -= OnStatus;
+            presenter.SessionChanged -= OnSessionChanged;
+            presenter.RoutesLoaded -= OnRoutesLoaded;
+            presenter.RouteSaved -= OnRouteSaved;
+            presenter.ReadinessChanged -= OnReadinessChanged;
+            presenter.Error -= OnError;
+            presenter.Dispose();
         }
 
         private void BuildUi()
@@ -740,7 +752,11 @@ namespace TG.Control.Touch
             if (config == null) return;
             if (!string.IsNullOrWhiteSpace(config.touchTitle)) title.text = config.touchTitle;
             if (!string.IsNullOrWhiteSpace(config.touchSubtitle)) subtitle.text = config.touchSubtitle;
-            if (ColorUtility.TryParseHtmlString(config.touchAccentColor, out var color)) accent = color;
+            if (ColorUtility.TryParseHtmlString(config.touchAccentColor, out var color))
+            {
+                theme.SetAccent(color);
+                accent = theme.Accent;
+            }
             if (ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out color)) background.color = color;
             if (!string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) StartCoroutine(LoadBackground(apiClient.NormalizeUrl(config.touchBackgroundUrl)));
             foreach (var button in GetComponentsInChildren<Button>(true))
@@ -780,138 +796,20 @@ namespace TG.Control.Touch
         private bool CanStart => connected && readiness?.canStart == true;
         private static bool HasContent(ExhibitionModule module) => module?.nodes != null && module.nodes.Any(node => node != null && (!string.IsNullOrWhiteSpace(node.narrationText) || !string.IsNullOrWhiteSpace(node.ttsAudioUrl)));
 
-        private RectTransform ScrollGrid(Transform parent, string prefix, int columns, Vector2 cellSize, Vector2 spacing)
-        {
-            var viewport = Image(prefix + " Viewport", parent, new Color(1, 1, 1, 0));
-            viewport.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1;
-            viewport.gameObject.AddComponent<RectMask2D>();
-            var root = Rect(prefix + " Grid", viewport.transform);
-            Anchor(root, 0, 1, 1, 1, 0, 0, 0, 0);
-            root.pivot = new Vector2(.5f, 1);
-            var grid = root.gameObject.AddComponent<GridLayoutGroup>();
-            grid.cellSize = cellSize;
-            grid.spacing = spacing;
-            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = columns;
-            grid.childAlignment = TextAnchor.UpperLeft;
-            root.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            var scroll = viewport.gameObject.AddComponent<ScrollRect>();
-            scroll.viewport = viewport.rectTransform;
-            scroll.content = root;
-            scroll.horizontal = false;
-            scroll.vertical = true;
-            scroll.scrollSensitivity = 36;
-            return root;
-        }
-
-        private RectTransform Row(Transform parent, float spacing, float height)
-        {
-            var row = Rect("Row", parent);
-            row.gameObject.AddComponent<LayoutElement>().preferredHeight = height;
-            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = spacing;
-            layout.childControlHeight = true;
-            layout.childControlWidth = true;
-            layout.childForceExpandWidth = true;
-            return row;
-        }
-
-        private Button Button(Transform parent, string text, bool primary, UnityEngine.Events.UnityAction action)
-        {
-            var image = Image(text, parent, primary ? accent : Hex("#EDF1EF"));
-            if (primary) image.gameObject.name = "Primary - " + text;
-            var button = image.gameObject.AddComponent<Button>();
-            button.targetGraphic = image;
-            button.onClick.AddListener(action);
-            var colors = button.colors;
-            colors.highlightedColor = primary ? Hex("#26775A") : Hex("#E2E9E5");
-            colors.pressedColor = primary ? Hex("#174C3A") : Hex("#D7E1DC");
-            colors.disabledColor = new Color(.75f, .79f, .77f, .55f);
-            button.colors = colors;
-            var label = Label("Label", image.transform, text, 14, FontStyle.Bold, primary ? Color.white : Ink, TextAnchor.MiddleCenter);
-            Stretch(label.rectTransform, 6, 3, -6, -3);
-            return button;
-        }
-
-        private InputField Input(Transform parent, string placeholder, int size, float height)
-        {
-            var image = Image("Route Name Input", parent, Hex("#F5F7F6"));
-            image.gameObject.AddComponent<LayoutElement>().preferredHeight = height;
-            var field = image.gameObject.AddComponent<InputField>();
-            field.targetGraphic = image;
-            field.lineType = InputField.LineType.SingleLine;
-            field.characterLimit = 20;
-            var text = Label("Text", image.transform, string.Empty, size, FontStyle.Normal, Ink, TextAnchor.MiddleLeft);
-            Stretch(text.rectTransform, 16, 5, -16, -5);
-            text.supportRichText = false;
-            var hint = Label("Placeholder", image.transform, placeholder, size, FontStyle.Normal, new Color(.45f, .52f, .49f, .65f), TextAnchor.MiddleLeft);
-            Stretch(hint.rectTransform, 16, 5, -16, -5);
-            field.textComponent = text;
-            field.placeholder = hint;
-            return field;
-        }
-
-        private RectTransform Panel(string name, Transform parent, Color color) => Image(name, parent, color).rectTransform;
-        private Image Image(string name, Transform parent, Color color)
-        {
-            var image = new GameObject(name, typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-            image.transform.SetParent(parent, false);
-            image.color = color;
-            return image;
-        }
-        private RectTransform Rect(string name, Transform parent)
-        {
-            var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            return rect;
-        }
-        private Text Label(string name, Transform parent, string value, int size, FontStyle style, Color color, TextAnchor alignment)
-        {
-            var label = new GameObject(name, typeof(RectTransform), typeof(Text)).GetComponent<Text>();
-            label.transform.SetParent(parent, false);
-            label.font = font;
-            label.fontSize = size;
-            label.fontStyle = style;
-            label.color = color;
-            label.alignment = alignment;
-            label.text = value;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
-            label.raycastTarget = false;
-            return label;
-        }
-        private Text LayoutLabel(Transform parent, string value, int size, FontStyle style, Color color, float height)
-        {
-            var label = Label(value, parent, value, size, style, color, TextAnchor.MiddleLeft);
-            label.gameObject.AddComponent<LayoutElement>().preferredHeight = height;
-            return label;
-        }
-        private void FreeLabel(Transform parent, string value, int size, FontStyle style, Color color, float left, float top, float right, float height, TextAnchor alignment = TextAnchor.MiddleLeft)
-        {
-            var label = Label(value, parent, value, size, style, color, alignment);
-            Anchor(label.rectTransform, 0, 1, 1, 1, left, -top - height, -right, -top);
-        }
-        private void Divider(Transform parent)
-        {
-            var divider = Image("Divider", parent, Hex("#DEE5E1"));
-            divider.gameObject.AddComponent<LayoutElement>().preferredHeight = 2;
-        }
-        private static void Clear(Transform root)
-        {
-            for (var i = root.childCount - 1; i >= 0; i--)
-            {
-                root.GetChild(i).gameObject.SetActive(false);
-                Destroy(root.GetChild(i).gameObject);
-            }
-        }
-        private static void Stretch(RectTransform rect, float left = 0, float bottom = 0, float right = 0, float top = 0) => Anchor(rect, 0, 0, 1, 1, left, bottom, right, top);
-        private static void Anchor(RectTransform rect, float minX, float minY, float maxX, float maxY, float left, float bottom, float right, float top)
-        {
-            rect.anchorMin = new Vector2(minX, minY);
-            rect.anchorMax = new Vector2(maxX, maxY);
-            rect.offsetMin = new Vector2(left, bottom);
-            rect.offsetMax = new Vector2(right, top);
-        }
-        private static Color Hex(string value) { ColorUtility.TryParseHtmlString(value, out var color); return color; }
+        private RectTransform ScrollGrid(Transform parent, string prefix, int columns, Vector2 cellSize, Vector2 spacing) => uiFactory.ScrollGrid(parent, prefix, columns, cellSize, spacing);
+        private RectTransform Row(Transform parent, float spacing, float height) => uiFactory.Row(parent, spacing, height);
+        private Button Button(Transform parent, string text, bool primary, UnityEngine.Events.UnityAction action) => uiFactory.Button(parent, text, primary, action);
+        private InputField Input(Transform parent, string placeholder, int size, float height) => uiFactory.Input(parent, placeholder, size, height);
+        private RectTransform Panel(string name, Transform parent, Color color) => uiFactory.Panel(name, parent, color);
+        private Image Image(string name, Transform parent, Color color) => uiFactory.Image(name, parent, color);
+        private RectTransform Rect(string name, Transform parent) => uiFactory.Rect(name, parent);
+        private Text Label(string name, Transform parent, string value, int size, FontStyle style, Color color, TextAnchor alignment) => uiFactory.Label(name, parent, value, size, style, color, alignment);
+        private Text LayoutLabel(Transform parent, string value, int size, FontStyle style, Color color, float height) => uiFactory.LayoutLabel(parent, value, size, style, color, height);
+        private void FreeLabel(Transform parent, string value, int size, FontStyle style, Color color, float left, float top, float right, float height, TextAnchor alignment = TextAnchor.MiddleLeft) => uiFactory.FreeLabel(parent, value, size, style, color, left, top, right, height, alignment);
+        private void Divider(Transform parent) => uiFactory.Divider(parent);
+        private static void Clear(Transform root) => TouchUiFactory.Clear(root);
+        private static void Stretch(RectTransform rect, float left = 0, float bottom = 0, float right = 0, float top = 0) => TouchUiFactory.Stretch(rect, left, bottom, right, top);
+        private static void Anchor(RectTransform rect, float minX, float minY, float maxX, float maxY, float left, float bottom, float right, float top) => TouchUiFactory.Anchor(rect, minX, minY, maxX, maxY, left, bottom, right, top);
+        private static Color Hex(string value) => TouchTheme.ParseColor(value);
     }
 }
