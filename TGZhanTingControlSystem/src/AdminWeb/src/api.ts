@@ -38,7 +38,7 @@ async function request<T>(path: string, init?: RequestInit, authenticated = fals
     try {
       const problem = JSON.parse(text)
       const validation = problem.errors ? Object.values(problem.errors).flat().join('；') : ''
-      message = problem.message ?? problem.detail ?? validation ?? text
+      message = problem.message ?? (validation || problem.detail || text)
     } catch { /* keep the original response text */ }
     throw new Error(message || `请求失败：${response.status}`)
   }

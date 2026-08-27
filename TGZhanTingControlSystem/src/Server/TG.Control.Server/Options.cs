@@ -15,6 +15,7 @@ public sealed class PlaybackOptions
     public int SyncToleranceMilliseconds { get; init; } = 500;
     public int LongPollSeconds { get; init; } = 20;
     public bool RequireLedReadyBeforeStart { get; init; } = true;
+    public bool AllowDegradedPlayback { get; init; } = true;
 }
 
 public sealed class TtsOptions

@@ -8,6 +8,7 @@ public interface IContentRepository
 {
     Task<PublishedContent> GetAsync(CancellationToken cancellationToken);
     Task<PublishedContent> SaveAsync(IReadOnlyList<ExhibitionModule> modules, string publishedBy, CancellationToken cancellationToken);
+    Task<PublishedContent> GetVersionAsync(long version, CancellationToken cancellationToken);
     Task<IReadOnlyList<ContentVersionSummary>> GetHistoryAsync(CancellationToken cancellationToken);
     Task<PublishedContent> RollbackAsync(long version, string publishedBy, CancellationToken cancellationToken);
 }
@@ -92,6 +93,20 @@ public sealed class JsonContentRepository : IContentRepository
                     item.Modules.Count, item.Modules.Sum(module => module.Nodes.Count), item.Version == current.Version));
             }
             return result.OrderByDescending(item => item.Version).ToArray();
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<PublishedContent> GetVersionAsync(long version, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var path = HistoryPath(version);
+            if (!File.Exists(path)) throw new KeyNotFoundException($"内容版本 V{version} 不存在。");
+            await using var stream = File.OpenRead(path);
+            return await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions, cancellationToken)
+                ?? throw new InvalidDataException($"内容版本 V{version} 无效。");
         }
         finally { gate.Release(); }
     }

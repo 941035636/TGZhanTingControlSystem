@@ -49,9 +49,20 @@ app.MapPost("/api/auth/logout", (HttpRequest request, AdminSessionStore sessions
 });
 app.MapGet("/api/content/current", (IContentRepository repository, CancellationToken ct) => repository.GetAsync(ct));
 app.MapGet("/api/ui/current", (UiExperienceRepository repository, CancellationToken ct) => repository.GetAsync(ct));
-app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig config, AdminSessionStore sessions, UiExperienceRepository repository, CancellationToken ct) =>
+app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig config, AdminSessionStore sessions,
+    UiExperienceRepository repository, AssetStorage assetStorage, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
+    var validation = new Dictionary<string, string[]>();
+    var touchError = string.IsNullOrWhiteSpace(config.TouchBackgroundUrl)
+        ? null
+        : assetStorage.ValidatePublishedReference(config.TouchBackgroundUrl, 0, request.Host);
+    if (touchError is not null) validation["touchBackgroundUrl"] = [$"触控中控端背景素材：{touchError}"];
+    var ledError = string.IsNullOrWhiteSpace(config.LedIdleMediaUrl)
+        ? null
+        : assetStorage.ValidatePublishedReference(config.LedIdleMediaUrl, 0, request.Host);
+    if (ledError is not null) validation["ledIdleMediaUrl"] = [$"LED待机素材：{ledError}"];
+    if (validation.Count > 0) return Results.ValidationProblem(validation);
     return Results.Ok(await repository.SaveAsync(config, username, ct));
 });
 app.MapGet("/api/content/manifest", async (IContentRepository repository, CancellationToken ct) =>
@@ -95,10 +106,10 @@ app.MapDelete("/api/routes/{id}", async (string id, HttpRequest httpRequest, Nar
     return Results.NoContent();
 });
 app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishContentRequest request, AdminSessionStore sessions,
-    IContentRepository repository, OperationalEventRepository events, CancellationToken ct) =>
+    IContentRepository repository, AssetStorage assetStorage, OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
-    var validation = ContentValidator.Validate(request.Modules);
+    var validation = ContentValidator.Validate(request.Modules, assetStorage, httpRequest.Host);
     if (validation.Count > 0) return Results.ValidationProblem(validation);
     var content = await repository.SaveAsync(request.Modules, username, ct);
     await events.AppendAsync("Information", "Content", "Publish", $"{username} 发布了内容版本 V{content.Version}。", cancellationToken: ct);
@@ -107,11 +118,14 @@ app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishConte
 app.MapGet("/api/content/versions", async (HttpRequest request, AdminSessionStore sessions, IContentRepository repository, CancellationToken ct) =>
     sessions.TryValidate(request, out _) ? Results.Ok(await repository.GetHistoryAsync(ct)) : Results.Unauthorized());
 app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpRequest request, AdminSessionStore sessions,
-    IContentRepository repository, OperationalEventRepository events, CancellationToken ct) =>
+    IContentRepository repository, AssetStorage assetStorage, OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
     try
     {
+        var target = await repository.GetVersionAsync(version, ct);
+        var validation = ContentValidator.Validate(target.Modules, assetStorage, request.Host);
+        if (validation.Count > 0) return Results.ValidationProblem(validation);
         var content = await repository.RollbackAsync(version, username, ct);
         await events.AppendAsync("Warning", "Content", "Rollback", $"{username} 将内容回滚至 V{version}，生成新版本 V{content.Version}。", cancellationToken: ct);
         return Results.Ok(content);
@@ -170,11 +184,18 @@ app.MapGet("/api/readiness", async (HttpRequest request, AdminSessionStore sessi
     var led = broker.GetClientStatuses(threshold)
         .FirstOrDefault(item => string.Equals(item.ClientId, playback.Value.LedClientId, StringComparison.OrdinalIgnoreCase));
     var online = led?.Online == true;
-    var ready = online && led?.Ready == true && led.ContentVersion == content.Version;
-    var message = !online ? "LED播放端离线" : led?.Ready != true ? led?.Status ?? "LED正在准备素材"
-        : led.ContentVersion != content.Version ? $"LED正在同步内容 V{content.Version}（当前 V{led.ContentVersion}）"
-        : "服务器、LED和讲解内容均已就绪";
-    return Results.Ok(new SystemReadiness(ready, content.Version, online, led?.Ready == true,
+    var versionMatches = online && led?.ContentVersion == content.Version;
+    var fullyReady = versionMatches && led?.Ready == true;
+    var canStart = online && (fullyReady || playback.Value.AllowDegradedPlayback);
+    var message = !online ? "LED播放端离线"
+        : fullyReady ? "服务器、LED和讲解内容均已就绪"
+        : !versionMatches && playback.Value.AllowDegradedPlayback
+            ? $"LED内容 V{led?.ContentVersion ?? 0} 与服务器 V{content.Version} 不一致；仍可开始，当前节点素材将按需下载"
+        : !versionMatches ? $"LED正在同步内容 V{content.Version}（当前 V{led?.ContentVersion ?? 0}）"
+        : playback.Value.AllowDegradedPlayback
+            ? (string.IsNullOrWhiteSpace(led?.Status) ? "部分素材未就绪，系统受限可用；失败节点将按策略跳过" : led.Status + "；系统受限可用")
+            : led?.Status ?? "LED正在准备素材";
+    return Results.Ok(new SystemReadiness(canStart, content.Version, online, led?.Ready == true,
         led?.ContentVersion ?? 0, message, DateTimeOffset.UtcNow));
 });
 app.MapPost("/api/playback/start", async (HttpRequest httpRequest, StartNarrationRequest request,

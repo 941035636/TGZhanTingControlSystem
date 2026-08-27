@@ -4,7 +4,8 @@ namespace TG.Control.Server;
 
 public static class ContentValidator
 {
-    public static Dictionary<string, string[]> Validate(IReadOnlyList<ExhibitionModule>? modules)
+    public static Dictionary<string, string[]> Validate(IReadOnlyList<ExhibitionModule>? modules,
+        AssetStorage assetStorage, HostString requestHost)
     {
         var errors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         void Add(string key, string message)
@@ -25,6 +26,11 @@ public static class ContentValidator
             var moduleKey = $"modules[{module.Order}]";
             if (string.IsNullOrWhiteSpace(module.Id) || !moduleIds.Add(module.Id)) Add(moduleKey, "模块ID不能为空且不能重复。");
             if (string.IsNullOrWhiteSpace(module.Name)) Add(moduleKey, "模块名称不能为空。");
+            if (!string.IsNullOrWhiteSpace(module.CoverUrl))
+            {
+                var coverError = assetStorage.ValidatePublishedReference(module.CoverUrl, 0, requestHost);
+                if (coverError is not null) Add($"{moduleKey}.coverUrl", $"模块“{module.Name}” / 封面素材：{coverError}");
+            }
             var nodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var node in module.Nodes ?? [])
             {
@@ -38,6 +44,20 @@ public static class ContentValidator
                 foreach (var asset in node.Assets ?? [])
                 {
                     if (string.IsNullOrWhiteSpace(asset.Name) || string.IsNullOrWhiteSpace(asset.Url)) Add(nodeKey, "素材名称和地址不能为空。");
+                    else
+                    {
+                        var assetError = assetStorage.ValidatePublishedReference(asset.Url, asset.SizeBytes, requestHost);
+                        if (assetError is not null)
+                            Add($"{nodeKey}.assets[{asset.Id}]",
+                                $"模块“{module.Name}” / 节点“{node.Name}” / 素材“{asset.Name}”：{assetError}");
+                    }
+                }
+                if (!string.IsNullOrWhiteSpace(node.TtsAudioUrl))
+                {
+                    var audioError = assetStorage.ValidatePublishedReference(node.TtsAudioUrl, 0, requestHost);
+                    if (audioError is not null)
+                        Add($"{nodeKey}.ttsAudioUrl",
+                            $"模块“{module.Name}” / 节点“{node.Name}” / 讲解音频：{audioError}");
                 }
             }
         }

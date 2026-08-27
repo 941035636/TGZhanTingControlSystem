@@ -24,14 +24,55 @@ namespace TG.Control.LedPlayer
         private long syncedContentVersion;
         private long uiExperienceVersion = -1;
         private float nextContentCheckAt;
+        private Coroutine contentSyncCoroutine;
+        private bool playbackPriorityActive;
+        private string contentStatus = "LED正在检查内容版本";
 
         public string ClientId => clientId;
         public bool IsSyncing => syncing;
         public long SyncedContentVersion => syncedContentVersion;
         private string BaseUrl => serverBaseUrl.TrimEnd('/');
 
-        private void OnEnable() { running = true; StartCoroutine(PollLoop()); StartCoroutine(UiExperienceLoop()); }
-        private void OnDisable() => running = false;
+        private void OnEnable()
+        {
+            running = true;
+            syncStarted = false;
+            StartCoroutine(PollLoop());
+            StartCoroutine(UiExperienceLoop());
+        }
+
+        private void OnDisable()
+        {
+            running = false;
+            playbackPriorityActive = false;
+            if (contentSyncCoroutine != null) StopCoroutine(contentSyncCoroutine);
+            contentSyncCoroutine = null;
+            syncing = false;
+        }
+
+        public void BeginPlaybackPriority()
+        {
+            playbackPriorityActive = true;
+            if (contentSyncCoroutine != null)
+            {
+                StopCoroutine(contentSyncCoroutine);
+                contentSyncCoroutine = null;
+                syncing = false;
+                contentStatus = "内容 V" + syncedContentVersion + " 已识别，后台同步已暂停并优先准备当前讲解素材";
+                ContentSyncChanged?.Invoke(new ContentSyncProgress
+                {
+                    version = syncedContentVersion,
+                    error = "后台同步已暂停，正在优先准备当前讲解素材。",
+                    finished = true
+                });
+            }
+        }
+
+        public void EndPlaybackPriority()
+        {
+            playbackPriorityActive = false;
+            nextContentCheckAt = Time.realtimeSinceStartup + 1;
+        }
 
         public void Report(PlaybackCommand command, PlaybackState state, double position = 0, string error = null, double progress = 0) =>
             StartCoroutine(Post("/api/playback/status", new PlaybackStatusReport
@@ -49,14 +90,14 @@ namespace TG.Control.LedPlayer
                 {
                     clientId = clientId, kind = ClientKind.LedPlayer, appVersion = Application.version,
                     contentVersion = syncedContentVersion, ready = contentReady,
-                    status = contentReady ? "LED内容已就绪" : "LED正在检查内容版本"
+                    status = contentReady ? "LED内容已就绪" : contentStatus
                 }, () => registered = true);
                 SetConnected(registered);
                 if (!registered) { syncStarted = false; yield return new WaitForSecondsRealtime(2); continue; }
                 if (!syncStarted)
                 {
                     syncStarted = true;
-                    yield return SyncPublishedContent();
+                    StartContentSync();
                     nextContentCheckAt = Time.realtimeSinceStartup + 10;
                 }
 
@@ -71,18 +112,24 @@ namespace TG.Control.LedPlayer
                             CommandReceived?.Invoke(JsonUtility.FromJson<PlaybackCommand>(request.downloadHandler.text));
                         else if (request.responseCode != 204) { SetConnected(false); break; }
                     }
-                    if (!syncing && Time.realtimeSinceStartup >= nextContentCheckAt)
+                    if (!syncing && !playbackPriorityActive && Time.realtimeSinceStartup >= nextContentCheckAt)
                     {
                         nextContentCheckAt = Time.realtimeSinceStartup + 10;
-                        yield return SyncPublishedContent();
+                        StartContentSync();
                     }
                 }
             }
         }
 
+        private void StartContentSync()
+        {
+            if (!running || syncing || playbackPriorityActive) return;
+            syncing = true;
+            contentSyncCoroutine = StartCoroutine(SyncPublishedContent());
+        }
+
         private IEnumerator SyncPublishedContent()
         {
-            syncing = true;
             using (var request = UnityWebRequest.Get(BaseUrl + "/api/content/manifest"))
             {
                 ApplyTerminalHeader(request);
@@ -90,26 +137,38 @@ namespace TG.Control.LedPlayer
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    syncing = false;
                     contentReady = false;
-                    ContentSyncChanged?.Invoke(new ContentSyncProgress { error = "获取内容清单失败：" + request.error, finished = true });
-                    yield return ReportPresence(false, "获取内容清单失败：" + request.error);
+                    contentStatus = "获取内容清单失败：" + request.error;
+                    ContentSyncChanged?.Invoke(new ContentSyncProgress { error = contentStatus, finished = true });
+                    yield return ReportPresence(false, contentStatus);
+                    syncing = false;
+                    contentSyncCoroutine = null;
                     yield break;
                 }
 
                 var manifest = JsonUtility.FromJson<ContentSyncManifest>(request.downloadHandler.text);
                 if (manifest == null)
                 {
-                    syncing = false;
                     contentReady = false;
-                    ContentSyncChanged?.Invoke(new ContentSyncProgress { error = "内容清单格式无效。", finished = true });
-                    yield return ReportPresence(false, "内容清单格式无效");
+                    contentStatus = "内容清单格式无效";
+                    ContentSyncChanged?.Invoke(new ContentSyncProgress { error = contentStatus + "。", finished = true });
+                    yield return ReportPresence(false, contentStatus);
+                    syncing = false;
+                    contentSyncCoroutine = null;
                     yield break;
                 }
 
                 var assets = manifest.assets ?? new ContentSyncAsset[0];
                 var progress = new ContentSyncProgress { version = manifest.version, total = assets.Length, completed = 0 };
+                // The manifest version means this terminal understands the published route. Large media files may
+                // continue downloading in the background and must not keep the operator terminal globally locked.
+                syncedContentVersion = manifest.version;
+                contentReady = assets.Length == 0;
+                contentStatus = contentReady
+                    ? "LED内容已就绪"
+                    : "内容 V" + manifest.version + " 已识别，正在后台同步 " + assets.Length + " 个素材";
                 ContentSyncChanged?.Invoke(progress);
+                yield return ReportPresence(contentReady, contentStatus);
                 for (var index = 0; index < assets.Length && running; index++)
                 {
                     var asset = assets[index];
@@ -129,12 +188,16 @@ namespace TG.Control.LedPlayer
 
                 var succeeded = progress.completed == progress.total && string.IsNullOrWhiteSpace(progress.error);
                 contentReady = succeeded;
-                if (succeeded) syncedContentVersion = manifest.version;
                 syncing = false;
+                contentSyncCoroutine = null;
                 progress.currentUrl = null;
                 progress.finished = true;
                 ContentSyncChanged?.Invoke(progress);
-                yield return ReportPresence(succeeded, succeeded ? "LED内容已就绪" : "部分素材同步失败");
+                var failedCount = Math.Max(0, progress.total - progress.completed);
+                contentStatus = succeeded
+                    ? "LED内容已就绪"
+                    : "内容 V" + manifest.version + " 已识别，" + failedCount + " 个素材同步失败";
+                yield return ReportPresence(succeeded, contentStatus);
                 Debug.Log("LED内容同步完成：版本 V" + manifest.version + "，" + progress.completed + "/" + progress.total + " 个素材已缓存。");
             }
         }

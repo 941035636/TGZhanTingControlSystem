@@ -688,11 +688,13 @@ namespace TG.Control.Touch
             if (readinessLabel != null)
             {
                 readinessLabel.text = readiness?.message ?? "正在检查LED播放端和内容版本…";
-                readinessLabel.color = readiness?.canStart == true ? accent : Gold;
+                readinessLabel.color = readiness?.canStart == true && readiness.ledReady ? accent : Gold;
             }
             if (homeStatusLabel != null)
                 homeStatusLabel.text = !connected ? "服务器连接中断，系统正在自动重连；恢复连接后可继续操作。"
-                    : readiness?.canStart == false ? "暂不可开始：" + readiness.message : status;
+                    : readiness?.canStart == false ? "暂不可开始：" + readiness.message
+                    : readiness?.ledReady == false ? "受限可用：仍可开始讲解；缺失素材会再次下载，失败节点按策略跳过或可人工重试。"
+                    : status;
             if (editorStatusLabel != null) editorStatusLabel.text = status;
             if (statusLabel != null) statusLabel.text = status;
             if (playbackModuleLabel != null)

@@ -17,6 +17,7 @@ let routes: NarrationRoute[] = []
 let readiness: SystemReadiness | null = null
 let versions: ContentVersionSummary[] = []
 let operationEvents: OperationalEvent[] = []
+let publishError = ''
 let activeView: 'content'|'routes'|'versions'|'operations' = 'content'
 const draftKey = 'tg-content-draft-v1'
 
@@ -77,7 +78,7 @@ function renderWorkspace():string{
   if(activeView==='routes')return renderRoutesView()
   if(activeView==='versions')return renderVersionsView()
   if(activeView==='operations')return renderOperationsView()
-  return `<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>讲解节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).length + (item.nodes.filter(node => node.ttsAudioUrl).length), 0)}</strong><span>展示与音频素材</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
+  return `${publishError?`<section class="publish-validation-error"><strong>发布已阻止：请修复以下素材</strong><p>${escapeHtml(publishError).replaceAll('；','<br/>')}</p></section>`:''}<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>讲解节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).length + (item.nodes.filter(node => node.ttsAudioUrl).length), 0)}</strong><span>展示与音频素材</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
   <section class="section-title"><div><p class="eyebrow">CONTENT</p><h2>内容中心</h2><p class="section-note">配置模块、讲解节点、TTS文案和大屏素材；发布前的修改仅保留在当前浏览器草稿中。</p></div><div class="section-actions"><button id="edit-ui">终端界面设置</button><button id="add">新增模块</button></div></section><section class="module-grid">${content.modules.sort((a,b) => a.order-b.order).map(moduleCard).join('')}</section>`
 }
 
@@ -136,7 +137,7 @@ function renderOperationsView():string{
   return `${readinessBanner()}<section class="section-title"><div><p class="eyebrow">OPERATIONS</p><h2>终端与运行</h2><p class="section-note">查看终端在线、内容版本、活动讲解和关键操作记录。</p></div><button id="refresh-operations">刷新状态</button></section><section class="terminal-grid">${clients||'<div class="empty-management">尚无终端注册</div>'}</section><h3 class="subheading">活动讲解</h3><section class="session-list">${sessions}</section><h3 class="subheading">运行日志</h3><div class="log-table-wrap"><table class="log-table"><thead><tr><th>时间</th><th>级别</th><th>分类</th><th>事件</th></tr></thead><tbody>${logs||'<tr><td colspan="4">暂无运行日志</td></tr>'}</tbody></table></div>`
 }
 
-function readinessBanner():string{return `<section class="readiness-banner ${readiness?.canStart?'ready':'blocked'}"><div><span>${readiness?.canStart?'✓ 系统可以接待':'! 系统暂未就绪'}</span><strong>${escapeHtml(readiness?.message??'正在读取系统状态')}</strong></div><p>服务器内容 V${readiness?.contentVersion??0} · LED内容 V${readiness?.ledContentVersion??0}</p></section>`}
+function readinessBanner():string{const state=!readiness?.canStart?'blocked':readiness.ledReady?'ready':'degraded';const label=state==='ready'?'✓ 系统可以接待':state==='degraded'?'! 系统受限可用':'! 系统暂未就绪';return `<section class="readiness-banner ${state}"><div><span>${label}</span><strong>${escapeHtml(readiness?.message??'正在读取系统状态')}</strong></div><p>服务器内容 V${readiness?.contentVersion??0} · LED内容 V${readiness?.ledContentVersion??0}</p></section>`}
 
 async function refreshOperations():Promise<void>{try{[clientStatuses,playbackSessions,readiness,operationEvents]=await Promise.all([api.clientStatuses(),api.playbackSessions(),api.readiness(),api.operations()]);renderDashboard();showToast('运行状态已刷新。')}catch(error){showToast(error instanceof Error?error.message:'刷新失败')}}
 function formatTime(value:string):string{const date=new Date(value);return Number.isNaN(date.getTime())?'-':date.getUTCFullYear()<2000?'系统初始化':date.toLocaleString('zh-CN',{hour12:false})}
@@ -248,7 +249,7 @@ function validateDraft(modules: ExhibitionModule[]): string | null {
   return null
 }
 
-async function publish(): Promise<void> { if(!content)return;const validation=validateDraft(content.modules);if(validation)return showToast(validation);try{content=await api.publish(content.modules);dirty=false;localStorage.removeItem(draftKey);versions=await api.contentVersions();renderDashboard();showToast(`版本 V${content.version} 发布成功。`)}catch(error){if(!api.hasSession()){renderLogin('登录已过期，请重新登录。');return}showToast(error instanceof Error?error.message:'发布失败')} }
+async function publish(): Promise<void> { if(!content)return;const validation=validateDraft(content.modules);if(validation)return showToast(validation);try{content=await api.publish(content.modules);publishError='';dirty=false;localStorage.removeItem(draftKey);versions=await api.contentVersions();renderDashboard();showToast(`版本 V${content.version} 发布成功。`)}catch(error){if(!api.hasSession()){renderLogin('登录已过期，请重新登录。');return}publishError=error instanceof Error?error.message:'发布失败';activeView='content';renderDashboard();showToast('发布已阻止，请根据页面提示修复素材。')} }
 
 function saveDraft():void{if(!content)return;localStorage.setItem(draftKey,JSON.stringify({baseVersion:content.version,modules:content.modules,savedAt:new Date().toISOString()}))}
 function restoreDraft(published:PublishedContent):{content:PublishedContent;dirty:boolean}{try{const value=JSON.parse(localStorage.getItem(draftKey)??'null') as {baseVersion:number;modules:ExhibitionModule[]}|null;if(value?.baseVersion===published.version&&Array.isArray(value.modules))return{content:{...published,modules:value.modules},dirty:true};if(value)localStorage.removeItem(draftKey)}catch{localStorage.removeItem(draftKey)}return{content:published,dirty:false}}

@@ -49,12 +49,14 @@ namespace TG.Control.LedPlayer
             {
                 case PlaybackAction.Prepare:
                     PlaybackActiveChanged?.Invoke(true);
+                    apiClient.BeginPlaybackPriority();
                     CancelPlayback(true);
                     StartCoroutine(PrepareMedia(command, ++playbackGeneration, false));
                     break;
                 case PlaybackAction.PlayVideo:
                 case PlaybackAction.PlayNarration:
                     PlaybackActiveChanged?.Invoke(true);
+                    apiClient.BeginPlaybackPriority();
                     if (MatchesPreparedMedia(command))
                         StartCoroutine(PlayPrepared(command, playbackGeneration));
                     else
@@ -78,6 +80,7 @@ namespace TG.Control.LedPlayer
                 case PlaybackAction.Stop:
                     playbackGeneration++;
                     CancelPlayback(true);
+                    apiClient.EndPlaybackPriority();
                     PlaybackActiveChanged?.Invoke(false);
                     break;
                 case PlaybackAction.Seek:
@@ -87,6 +90,7 @@ namespace TG.Control.LedPlayer
                     var skippedAt = CurrentPositionSeconds();
                     playbackGeneration++;
                     CancelPlayback(true);
+                    apiClient.EndPlaybackPriority();
                     PlaybackActiveChanged?.Invoke(false);
                     apiClient.Report(command, PlaybackState.Skipped, skippedAt);
                     break;
@@ -96,11 +100,6 @@ namespace TG.Control.LedPlayer
         private IEnumerator PrepareMedia(PlaybackCommand command, int generation, bool playAfterPrepare)
         {
             apiClient.Report(command, PlaybackState.Received);
-            while (apiClient.IsSyncing)
-            {
-                if (generation != playbackGeneration) yield break;
-                yield return null;
-            }
             var hasVideo = !string.IsNullOrWhiteSpace(command.mediaUrl);
             var hasNarration = !string.IsNullOrWhiteSpace(command.narrationAudioUrl);
             if (!hasVideo && !hasNarration)
@@ -234,6 +233,7 @@ namespace TG.Control.LedPlayer
             var completedAt = CurrentPositionSeconds();
             CancelPlayback(false);
             apiClient.Report(command, PlaybackState.Completed, completedAt);
+            apiClient.EndPlaybackPriority();
             PlaybackActiveChanged?.Invoke(false);
         }
 
@@ -323,6 +323,7 @@ namespace TG.Control.LedPlayer
         private void Fail(PlaybackCommand command, string error)
         {
             apiClient.Report(command, PlaybackState.Failed, error: error);
+            apiClient.EndPlaybackPriority();
             PlaybackActiveChanged?.Invoke(false);
         }
     }

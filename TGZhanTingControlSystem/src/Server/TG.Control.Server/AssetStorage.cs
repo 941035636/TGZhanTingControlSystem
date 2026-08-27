@@ -25,6 +25,45 @@ public sealed class AssetStorage
     public string MediaDirectory { get; }
     public IFileProvider FileProvider { get; }
 
+    public string? ValidatePublishedReference(string url, long expectedSize, HostString requestHost)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return "素材地址为空。";
+        if (!Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var uri)) return $"素材地址格式无效：{url}";
+
+        string path;
+        if (uri.IsAbsoluteUri)
+        {
+            if (uri.Scheme is not ("http" or "https")) return $"不支持的素材地址协议：{uri.Scheme}";
+            var belongsToThisServer = uri.IsLoopback ||
+                                      string.Equals(uri.Host, requestHost.Host, StringComparison.OrdinalIgnoreCase);
+            if (!belongsToThisServer) return "外部素材地址不能直接发布，请先上传到本系统素材库。";
+            path = uri.AbsolutePath;
+        }
+        else
+        {
+            path = url.Split('?', '#')[0];
+            if (!path.StartsWith('/')) path = "/" + path;
+        }
+
+        const string mediaPrefix = "/media/";
+        if (!path.StartsWith(mediaPrefix, StringComparison.OrdinalIgnoreCase))
+            return $"本服务器素材必须使用 {mediaPrefix} 地址。";
+
+        var storedName = Uri.UnescapeDataString(path[mediaPrefix.Length..]);
+        if (string.IsNullOrWhiteSpace(storedName) ||
+            !string.Equals(storedName, Path.GetFileName(storedName), StringComparison.Ordinal) ||
+            storedName.Contains('/') || storedName.Contains('\\'))
+            return "素材文件名无效。";
+
+        var filePath = Path.Combine(MediaDirectory, storedName);
+        if (!File.Exists(filePath)) return $"服务器文件不存在（HTTP 404）：{path}";
+        var actualSize = new FileInfo(filePath).Length;
+        if (actualSize <= 0) return $"服务器文件为空：{path}";
+        if (expectedSize > 0 && actualSize != expectedSize)
+            return $"服务器文件大小不一致：记录 {expectedSize} 字节，实际 {actualSize} 字节。";
+        return null;
+    }
+
     public bool Delete(string storedName)
     {
         if (!string.Equals(storedName, Path.GetFileName(storedName), StringComparison.Ordinal)) return false;

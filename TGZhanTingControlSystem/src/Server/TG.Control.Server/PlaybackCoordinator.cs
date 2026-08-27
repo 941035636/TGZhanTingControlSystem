@@ -55,9 +55,16 @@ public sealed class PlaybackCoordinator(
             var led = broker.GetClientStatuses(onlineThreshold)
                 .FirstOrDefault(client => string.Equals(client.ClientId, settings.LedClientId, StringComparison.OrdinalIgnoreCase));
             if (led is null || !led.Online) throw new InvalidOperationException("LED播放端离线，暂时不能开始讲解。");
-            if (!led.Ready) throw new InvalidOperationException(string.IsNullOrWhiteSpace(led.Status) ? "LED播放端尚未准备完成。" : led.Status);
-            if (led.ContentVersion != content.Version)
+            if (led.ContentVersion != content.Version && !settings.AllowDegradedPlayback)
                 throw new InvalidOperationException($"LED内容版本为 V{led.ContentVersion}，服务器为 V{content.Version}，请等待素材同步完成。");
+            if (!led.Ready && !settings.AllowDegradedPlayback)
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(led.Status) ? "LED播放端尚未准备完成。" : led.Status);
+            if (led.ContentVersion != content.Version || !led.Ready)
+            {
+                await eventLog.AppendAsync("Warning", "Playback", "DegradedStart",
+                    $"LED以受限模式启动讲解：服务器 V{content.Version}，LED V{led.ContentVersion}；缺失素材按需下载，失败节点按配置策略处理。",
+                    cancellationToken: cancellationToken);
+            }
         }
         var lookup = content.Modules.ToDictionary(module => module.Id, StringComparer.OrdinalIgnoreCase);
         var modules = request.ModuleIds.Select(id => lookup.TryGetValue(id, out var module)
