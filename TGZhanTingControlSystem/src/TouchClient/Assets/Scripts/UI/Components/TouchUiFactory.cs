@@ -9,6 +9,7 @@ namespace TG.Control.Touch.UI.Components
     /// <summary>Creates the existing runtime UGUI primitives without owning any business behavior.</summary>
     public sealed class TouchUiFactory
     {
+        private static Sprite roundedSprite;
         private readonly Font font;
         private readonly Func<Color> accent;
         private readonly TouchTheme theme;
@@ -74,6 +75,31 @@ namespace TG.Control.Touch.UI.Components
             return button;
         }
 
+        /// <summary>Rounded commercial button used by migrated pages without changing legacy pages.</summary>
+        public Button TouchButton(Transform parent, string text, bool primary, UnityAction action)
+        {
+            var image = RoundedImage(text, parent, primary ? theme.Primary : theme.SecondaryButton);
+            image.gameObject.name = (primary ? "Product Primary - " : "Product Secondary - ") + text;
+            var button = image.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(action);
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = primary
+                ? Color.Lerp(Color.white, theme.PrimaryHighlight, .2f)
+                : Color.Lerp(Color.white, theme.SecondaryHighlight, .2f);
+            colors.pressedColor = primary
+                ? Color.Lerp(Color.white, theme.PrimaryPressed, .28f)
+                : Color.Lerp(Color.white, theme.SecondaryPressed, .28f);
+            colors.disabledColor = new Color(.52f, .58f, .66f, .72f);
+            colors.colorMultiplier = 1;
+            button.colors = colors;
+            var label = Label("Label", image.transform, text, theme.ButtonText, FontStyle.Bold,
+                theme.TextPrimary, TextAnchor.MiddleCenter);
+            Stretch(label.rectTransform, 10, 4, -10, -4);
+            return button;
+        }
+
         public InputField Input(Transform parent, string placeholder, int size, float height)
         {
             var image = Image("Route Name Input", parent, theme.InputBackground);
@@ -101,6 +127,14 @@ namespace TG.Control.Touch.UI.Components
             var image = new GameObject(name, typeof(RectTransform), typeof(Image)).GetComponent<Image>();
             image.transform.SetParent(parent, false);
             image.color = color;
+            return image;
+        }
+
+        public Image RoundedImage(string name, Transform parent, Color color)
+        {
+            var image = Image(name, parent, color);
+            image.sprite = GetRoundedSprite();
+            image.type = UnityEngine.UI.Image.Type.Sliced;
             return image;
         }
 
@@ -164,6 +198,39 @@ namespace TG.Control.Touch.UI.Components
             rect.anchorMax = new Vector2(maxX, maxY);
             rect.offsetMin = new Vector2(left, bottom);
             rect.offsetMax = new Vector2(right, top);
+        }
+
+        private static Sprite GetRoundedSprite()
+        {
+            if (roundedSprite != null) return roundedSprite;
+            const int size = 64;
+            const int radius = 14;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "TG Rounded Rectangle",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            var pixels = new Color[size * size];
+            var half = size * .5f;
+            var inner = half - radius;
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var dx = Mathf.Max(Mathf.Abs(x + .5f - half) - inner, 0);
+                var dy = Mathf.Max(Mathf.Abs(y + .5f - half) - inner, 0);
+                var distance = Mathf.Sqrt(dx * dx + dy * dy);
+                var alpha = Mathf.Clamp01(radius - distance + .5f);
+                pixels[y * size + x] = new Color(1, 1, 1, alpha);
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            roundedSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f),
+                100, 0, SpriteMeshType.FullRect, new Vector4(radius, radius, radius, radius));
+            roundedSprite.name = "TG Rounded Rectangle";
+            roundedSprite.hideFlags = HideFlags.HideAndDontSave;
+            return roundedSprite;
         }
     }
 }

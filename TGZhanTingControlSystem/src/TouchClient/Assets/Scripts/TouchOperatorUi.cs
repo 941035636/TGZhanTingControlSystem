@@ -4,11 +4,12 @@ using System.Collections.Generic;
 using System.Linq;
 using TG.Control.Touch.UI;
 using TG.Control.Touch.UI.Components;
+using TG.Control.Touch.UI.Pages;
+using TG.Control.Touch.UI.Services;
 using TG.Control.Touch.UI.Theme;
 using TG.Control.UnityContracts;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.Networking;
 using UnityEngine.UI;
 
 namespace TG.Control.Touch
@@ -40,22 +41,22 @@ namespace TG.Control.Touch
         private TouchUiFactory uiFactory;
         private Color accent;
         private PageState pageState;
+        private bool navigateToPlaybackWhenSessionArrives;
 
         private Image background;
         private TouchAppShell appShell;
+        private ReceptionHomePage receptionHomePage;
+        private TouchImageLoader imageLoader;
         private InputField routeInput;
         private Text routeCaption;
         private Text selectionSummary;
         private Text editorStatusLabel;
         private Text statusLabel;
-        private RectTransform routeCards;
         private RectTransform moduleCards;
         private ScrollRect moduleScroll;
         private GameObject homePage;
         private GameObject editorPage;
         private GameObject playbackPage;
-        private Text homeStatusLabel;
-        private Text readinessLabel;
         private Text playbackModuleLabel;
         private Text playbackNodeLabel;
         private Text playbackProgressLabel;
@@ -64,7 +65,6 @@ namespace TG.Control.Touch
         private Button backButton;
         private Button deleteButton;
         private Button startButton;
-        private Button startAllButton;
         private Button pauseButton;
         private Button resumeButton;
         private Button skipButton;
@@ -78,7 +78,7 @@ namespace TG.Control.Touch
         private void Awake()
         {
             theme = TouchTheme.CreateDefault();
-            accent = theme.Accent;
+            accent = theme.Primary;
             uiFactory = new TouchUiFactory(theme.CreateFont(), () => accent, theme);
             BuildUi();
         }
@@ -93,6 +93,8 @@ namespace TG.Control.Touch
             presenter.RoutesLoaded += OnRoutesLoaded;
             presenter.RouteSaved += OnRouteSaved;
             presenter.ReadinessChanged += OnReadinessChanged;
+            presenter.UiExperienceChanged += ApplyUiExperience;
+            presenter.UiExperienceLoadFailed += OnUiExperienceLoadFailed;
             presenter.Error += OnError;
             presenter.Attach();
 
@@ -109,6 +111,14 @@ namespace TG.Control.Touch
         private void OnDestroy()
         {
             if (appShell != null) appShell.NavigationRequested -= OnShellNavigationRequested;
+            if (receptionHomePage != null)
+            {
+                receptionHomePage.TemporaryRequested -= NewTemporaryRoute;
+                receptionHomePage.StartAllRequested -= StartAllFromHome;
+                receptionHomePage.ContinuePlaybackRequested -= ContinueCurrentPlayback;
+                receptionHomePage.RouteStartRequested -= StartRoute;
+                receptionHomePage.RouteEditRequested -= EditRoute;
+            }
             if (presenter == null) return;
             presenter.ConnectionChanged -= OnConnectionChanged;
             presenter.ContentLoaded -= OnContentLoaded;
@@ -117,6 +127,8 @@ namespace TG.Control.Touch
             presenter.RoutesLoaded -= OnRoutesLoaded;
             presenter.RouteSaved -= OnRouteSaved;
             presenter.ReadinessChanged -= OnReadinessChanged;
+            presenter.UiExperienceChanged -= ApplyUiExperience;
+            presenter.UiExperienceLoadFailed -= OnUiExperienceLoadFailed;
             presenter.Error -= OnError;
             presenter.Dispose();
         }
@@ -143,67 +155,20 @@ namespace TG.Control.Touch
             background = appShell.Background;
 
             var body = appShell.ContentRoot;
-            homePage = BuildHomePage(body).gameObject;
+            imageLoader = new TouchImageLoader(this);
+            receptionHomePage = new ReceptionHomePage(uiFactory, theme, imageLoader, body);
+            receptionHomePage.TemporaryRequested += NewTemporaryRoute;
+            receptionHomePage.StartAllRequested += StartAllFromHome;
+            receptionHomePage.ContinuePlaybackRequested += ContinueCurrentPlayback;
+            receptionHomePage.RouteStartRequested += StartRoute;
+            receptionHomePage.RouteEditRequested += EditRoute;
+            homePage = receptionHomePage.Root.gameObject;
             editorPage = BuildEditorPage(body).gameObject;
             playbackPage = BuildPlaybackPage(body).gameObject;
             Stretch(homePage.GetComponent<RectTransform>());
             Stretch(editorPage.GetComponent<RectTransform>());
             Stretch(playbackPage.GetComponent<RectTransform>());
             ShowPage(PageState.Home);
-        }
-
-        private RectTransform BuildHomePage(Transform parent)
-        {
-            var page = Rect("Reception Home", parent);
-            var layout = page.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 14;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandHeight = false;
-
-            var hero = Panel("Reception Actions", page, theme.SurfaceElevated);
-            var heroElement = hero.gameObject.AddComponent<LayoutElement>();
-            heroElement.minHeight = 112;
-            heroElement.preferredHeight = 112;
-            heroElement.flexibleHeight = 0;
-            var heroLayout = hero.gameObject.AddComponent<HorizontalLayoutGroup>();
-            heroLayout.padding = new RectOffset(24, 24, 16, 16);
-            heroLayout.spacing = 14;
-            heroLayout.childControlWidth = true;
-            heroLayout.childControlHeight = true;
-            heroLayout.childForceExpandWidth = false;
-
-            var intro = Rect("Reception Intro", hero);
-            intro.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-            var introLayout = intro.gameObject.AddComponent<VerticalLayoutGroup>();
-            introLayout.childControlWidth = true;
-            introLayout.childControlHeight = true;
-            introLayout.childForceExpandHeight = false;
-            LayoutLabel(intro, "选择接待方案", 25, FontStyle.Bold, Ink, 40);
-            readinessLabel = LayoutLabel(intro, "正在检查LED播放端和内容版本…", 14, FontStyle.Bold, Gold, 28);
-
-            var temporary = Button(hero, "临时组合", false, NewTemporaryRoute);
-            temporary.gameObject.AddComponent<LayoutElement>().preferredWidth = 210;
-            startAllButton = Button(hero, "全部主题讲解", true, () => facade.StartAll());
-            startAllButton.gameObject.AddComponent<LayoutElement>().preferredWidth = 230;
-
-            var routesPanel = Panel("Saved Route Area", page, theme.SurfaceElevated);
-            routesPanel.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1;
-            var routesLayout = routesPanel.gameObject.AddComponent<VerticalLayoutGroup>();
-            routesLayout.padding = new RectOffset(18, 18, 14, 14);
-            routesLayout.spacing = 10;
-            routesLayout.childControlWidth = true;
-            routesLayout.childControlHeight = true;
-            routesLayout.childForceExpandHeight = false;
-            LayoutLabel(routesPanel, "常用讲解路线", 21, FontStyle.Bold, Ink, 38);
-            routeCards = ScrollGrid(routesPanel, "Route", 3, theme.RouteGridCellSize,
-                new Vector2(theme.CardSpacing, theme.CardSpacing));
-
-            homeStatusLabel = LayoutLabel(page, status, 14, FontStyle.Normal, Muted, 54);
-            var homeStatusElement = homeStatusLabel.GetComponent<LayoutElement>();
-            homeStatusElement.preferredHeight = 54;
-            homeStatusElement.flexibleHeight = 0;
-            return page;
         }
 
         private RectTransform BuildEditorPage(Transform parent)
@@ -326,7 +291,7 @@ namespace TG.Control.Touch
         {
             connected = value;
             status = value ? "系统已连接，可以开始讲解。" : "服务器连接中断，正在自动重连…";
-            RebuildRoutes();
+            if (value) receptionHomePage?.ClearError();
             Refresh();
         }
 
@@ -337,17 +302,12 @@ namespace TG.Control.Touch
             selectionOrder.RemoveAll(id => !selected.Contains(id));
             status = $"内容版本 V{value.version} 已加载，共 {value.modules.Length} 个主题。";
             RebuildModules();
-            RebuildRoutes();
             Refresh();
         }
 
         private void OnReadinessChanged(SystemReadiness value)
         {
-            var changed = readiness == null || readiness.canStart != value.canStart ||
-                          readiness.contentVersion != value.contentVersion || readiness.ledOnline != value.ledOnline ||
-                          readiness.ledContentVersion != value.ledContentVersion;
             readiness = value;
-            if (changed) RebuildRoutes();
             Refresh();
         }
 
@@ -360,7 +320,6 @@ namespace TG.Control.Touch
                 var remembered = routes.FirstOrDefault(item => item.id == lastId) ?? routes.FirstOrDefault();
                 if (remembered != null) LoadRoute(remembered);
             }
-            RebuildRoutes();
             Refresh();
         }
 
@@ -377,20 +336,34 @@ namespace TG.Control.Touch
         {
             session = value;
             confirmStop = false;
-            if (value != null) ShowPage(PageState.Playback);
-            else if (pageState == PageState.Playback) ShowPage(PageState.Home);
-            RebuildRoutes();
+            if (value != null && navigateToPlaybackWhenSessionArrives)
+            {
+                navigateToPlaybackWhenSessionArrives = false;
+                ShowPage(PageState.Playback);
+            }
+            else if (value == null && pageState == PageState.Playback) ShowPage(PageState.Home);
             Refresh();
         }
 
         private void OnStatus(string value)
         {
             status = value;
-            if (facade.HasActiveSession) ShowPage(PageState.Playback);
+            receptionHomePage?.ClearError();
+            if (facade.HasActiveSession && navigateToPlaybackWhenSessionArrives)
+            {
+                navigateToPlaybackWhenSessionArrives = false;
+                ShowPage(PageState.Playback);
+            }
             Refresh();
         }
 
-        private void OnError(string value) { status = "操作失败：" + value; Refresh(); }
+        private void OnError(string value)
+        {
+            navigateToPlaybackWhenSessionArrives = false;
+            status = "操作失败：" + value;
+            receptionHomePage?.ShowError(status);
+            Refresh();
+        }
 
         private void LoadRoute(NarrationRoute route)
         {
@@ -473,7 +446,23 @@ namespace TG.Control.Touch
         {
             LoadRoute(route);
             status = "正在启动路线：“" + route.name + "”…";
+            navigateToPlaybackWhenSessionArrives = true;
             facade.StartModules(route.moduleIds ?? Array.Empty<string>());
+            Refresh();
+        }
+
+        private void StartAllFromHome()
+        {
+            status = "正在准备全部主题讲解…";
+            navigateToPlaybackWhenSessionArrives = true;
+            facade.StartAll();
+            Refresh();
+        }
+
+        private void ContinueCurrentPlayback()
+        {
+            if (!facade.HasActiveSession) return;
+            ShowPage(PageState.Playback);
             Refresh();
         }
 
@@ -527,6 +516,7 @@ namespace TG.Control.Touch
         {
             if (selectionOrder.Count == 0) return;
             status = "正在准备讲解路线…";
+            navigateToPlaybackWhenSessionArrives = true;
             facade.StartModules(selectionOrder.ToArray());
             Refresh();
         }
@@ -632,54 +622,6 @@ namespace TG.Control.Touch
             appShell.SetActiveSection(section);
         }
 
-        private void RebuildRoutes()
-        {
-            if (routeCards == null) return;
-            Clear(routeCards);
-            if (routes.Length == 0)
-            {
-                var empty = Panel("No Saved Routes", routeCards, theme.Surface);
-                var emptyLayout = empty.gameObject.AddComponent<VerticalLayoutGroup>();
-                emptyLayout.padding = new RectOffset(26, 26, 24, 24);
-                emptyLayout.spacing = 10;
-                emptyLayout.childControlHeight = true;
-                emptyLayout.childControlWidth = true;
-                emptyLayout.childForceExpandHeight = false;
-                LayoutLabel(empty, "尚未保存常用路线", 20, FontStyle.Bold, Ink, 42);
-                LayoutLabel(empty, "点击上方“临时组合”，选择主题并保存后，即可在此一键开始讲解。", 14, FontStyle.Normal, Muted, 58);
-                var create = Button(empty, "创建第一条路线", true, NewTemporaryRoute);
-                create.gameObject.AddComponent<LayoutElement>().preferredHeight = 54;
-                return;
-            }
-            foreach (var item in routes)
-            {
-                var route = item;
-                var card = Panel("Route " + route.name, routeCards,
-                    route.id == activeRouteId ? theme.PrimaryMuted : theme.Surface);
-                var element = card.gameObject.AddComponent<LayoutElement>();
-                element.preferredWidth = 592;
-                element.preferredHeight = 225;
-                var layout = card.gameObject.AddComponent<VerticalLayoutGroup>();
-                layout.padding = new RectOffset(18, 18, 14, 14);
-                layout.spacing = 6;
-                layout.childControlHeight = true;
-                layout.childControlWidth = true;
-                layout.childForceExpandHeight = false;
-                LayoutLabel(card, route.name, 21, FontStyle.Bold, Ink, 36);
-                var ids = route.moduleIds ?? Array.Empty<string>();
-                var names = ids.Select(id => content?.modules.FirstOrDefault(module => module.id == id)?.name)
-                    .Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
-                LayoutLabel(card, ids.Length + " 个主题", 13, FontStyle.Bold, Gold, 22);
-                var moduleNames = names.Length == 0 ? "内容尚未就绪" : string.Join(" → ", names);
-                LayoutLabel(card, moduleNames, 13, FontStyle.Normal, Muted, 52);
-                var actions = Row(card, 8, 52);
-                var edit = Button(actions, "编辑路线", false, () => EditRoute(route));
-                edit.gameObject.AddComponent<LayoutElement>().preferredWidth = 145;
-                var play = Button(actions, "开始讲解", true, () => StartRoute(route));
-                play.interactable = CanStart && !facade.HasActiveSession && RoutePlayable(route);
-            }
-        }
-
         private void RebuildModules()
         {
             if (moduleCards == null) return;
@@ -730,16 +672,7 @@ namespace TG.Control.Touch
         {
             if (appShell == null) return;
             appShell.SetGlobalState(connected, readiness, facade.HasActiveSession);
-            if (readinessLabel != null)
-            {
-                readinessLabel.text = readiness?.message ?? "正在检查LED播放端和内容版本…";
-                readinessLabel.color = readiness?.canStart == true && readiness.ledReady ? accent : Gold;
-            }
-            if (homeStatusLabel != null)
-                homeStatusLabel.text = !connected ? "服务器连接中断，系统正在自动重连；恢复连接后可继续操作。"
-                    : readiness?.canStart == false ? "暂不可开始：" + readiness.message
-                    : readiness?.ledReady == false ? "受限可用：仍可开始讲解；缺失素材会再次下载，失败节点按策略跳过或可人工重试。"
-                    : status;
+            if (presenter != null) receptionHomePage?.Render(presenter.State, presenter.NormalizeAssetUrl);
             if (editorStatusLabel != null) editorStatusLabel.text = status;
             if (statusLabel != null) statusLabel.text = status;
             if (playbackModuleLabel != null)
@@ -773,7 +706,6 @@ namespace TG.Control.Touch
             deleteButton.GetComponentInChildren<Text>().text = confirmDelete ? "确认删除" : "删除路线";
             backButton.GetComponentInChildren<Text>().text = confirmLeaveEditor ? "放弃修改" : "← 返回首页";
             startButton.interactable = CanStart && idle && modules.Any(HasContent);
-            startAllButton.interactable = CanStart && idle && content?.modules.Any(module => module.enabled && HasContent(module)) == true;
             pauseButton.gameObject.SetActive(session != null && !session.paused);
             resumeButton.gameObject.SetActive(session != null && session.paused);
             pauseButton.interactable = resumeButton.interactable = retryButton.interactable = skipButton.interactable = stopButton.interactable = connected && !idle;
@@ -786,46 +718,27 @@ namespace TG.Control.Touch
             appShell.SetBranding(config.touchTitle, config.touchSubtitle);
             if (ColorUtility.TryParseHtmlString(config.touchAccentColor, out var color))
             {
-                theme.SetAccent(color);
-                accent = theme.Accent;
-                appShell.RefreshTheme();
+                theme.SetConfigurableAccent(color);
+                receptionHomePage?.RefreshTheme();
             }
-            if (ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out color)) background.color = color;
-            if (!string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) StartCoroutine(LoadBackground(apiClient.NormalizeUrl(config.touchBackgroundUrl)));
-            foreach (var button in GetComponentsInChildren<Button>(true))
-                if (button.gameObject.name.StartsWith("Primary - ", StringComparison.Ordinal)) button.targetGraphic.color = accent;
-            RebuildModules();
+            background.sprite = null;
+            background.color = ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out color)
+                ? color : theme.Background;
+            Refresh();
         }
 
         private IEnumerator UiExperienceLoop()
         {
             while (enabled)
             {
-                var completed = false;
-                apiClient.GetUiExperience(value => { ApplyUiExperience(value); completed = true; }, message =>
-                {
-                    Debug.LogWarning("读取中控界面配置失败：" + message);
-                    completed = true;
-                });
-                while (!completed && enabled) yield return null;
+                presenter?.RefreshUiExperience();
                 yield return new WaitForSecondsRealtime(10);
             }
         }
 
-        private IEnumerator LoadBackground(string url)
-        {
-            using (var request = UnityWebRequestTexture.GetTexture(url))
-            {
-                yield return request.SendWebRequest();
-                if (request.result != UnityWebRequest.Result.Success) yield break;
-                var texture = DownloadHandlerTexture.GetContent(request);
-                if (texture == null) yield break;
-                background.sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f));
-                background.color = Color.white;
-            }
-        }
+        private void OnUiExperienceLoadFailed(string message) =>
+            Debug.LogWarning("读取中控界面配置失败：" + message);
 
-        private bool RoutePlayable(NarrationRoute route) => content?.modules.Any(module => route.moduleIds != null && route.moduleIds.Contains(module.id) && HasContent(module)) == true;
         private bool CanStart => connected && readiness?.canStart == true;
         private static bool HasContent(ExhibitionModule module) => module?.nodes != null && module.nodes.Any(node => node != null && (!string.IsNullOrWhiteSpace(node.narrationText) || !string.IsNullOrWhiteSpace(node.ttsAudioUrl)));
 

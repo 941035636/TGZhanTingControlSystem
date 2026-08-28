@@ -11,6 +11,7 @@ namespace TG.Control.Touch.UI
         private readonly TouchApiClient apiClient;
         private readonly TouchControlFacade facade;
         private bool attached;
+        private bool uiExperiencePending;
 
         public TouchUiState State { get; }
         public event Action<bool> ConnectionChanged;
@@ -20,6 +21,8 @@ namespace TG.Control.Touch.UI
         public event Action<NarrationRoute[]> RoutesLoaded;
         public event Action<NarrationRoute> RouteSaved;
         public event Action<SystemReadiness> ReadinessChanged;
+        public event Action<UiExperienceConfig> UiExperienceChanged;
+        public event Action<string> UiExperienceLoadFailed;
         public event Action<string> Error;
 
         public TouchUiPresenter(TouchApiClient apiClient, TouchControlFacade facade)
@@ -31,7 +34,8 @@ namespace TG.Control.Touch.UI
                 Connected = apiClient.IsConnected,
                 Content = facade.CurrentContent,
                 Readiness = facade.CurrentReadiness,
-                Routes = facade.CurrentRoutes ?? Array.Empty<NarrationRoute>()
+                Routes = facade.CurrentRoutes ?? Array.Empty<NarrationRoute>(),
+                HasActiveSession = facade.HasActiveSession
             };
         }
 
@@ -65,11 +69,44 @@ namespace TG.Control.Touch.UI
 
         private void HandleConnectionChanged(bool value) { State.Connected = value; ConnectionChanged?.Invoke(value); }
         private void HandleContentLoaded(PublishedContent value) { State.Content = value; ContentLoaded?.Invoke(value); }
-        private void HandleStatus(string value) { State.Status = value; StatusChanged?.Invoke(value); }
-        private void HandleSessionChanged(PlaybackSessionStatus value) { State.Session = value; SessionChanged?.Invoke(value); }
+        private void HandleStatus(string value)
+        {
+            State.Status = value;
+            State.HasActiveSession = facade.HasActiveSession;
+            StatusChanged?.Invoke(value);
+        }
+        private void HandleSessionChanged(PlaybackSessionStatus value)
+        {
+            State.Session = value;
+            State.HasActiveSession = value != null || facade.HasActiveSession;
+            SessionChanged?.Invoke(value);
+        }
         private void HandleRoutesLoaded(NarrationRoute[] value) { State.Routes = value ?? Array.Empty<NarrationRoute>(); RoutesLoaded?.Invoke(State.Routes); }
         private void HandleRouteSaved(NarrationRoute value) { RouteSaved?.Invoke(value); }
         private void HandleReadinessChanged(SystemReadiness value) { State.Readiness = value; ReadinessChanged?.Invoke(value); }
-        private void HandleError(string value) { Error?.Invoke(value); }
+        private void HandleError(string value)
+        {
+            State.Status = "操作失败：" + value;
+            State.HasActiveSession = facade.HasActiveSession;
+            Error?.Invoke(value);
+        }
+
+        public void RefreshUiExperience()
+        {
+            if (uiExperiencePending) return;
+            uiExperiencePending = true;
+            apiClient.GetUiExperience(value =>
+            {
+                uiExperiencePending = false;
+                State.UiExperience = value;
+                UiExperienceChanged?.Invoke(value);
+            }, message =>
+            {
+                uiExperiencePending = false;
+                UiExperienceLoadFailed?.Invoke(message);
+            });
+        }
+
+        public string NormalizeAssetUrl(string url) => apiClient.NormalizeUrl(url);
     }
 }
