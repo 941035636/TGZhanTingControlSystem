@@ -55,8 +55,12 @@ namespace TG.Control.Touch.UI.Theme
         public float HomeHeroHeight { get; } = 300;
         public float HomeStatusPanelWidth { get; } = 370;
         public float HomeQuickActionHeight { get; } = 124;
+        public float RouteEditorHeaderHeight { get; } = 150;
+        public float RouteEditorSelectionWidth { get; } = 440;
+        public float RouteEditorSequenceItemHeight { get; } = 78;
         public Vector2 RouteGridCellSize { get; } = new Vector2(500, 240);
         public Vector2 ModuleGridCellSize { get; } = new Vector2(370, 185);
+        public Vector2 RouteEditorModuleCellSize { get; } = new Vector2(265, 166);
 
         // Compatibility aliases retained until the legacy page internals are migrated in later stages.
         public Color Ink => TextPrimary;
