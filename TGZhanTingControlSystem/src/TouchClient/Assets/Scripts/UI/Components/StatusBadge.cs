@@ -20,17 +20,17 @@ namespace TG.Control.Touch.UI.Components
         public StatusBadge(TouchUiFactory factory, TouchTheme theme, Transform parent, string name)
         {
             this.theme = theme;
-            background = factory.Image(name, parent, theme.SurfaceElevated);
+            background = factory.RoundedImage(name, parent, theme.SurfaceElevated);
             var layout = background.gameObject.AddComponent<LayoutElement>();
             layout.preferredHeight = theme.StatusBadgeHeight;
-            layout.minWidth = 156;
+            layout.minWidth = 168;
 
-            indicator = factory.Image("State Indicator", background.transform, theme.TextSecondary);
+            indicator = factory.RoundedImage("State Indicator", background.transform, theme.TextSecondary);
             TouchUiFactory.Anchor(indicator.rectTransform, 0, .5f, 0, .5f,
-                theme.CardSpacing, -5, theme.CardSpacing + 10, 5);
+                theme.Space16, -4, theme.Space16 + 8, 4);
             label = factory.Label("State Label", background.transform, string.Empty, theme.Caption,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Stretch(label.rectTransform, theme.CardSpacing + 20, 0, -theme.CardSpacing, 0);
+            TouchUiFactory.Stretch(label.rectTransform, theme.Space16 + 18, 0, -theme.Space16, 0);
         }
 
         public void Set(string text, StatusTone value)
@@ -39,7 +39,7 @@ namespace TG.Control.Touch.UI.Components
             label.text = text ?? string.Empty;
             var stateColor = ToneColor(tone);
             indicator.color = stateColor;
-            background.color = Color.Lerp(theme.SurfaceElevated, stateColor, .12f);
+            background.color = Color.Lerp(theme.SurfaceElevated, stateColor, .14f);
         }
 
         public void RefreshTheme() => Set(label.text, tone);

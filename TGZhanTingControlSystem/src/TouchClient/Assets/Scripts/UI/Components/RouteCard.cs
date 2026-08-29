@@ -36,7 +36,8 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(accentBar.rectTransform, 0, 1, 1, 1, 0, -5, 0, 0);
 
             cover = factory.RoundedImage("Route Cover", surface.transform, theme.PrimarySoft);
-            TouchUiFactory.Anchor(cover.rectTransform, 0, 1, 0, 1, 18, -116, 132, -18);
+            TouchUiFactory.Anchor(cover.rectTransform, 0, 1, 0, 1,
+                theme.Space16, -94, 108, -theme.Space16);
             cover.raycastTarget = false;
             placeholder = factory.Label("Route Cover Placeholder", cover.transform, (index + 1).ToString("00"),
                 theme.H2, FontStyle.Bold, theme.ConfigurableAccent, TextAnchor.MiddleCenter);
@@ -45,32 +46,35 @@ namespace TG.Control.Touch.UI.Components
             var title = factory.Label("Route Name", surface.transform,
                 string.IsNullOrWhiteSpace(route.name) ? "未命名路线" : route.name,
                 theme.CardTitle, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(title.rectTransform, 0, 1, 1, 1, 150, -54, -18, -17);
+            TouchUiFactory.Anchor(title.rectTransform, 0, 1, 1, 1,
+                126, -48, -theme.Space16, -theme.Space16);
             title.resizeTextForBestFit = true;
-            title.resizeTextMinSize = 16;
+            title.resizeTextMinSize = theme.Secondary;
             title.resizeTextMaxSize = theme.CardTitle;
 
             var ids = route.moduleIds ?? Array.Empty<string>();
             var count = factory.Label("Theme Count", surface.transform, ids.Length + " 个主题",
                 theme.Caption, FontStyle.Bold, theme.ConfigurableAccent, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(count.rectTransform, 0, 1, 1, 1, 150, -83, -18, -56);
+            TouchUiFactory.Anchor(count.rectTransform, 0, 1, 1, 1,
+                126, -74, -theme.Space16, -50);
             var summaryText = moduleNames == null || moduleNames.Length == 0
                 ? "内容尚未就绪"
                 : string.Join(" · ", moduleNames);
             var summary = factory.Label("Theme Summary", surface.transform, summaryText, theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.UpperLeft);
-            TouchUiFactory.Anchor(summary.rectTransform, 0, 1, 1, 1, 150, -121, -18, -86);
+            TouchUiFactory.Anchor(summary.rectTransform, 0, 1, 1, 1,
+                126, -116, -theme.Space16, -76);
 
             var editButton = factory.TouchButton(surface.transform, "编辑路线", false,
                 () => EditRequested?.Invoke(route));
             TouchUiFactory.Anchor(editButton.GetComponent<RectTransform>(), 0, 0, 0, 0,
-                18, 16, 150, 72);
+                theme.Space16, theme.Space12, 154, 66);
             editButton.interactable = !hasActiveSession;
             startButton = factory.TouchButton(surface.transform,
                 hasActiveSession ? "讲解进行中" : "开始讲解", !hasActiveSession,
                 () => StartRequested?.Invoke(route));
             TouchUiFactory.Anchor(startButton.GetComponent<RectTransform>(), 0, 0, 1, 0,
-                160, 16, -18, 72);
+                166, theme.Space12, -theme.Space16, 66);
             startButton.interactable = canStart && !hasActiveSession;
             if (!startButton.interactable) startButton.GetComponent<Image>().color = theme.SecondaryButton;
 

@@ -33,14 +33,14 @@ namespace TG.Control.Touch.UI
 
         public void Build(Transform canvas)
         {
-            background = factory.Image("App Background", canvas, theme.Background);
+            background = factory.Image("App Background", canvas, theme.AppBackground);
             TouchUiFactory.Stretch(background.rectTransform);
             background.raycastTarget = false;
 
             var veil = factory.Image("App Background Veil", canvas, theme.BackdropVeil);
             TouchUiFactory.Stretch(veil.rectTransform);
             veil.raycastTarget = false;
-            ambientAccent = factory.Image("Ambient Accent", canvas, Color.Lerp(theme.Background, theme.Primary, .2f));
+            ambientAccent = factory.Image("Ambient Accent", canvas, Color.Lerp(theme.AppBackground, theme.Primary, .24f));
             TouchUiFactory.Anchor(ambientAccent.rectTransform, 1, 1, 1, 1, -520, -4, 0, 0);
             ambientAccent.raycastTarget = false;
 
@@ -96,7 +96,7 @@ namespace TG.Control.Touch.UI
 
         public void RefreshTheme()
         {
-            ambientAccent.color = Color.Lerp(theme.Background, theme.Primary, .2f);
+            ambientAccent.color = Color.Lerp(theme.AppBackground, theme.Primary, .24f);
             topBar.RefreshTheme();
             navigation.RefreshTheme();
             contentHost.RefreshTheme(theme);

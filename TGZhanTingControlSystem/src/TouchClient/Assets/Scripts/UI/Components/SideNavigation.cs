@@ -18,6 +18,7 @@ namespace TG.Control.Touch.UI.Components
             public Image Accent;
             public Text Number;
             public Text Label;
+            public Image Activity;
             public Button Button;
             public bool Available = true;
         }
@@ -37,10 +38,10 @@ namespace TG.Control.Touch.UI.Components
             var border = factory.Image("Navigation Border", root.transform, theme.Border);
             TouchUiFactory.Anchor(border.rectTransform, 1, 0, 1, 1, -1, 0, 0, 0);
 
-            var heading = factory.Label("Navigation Heading", root.transform, "功能导航", theme.CardTitle,
+            var heading = factory.Label("Navigation Heading", root.transform, "接待工作台", theme.SectionTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(heading.rectTransform, 0, 1, 1, 1,
-                theme.PagePadding, -64, -theme.PagePadding, -theme.CardSpacing);
+                theme.PagePadding, -64, -theme.PagePadding, -theme.Space16);
             var caption = factory.Label("Navigation Caption", root.transform, "EXHIBITION CONTROL", theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1,
@@ -84,10 +85,10 @@ namespace TG.Control.Touch.UI.Components
 
         private void CreateItem(TouchUiFactory factory, TouchShellSection section, string number, string text, int index)
         {
-            var image = factory.Image("Navigation - " + text, root.transform, theme.NavigationBackground);
-            var top = -(112 + index * (theme.ButtonHeight + 12));
+            var image = factory.RoundedImage("Navigation - " + text, root.transform, theme.NavigationBackground);
+            var top = -(112 + index * (theme.NavigationItemHeight + theme.Space12));
             TouchUiFactory.Anchor(image.rectTransform, 0, 1, 1, 1,
-                12, top - theme.ButtonHeight, -12, top);
+                theme.Space12, top - theme.NavigationItemHeight, -theme.Space12, top);
             var button = image.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             button.onClick.AddListener(() =>
@@ -96,19 +97,26 @@ namespace TG.Control.Touch.UI.Components
                     NavigateRequested?.Invoke(section);
             });
             var colors = button.colors;
-            colors.highlightedColor = theme.SecondaryHighlight;
-            colors.pressedColor = theme.PrimaryPressed;
-            colors.disabledColor = theme.NeutralTint;
+            colors.normalColor = theme.NeutralTint;
+            colors.highlightedColor = Color.Lerp(theme.NeutralTint, theme.PrimaryHover, .10f);
+            colors.pressedColor = Color.Lerp(theme.NeutralTint, theme.PrimaryPressed, .18f);
+            colors.disabledColor = theme.DisabledControlTint;
+            colors.fadeDuration = .08f;
             button.colors = colors;
 
             var accent = factory.Image("Selection", image.transform, theme.Primary);
-            TouchUiFactory.Anchor(accent.rectTransform, 0, 0, 0, 1, 0, 0, 4, 0);
+            TouchUiFactory.Anchor(accent.rectTransform, 0, 0, 0, 1, 0, theme.Space8, 5, -theme.Space8);
             var numberLabel = factory.Label("Index", image.transform, number, theme.Caption, FontStyle.Bold,
                 theme.TextSecondary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(numberLabel.rectTransform, 0, 0, 0, 1, theme.CardSpacing, 0, theme.CardSpacing + 34, 0);
+            TouchUiFactory.Anchor(numberLabel.rectTransform, 0, 0, 0, 1,
+                theme.Space16, 0, theme.Space16 + 34, 0);
             var textLabel = factory.Label("Label", image.transform, text, theme.Body, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, 58, 0, -theme.CardSpacing, 0);
+            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, 58, 0, -theme.Space32, 0);
+            var activity = factory.RoundedImage("Activity", image.transform, theme.Success);
+            TouchUiFactory.Anchor(activity.rectTransform, 1, .5f, 1, .5f,
+                -theme.Space24, -5, -theme.Space16, 5);
+            activity.gameObject.SetActive(false);
             items.Add(new Item
             {
                 Section = section,
@@ -116,6 +124,7 @@ namespace TG.Control.Touch.UI.Components
                 Accent = accent,
                 Number = numberLabel,
                 Label = textLabel,
+                Activity = activity,
                 Button = button
             });
         }
@@ -128,6 +137,8 @@ namespace TG.Control.Touch.UI.Components
             item.Accent.color = theme.Primary;
             item.Number.color = !item.Available ? theme.Disabled : selected ? theme.Primary : theme.TextSecondary;
             item.Label.color = !item.Available ? theme.Disabled : theme.TextPrimary;
+            item.Activity.gameObject.SetActive(item.Section == TouchShellSection.Playback && item.Available);
+            item.Activity.color = theme.Success;
         }
     }
 }

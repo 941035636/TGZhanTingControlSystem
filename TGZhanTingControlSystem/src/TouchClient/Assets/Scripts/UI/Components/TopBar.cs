@@ -15,6 +15,7 @@ namespace TG.Control.Touch.UI.Components
         private readonly Text subtitle;
         private readonly Text dateLabel;
         private readonly Text timeLabel;
+        private readonly Image timeSurface;
         private readonly StatusBadge connectionBadge;
         private readonly StatusBadge readinessBadge;
         private int renderedSecond = -1;
@@ -28,14 +29,14 @@ namespace TG.Control.Touch.UI.Components
             var divider = factory.Image("Top Bar Border", root.transform, theme.Border);
             TouchUiFactory.Anchor(divider.rectTransform, 0, 0, 1, 0, 0, 0, 0, 2);
 
-            brandMark = factory.Image("Brand Mark", root.transform, theme.Primary);
+            brandMark = factory.RoundedImage("Brand Mark", root.transform, theme.PrimaryMuted);
             TouchUiFactory.Anchor(brandMark.rectTransform, 0, .5f, 0, .5f,
                 theme.PagePadding, -26, theme.PagePadding + 52, 26);
-            var brandLetters = factory.Label("Brand Letters", brandMark.transform, "TG", theme.CardTitle,
+            var brandLetters = factory.Label("Brand Letters", brandMark.transform, "TG", theme.SectionTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleCenter);
             TouchUiFactory.Stretch(brandLetters.rectTransform);
 
-            title = factory.Label("Product Name", root.transform, "展厅自动讲解系统", theme.H2,
+            title = factory.Label("Product Name", root.transform, "展厅自动讲解系统", theme.PageTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(title.rectTransform, 0, .47f, .5f, 1,
                 theme.PagePadding + 72, 0, 0, -theme.CardSpacing / 2);
@@ -44,15 +45,17 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(subtitle.rectTransform, 0, 0, .5f, .5f,
                 theme.PagePadding + 72, theme.CardSpacing / 2, 0, 0);
 
-            dateLabel = factory.Label("Current Date", root.transform, string.Empty, theme.Caption,
+            timeSurface = factory.RoundedImage("Local Time Panel", root.transform, theme.SurfaceSoft);
+            TouchUiFactory.Anchor(timeSurface.rectTransform, 1, .5f, 1, .5f, -704, -24, -454, 24);
+            dateLabel = factory.Label("Current Date", timeSurface.transform, string.Empty, theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleRight);
-            TouchUiFactory.Anchor(dateLabel.rectTransform, 1, 0, 1, 1, -690, 0, -585, 0);
-            timeLabel = factory.Label("Current Time", root.transform, string.Empty, theme.Body,
+            TouchUiFactory.Anchor(dateLabel.rectTransform, 0, 0, .48f, 1, theme.Space12, 0, 0, 0);
+            timeLabel = factory.Label("Current Time", timeSurface.transform, string.Empty, theme.Body,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(timeLabel.rectTransform, 1, 0, 1, 1, -570, 0, -450, 0);
+            TouchUiFactory.Anchor(timeLabel.rectTransform, .50f, 0, 1, 1, 0, 0, -theme.Space12, 0);
 
             connectionBadge = new StatusBadge(factory, theme, root.transform, "Server Status");
-            TouchUiFactory.Anchor(connectionBadge.Root, 1, .5f, 1, .5f, -430, -22, -242, 22);
+            TouchUiFactory.Anchor(connectionBadge.Root, 1, .5f, 1, .5f, -438, -22, -246, 22);
             readinessBadge = new StatusBadge(factory, theme, root.transform, "Reception Status");
             TouchUiFactory.Anchor(readinessBadge.Root, 1, .5f, 1, .5f, -226, -22, -theme.PagePadding, 22);
             connectionBadge.Set("服务连接中", StatusTone.Warning);
@@ -82,7 +85,8 @@ namespace TG.Control.Touch.UI.Components
 
         public void RefreshTheme()
         {
-            brandMark.color = theme.Primary;
+            brandMark.color = theme.PrimaryMuted;
+            timeSurface.color = theme.SurfaceSoft;
             connectionBadge.RefreshTheme();
             readinessBadge.RefreshTheme();
         }

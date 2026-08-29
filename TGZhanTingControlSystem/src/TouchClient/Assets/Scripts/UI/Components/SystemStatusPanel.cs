@@ -30,22 +30,22 @@ namespace TG.Control.Touch.UI.Components
             var title = factory.Label("System Status Title", surface.transform, "系统接待状态", theme.CardTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(title.rectTransform, 0, 1, 1, 1,
-                theme.PanelPadding, -58, -theme.PanelPadding, -18);
+                theme.PanelPadding, -50, -theme.PanelPadding, -theme.Space12);
             stateIndicator = factory.Image("System State Indicator", surface.transform, theme.TextSecondary);
-            TouchUiFactory.Anchor(stateIndicator.rectTransform, 1, 1, 1, 1, -40, -44, -28, -32);
+            TouchUiFactory.Anchor(stateIndicator.rectTransform, 1, 1, 1, 1, -40, -38, -28, -26);
 
             stateLabel = factory.Label("System State", surface.transform, "状态检查中", theme.Body,
                 FontStyle.Bold, theme.TextSecondary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(stateLabel.rectTransform, 0, 1, 1, 1,
-                theme.PanelPadding, -104, -theme.PanelPadding, -64);
+                theme.PanelPadding, -90, -theme.PanelPadding, -54);
             var divider = factory.Image("System Divider", surface.transform, theme.Border);
             TouchUiFactory.Anchor(divider.rectTransform, 0, 1, 1, 1,
-                theme.PanelPadding, -116, -theme.PanelPadding, -114);
+                theme.PanelPadding, -98, -theme.PanelPadding, -96);
 
-            serverValue = CreateRow(factory, surface.transform, "Server连接", 132);
-            ledValue = CreateRow(factory, surface.transform, "LED播放端", 174);
-            contentValue = CreateRow(factory, surface.transform, "正式内容", 216);
-            readinessValue = CreateRow(factory, surface.transform, "系统就绪", 258);
+            serverValue = CreateRow(factory, surface.transform, "Server连接", 106);
+            ledValue = CreateRow(factory, surface.transform, "LED播放端", 142);
+            contentValue = CreateRow(factory, surface.transform, "正式内容", 178);
+            readinessValue = CreateRow(factory, surface.transform, "系统就绪", 214);
         }
 
         public void Render(TouchUiState state)
@@ -92,13 +92,13 @@ namespace TG.Control.Touch.UI.Components
         private Text CreateRow(TouchUiFactory factory, Transform parent, string label, float top)
         {
             var key = factory.Label(label + " Label", parent, label, theme.Caption, FontStyle.Normal,
-                theme.TextSecondary, TextAnchor.MiddleLeft);
+                theme.TextMuted, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(key.rectTransform, 0, 1, .48f, 1,
-                theme.PanelPadding, -top - 34, 0, -top);
+                theme.PanelPadding, -top - 30, 0, -top);
             var value = factory.Label(label + " Value", parent, "—", theme.Caption, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(value.rectTransform, .42f, 1, 1, 1,
-                0, -top - 34, -theme.PanelPadding, -top);
+                0, -top - 30, -theme.PanelPadding, -top);
             return value;
         }
     }

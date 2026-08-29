@@ -61,32 +61,38 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(divider.rectTransform, 0, 1, 1, 1, 34, -120, -34, -118);
             divider.raycastTarget = false;
 
+            var focusSurface = factory.RoundedImage("Playback Current Focus", surface.transform, theme.SurfaceGlass);
+            TouchUiFactory.Anchor(focusSurface.rectTransform, 0, 1, 1, 1,
+                theme.Space32, -350, -theme.Space32, -132);
+            focusSurface.raycastTarget = false;
+
             var moduleKey = factory.Label("Playback Module Key", surface.transform, "当前讲解主题", theme.Caption,
                 FontStyle.Bold, theme.Primary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(moduleKey.rectTransform, 0, 1, .5f, 1, 34, -174, 0, -136);
+            TouchUiFactory.Anchor(moduleKey.rectTransform, 0, 1, .5f, 1, 52, -174, 0, -144);
             moduleSequence = factory.Label("Playback Module Sequence", surface.transform, string.Empty, theme.Caption,
                 FontStyle.Bold, theme.TextSecondary, TextAnchor.MiddleRight);
-            TouchUiFactory.Anchor(moduleSequence.rectTransform, .5f, 1, 1, 1, 0, -174, -34, -136);
+            TouchUiFactory.Anchor(moduleSequence.rectTransform, .5f, 1, 1, 1, 0, -174, -52, -144);
 
-            moduleName = factory.Label("Playback Module Name", surface.transform, "正在恢复当前主题", theme.H1,
+            moduleName = factory.Label("Playback Module Name", surface.transform, "正在恢复当前主题", theme.Display,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(moduleName.rectTransform, 0, 1, 1, 1, 34, -232, -34, -178);
+            TouchUiFactory.Anchor(moduleName.rectTransform, 0, 1, 1, 1, 52, -238, -52, -178);
             moduleName.resizeTextForBestFit = true;
             moduleName.resizeTextMinSize = theme.H2;
-            moduleName.resizeTextMaxSize = theme.H1;
+            moduleName.resizeTextMaxSize = theme.Display;
 
             var nodeKey = factory.Label("Playback Node Key", surface.transform, "当前讲解节点", theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(nodeKey.rectTransform, 0, 1, 0, 1, 34, -274, 190, -242);
-            nodeName = factory.Label("Playback Node Name", surface.transform, "正在同步大屏与语音，请稍候…", theme.H2,
+            TouchUiFactory.Anchor(nodeKey.rectTransform, 0, 1, 0, 1, 52, -278, 206, -246);
+            nodeName = factory.Label("Playback Node Name", surface.transform, "正在同步大屏与语音，请稍候…", theme.PageTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(nodeName.rectTransform, 0, 1, 1, 1, 190, -282, -34, -238);
+            TouchUiFactory.Anchor(nodeName.rectTransform, 0, 1, 1, 1, 206, -290, -52, -242);
             nodeName.resizeTextForBestFit = true;
             nodeName.resizeTextMinSize = theme.Body;
-            nodeName.resizeTextMaxSize = theme.H2;
+            nodeName.resizeTextMaxSize = theme.PageTitle;
 
             var progressArea = factory.RoundedImage("Playback Overall Progress", surface.transform, theme.SurfaceSoft);
-            TouchUiFactory.Anchor(progressArea.rectTransform, 0, 0, 1, 0, 34, 32, -34, 186);
+            TouchUiFactory.Anchor(progressArea.rectTransform, 0, 0, 1, 0,
+                theme.Space32, theme.Space32, -theme.Space32, 250);
             progressLabel = factory.Label("Playback Progress Label", progressArea.transform,
                 "正在读取讲解进度", theme.Body, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(progressLabel.rectTransform, 0, 1, .68f, 1, 22, -50, 0, -14);
@@ -102,8 +108,8 @@ namespace TG.Control.Touch.UI.Components
             progressFill.raycastTarget = false;
 
             var granularity = factory.Label("Playback Progress Granularity", progressArea.transform,
-                "进度按服务器当前节点更新", theme.Caption, FontStyle.Normal,
-                theme.TextSecondary, TextAnchor.MiddleLeft);
+                "节点进度来自服务端，不显示推测的媒体时间", theme.Caption, FontStyle.Normal,
+                theme.TextMuted, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(granularity.rectTransform, 0, 0, 1, 0, 22, 18, -22, 54);
         }
 
@@ -141,7 +147,7 @@ namespace TG.Control.Touch.UI.Components
 
             var currentIndex = IndexOf(verifiedModuleIds, session.moduleId);
             if (currentIndex < 0) return;
-            moduleSequence.text = "第 " + (currentIndex + 1) + " / " + verifiedModuleIds.Count + " 个主题";
+            moduleSequence.text = "主题进度 · " + (currentIndex + 1) + " / " + verifiedModuleIds.Count;
         }
 
         private void RenderProgress(PlaybackSessionStatus session)
@@ -153,7 +159,7 @@ namespace TG.Control.Touch.UI.Components
             progressFill.rectTransform.offsetMax = Vector2.zero;
             progressLabel.text = session == null || session.totalNodes <= 0
                 ? "正在读取讲解进度"
-                : "整体讲解进度 · 第 " + session.currentNodeNumber + " / " + session.totalNodes + " 个节点";
+                : "整条路线节点进度 · " + session.currentNodeNumber + " / " + session.totalNodes;
 
             preparationLabel.text = session != null && !session.playPublished && session.preparationProgress > 0
                 ? "素材准备 " + Mathf.Clamp01((float)session.preparationProgress).ToString("P0")

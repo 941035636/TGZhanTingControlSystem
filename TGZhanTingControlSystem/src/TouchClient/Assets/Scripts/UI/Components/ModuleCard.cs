@@ -28,7 +28,7 @@ namespace TG.Control.Touch.UI.Components
             this.theme = theme;
             selected = selectionOrder > 0;
             frame = factory.RoundedImage("Module Card - " + module.name, parent,
-                selected ? theme.ConfigurableAccent : theme.Border);
+                selected ? theme.Primary : theme.Border);
             frame.gameObject.AddComponent<LayoutElement>().preferredHeight = theme.RouteEditorModuleCellSize.y;
             surface = factory.RoundedImage("Module Card Surface", frame.transform,
                 selected ? theme.PrimarySoft : theme.SurfaceSoft);
@@ -42,11 +42,12 @@ namespace TG.Control.Touch.UI.Components
             colors.normalColor = Color.white;
             colors.highlightedColor = Color.Lerp(Color.white, theme.PrimaryHighlight, .12f);
             colors.pressedColor = Color.Lerp(Color.white, theme.PrimaryPressed, .22f);
-            colors.disabledColor = new Color(.52f, .58f, .66f, .72f);
+            colors.disabledColor = theme.DisabledControlTint;
+            colors.fadeDuration = .08f;
             button.colors = colors;
 
             accent = factory.RoundedImage("Module Accent", surface.transform,
-                selected ? theme.ConfigurableAccent : Color.clear);
+                selected ? theme.Primary : Color.clear);
             TouchUiFactory.Anchor(accent.rectTransform, 0, 1, 1, 1, 0, -5, 0, 0);
             accent.raycastTarget = false;
 
@@ -62,16 +63,16 @@ namespace TG.Control.Touch.UI.Components
                 theme.Body, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(title.rectTransform, 0, 1, 1, 1, 116, -66, -16, -15);
             title.resizeTextForBestFit = true;
-            title.resizeTextMinSize = 14;
+            title.resizeTextMinSize = theme.Secondary;
             title.resizeTextMaxSize = theme.Body;
 
-            var stateText = configured ? "讲解内容已配置" : "内容待配置 · 执行时按现有策略处理";
+            var stateText = configured ? "讲解内容就绪" : "内容待配置";
             var state = factory.Label("Module Content State", surface.transform, stateText, theme.Caption,
                 FontStyle.Normal, configured ? theme.TextSecondary : theme.Warning, TextAnchor.UpperLeft);
-            TouchUiFactory.Anchor(state.rectTransform, 0, 1, 1, 1, 116, -108, -16, -70);
+            TouchUiFactory.Anchor(state.rectTransform, 0, 1, 1, 1, 116, -98, -16, -70);
 
             var badge = factory.RoundedImage("Module Selection Badge", surface.transform,
-                selected ? theme.ConfigurableAccent : theme.SecondaryButton);
+                selected ? theme.Primary : theme.SecondaryButton);
             TouchUiFactory.Anchor(badge.rectTransform, 0, 0, 0, 0, 14, 12, 102, 50);
             var orderText = factory.Label("Module Selection Order", badge.transform,
                 selected ? "顺序 " + selectionOrder.ToString("00") : "未选择",
@@ -81,7 +82,7 @@ namespace TG.Control.Touch.UI.Components
 
             hint = factory.Label("Module Touch Hint", surface.transform,
                 selected ? "点击卡片移出路线" : "点击卡片加入路线", theme.Caption,
-                FontStyle.Bold, selected ? theme.ConfigurableAccent : theme.TextSecondary,
+                FontStyle.Bold, selected ? theme.Primary : theme.TextMuted,
                 TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(hint.rectTransform, 0, 0, 1, 0, 112, 12, -16, 50);
 
@@ -95,9 +96,9 @@ namespace TG.Control.Touch.UI.Components
 
         public void RefreshTheme()
         {
-            frame.color = selected ? theme.ConfigurableAccent : theme.Border;
-            accent.color = selected ? theme.ConfigurableAccent : Color.clear;
-            hint.color = selected ? theme.ConfigurableAccent : theme.TextSecondary;
+            frame.color = selected ? theme.Primary : theme.Border;
+            accent.color = selected ? theme.Primary : Color.clear;
+            hint.color = selected ? theme.Primary : theme.TextMuted;
             if (placeholder != null)
             {
                 placeholder.color = theme.ConfigurableAccent;

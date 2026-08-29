@@ -46,11 +46,11 @@ namespace TG.Control.Touch.UI.Pages
             headerElement.flexibleHeight = 0;
             var header = factory.RoundedImage("Playback Header", headerFrame.transform, theme.SurfaceElevated);
             TouchUiFactory.Stretch(header.rectTransform, 1, 1, -1, -1);
-            var title = factory.Label("Playback Page Title", header.transform, "当前讲解", theme.H2,
+            var title = factory.Label("Playback Page Title", header.transform, "当前讲解", theme.PageTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(title.rectTransform, 0, 0, .5f, 1, theme.PanelPadding, 10, 0, -10);
             var subtitle = factory.Label("Playback Page Subtitle", header.transform,
-                "实时查看主题、节点与整体进度，并执行现场讲解控制", theme.Caption,
+                "聚焦当前主题与节点，所有控制以服务端真实状态为准", theme.Secondary,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(subtitle.rectTransform, .42f, 0, 1, 1,
                 0, 10, -theme.PanelPadding, -10);
@@ -65,8 +65,8 @@ namespace TG.Control.Touch.UI.Pages
             controlBar.StopCancelled += () => StopCancelled?.Invoke();
 
             errorBanner = new ErrorBanner(factory, theme, root);
-            TouchUiFactory.Anchor(errorBanner.Root, 0, 1, 1, 1, 16,
-                -theme.PlaybackHeaderHeight - 72, -16, -theme.PlaybackHeaderHeight - 12);
+            TouchUiFactory.Anchor(errorBanner.Root, 0, 1, 1, 1, theme.Space16,
+                -theme.PlaybackHeaderHeight - 76, -theme.Space16, -theme.PlaybackHeaderHeight - theme.Space8);
         }
 
         public void Render(TouchUiState state, string verifiedRouteName,

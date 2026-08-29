@@ -43,25 +43,25 @@ namespace TG.Control.Touch.UI.Components
 
             normalControls = factory.Rect("Playback Normal Controls", surface.transform).gameObject;
             TouchUiFactory.Stretch(normalControls.GetComponent<RectTransform>());
-            var heading = factory.Label("Playback Control Heading", normalControls.transform, "讲解控制", theme.CardTitle,
+            var heading = factory.Label("Playback Control Heading", normalControls.transform, "讲解控制", theme.SectionTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(heading.rectTransform, 0, 1, 0, 1, 26, -52, 220, -16);
             var hint = factory.Label("Playback Control Hint", normalControls.transform,
                 "所有操作以服务器返回的真实讲解状态为准", theme.Caption, FontStyle.Normal,
-                theme.TextSecondary, TextAnchor.MiddleLeft);
+                theme.TextMuted, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(hint.rectTransform, 0, 1, .55f, 1, 26, -82, 0, -50);
 
             primaryButton = factory.TouchButton(normalControls.transform, "暂停讲解", true, OnPrimary);
             TouchUiFactory.Anchor(primaryButton.GetComponent<RectTransform>(), 0, 0, 0, 0,
-                26, 20, 346, 88);
+                26, 18, 346, 90);
             retryButton = factory.TouchButton(normalControls.transform, "重试当前", false,
                 () => RetryRequested?.Invoke());
             TouchUiFactory.Anchor(retryButton.GetComponent<RectTransform>(), 0, 0, 0, 0,
-                364, 20, 590, 88);
+                364, 22, 574, 86);
             skipButton = factory.TouchButton(normalControls.transform, "跳过当前", false,
                 () => SkipRequested?.Invoke());
             TouchUiFactory.Anchor(skipButton.GetComponent<RectTransform>(), 0, 0, 0, 0,
-                608, 20, 834, 88);
+                592, 22, 802, 86);
             skipButton.GetComponent<Image>().color = Color.Lerp(theme.SecondaryButton, theme.Warning, .14f);
 
             var dangerDivider = factory.Image("Playback Danger Divider", normalControls.transform, theme.Border);
@@ -72,7 +72,7 @@ namespace TG.Control.Touch.UI.Components
             stopButton = factory.TouchButton(normalControls.transform, "终止讲解", false,
                 () => StopRequested?.Invoke());
             TouchUiFactory.Anchor(stopButton.GetComponent<RectTransform>(), 1, 0, 1, 0,
-                -364, 20, -26, 88);
+                -364, 22, -26, 86);
             StyleDangerButton(stopButton, false);
 
             stopConfirmation = factory.RoundedImage("Stop Confirmation", surface.transform,

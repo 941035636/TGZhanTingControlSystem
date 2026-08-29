@@ -16,8 +16,8 @@ namespace TG.Control.Touch.UI.Components
 
         public ContentHost(TouchUiFactory factory, TouchTheme theme, Transform parent)
         {
-            frame = factory.Image("Content Host Frame", parent, theme.Border);
-            surface = factory.Image("Content Host Surface", frame.transform, theme.Surface);
+            frame = factory.RoundedImage("Content Host Frame", parent, theme.Border);
+            surface = factory.RoundedImage("Content Host Surface", frame.transform, theme.Surface);
             TouchUiFactory.Stretch(surface.rectTransform, 1, 1, -1, -1);
             contentRoot = factory.Rect("Page Host", surface.transform);
             TouchUiFactory.Stretch(contentRoot, theme.CardSpacing, theme.CardSpacing,

@@ -23,7 +23,7 @@ namespace TG.Control.Touch.UI.Components
 
         public RectTransform ScrollGrid(Transform parent, string prefix, int columns, Vector2 cellSize, Vector2 spacing)
         {
-            var viewport = Image(prefix + " Viewport", parent, new Color(1, 1, 1, 0));
+            var viewport = Image(prefix + " Viewport", parent, Color.clear);
             viewport.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1;
             viewport.gameObject.AddComponent<RectMask2D>();
             var root = Rect(prefix + " Grid", viewport.transform);
@@ -91,8 +91,9 @@ namespace TG.Control.Touch.UI.Components
             colors.pressedColor = primary
                 ? Color.Lerp(Color.white, theme.PrimaryPressed, .28f)
                 : Color.Lerp(Color.white, theme.SecondaryPressed, .28f);
-            colors.disabledColor = new Color(.52f, .58f, .66f, .72f);
+            colors.disabledColor = theme.DisabledControlTint;
             colors.colorMultiplier = 1;
+            colors.fadeDuration = .08f;
             button.colors = colors;
             var label = Label("Label", image.transform, text, theme.ButtonText, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleCenter);
@@ -102,19 +103,19 @@ namespace TG.Control.Touch.UI.Components
 
         public InputField Input(Transform parent, string placeholder, int size, float height)
         {
-            var image = Image("Route Name Input", parent, theme.InputBackground);
+            var image = RoundedImage("Route Name Input", parent, theme.InputBackground);
             image.gameObject.AddComponent<LayoutElement>().preferredHeight = height;
             var field = image.gameObject.AddComponent<InputField>();
             field.targetGraphic = image;
             field.lineType = InputField.LineType.SingleLine;
             field.characterLimit = 20;
             var text = Label("Text", image.transform, string.Empty, size, FontStyle.Normal, theme.Ink, TextAnchor.MiddleLeft);
-            Stretch(text.rectTransform, 16, 5, -16, -5);
+            Stretch(text.rectTransform, theme.Space16, theme.Space8, -theme.Space16, -theme.Space8);
             text.supportRichText = false;
             var hintColor = theme.TextSecondary;
             hintColor.a = .65f;
             var hint = Label("Placeholder", image.transform, placeholder, size, FontStyle.Normal, hintColor, TextAnchor.MiddleLeft);
-            Stretch(hint.rectTransform, 16, 5, -16, -5);
+            Stretch(hint.rectTransform, theme.Space16, theme.Space8, -theme.Space16, -theme.Space8);
             field.textComponent = text;
             field.placeholder = hint;
             return field;

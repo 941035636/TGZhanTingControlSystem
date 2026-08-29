@@ -89,7 +89,7 @@ namespace TG.Control.Touch.UI.Pages
             heroImage = factory.Image("Configurable Hero Image", heroSurface.transform, Color.clear);
             TouchUiFactory.Stretch(heroImage.rectTransform);
             heroImage.raycastTarget = false;
-            var overlay = factory.Image("Hero Contrast Overlay", heroSurface.transform, new Color(.015f, .06f, .12f, .70f));
+            var overlay = factory.Image("Hero Contrast Overlay", heroSurface.transform, theme.HeroOverlay);
             TouchUiFactory.Stretch(overlay.rectTransform);
             overlay.raycastTarget = false;
 
@@ -166,7 +166,7 @@ namespace TG.Control.Touch.UI.Pages
 
             var routesFrame = factory.RoundedImage("Saved Routes Frame", root, theme.Border);
             var routesElement = routesFrame.gameObject.AddComponent<LayoutElement>();
-            routesElement.minHeight = 350;
+            routesElement.minHeight = 501;
             routesElement.flexibleHeight = 1;
             var routesSurface = factory.RoundedImage("Saved Routes Surface", routesFrame.transform, theme.SurfaceElevated);
             TouchUiFactory.Stretch(routesSurface.rectTransform, 1, 1, -1, -1);
@@ -178,13 +178,14 @@ namespace TG.Control.Touch.UI.Pages
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(routeCaption.rectTransform, .5f, 1, 1, 1,
                 0, -56, -theme.PanelPadding, -14);
-            routeGrid = factory.ScrollGrid(routesSurface.transform, "Reception Route", 3,
+            routeGrid = factory.ScrollGrid(routesSurface.transform, "Reception Route", 2,
                 theme.RouteGridCellSize, new Vector2(theme.CardSpacing, theme.CardSpacing));
             TouchUiFactory.Anchor(routeGrid.parent.GetComponent<RectTransform>(), 0, 0, 1, 1,
                 theme.PanelPadding, theme.PanelPadding, -theme.PanelPadding, -68);
 
             errorBanner = new ErrorBanner(factory, theme, root);
-            TouchUiFactory.Anchor(errorBanner.Root, 0, 1, 1, 1, 16, -66, -16, -8);
+            TouchUiFactory.Anchor(errorBanner.Root, 0, 1, 1, 1,
+                theme.Space16, -76, -theme.Space16, -theme.Space8);
         }
 
         public void Render(TouchUiState state, Func<string, string> urlResolver)
@@ -319,18 +320,23 @@ namespace TG.Control.Touch.UI.Pages
 
         private void BuildHeroPlaceholder(Transform parent)
         {
-            var glow = factory.RoundedImage("Technology Glow", parent, new Color(.04f, .28f, .58f, .45f));
+            var glowColor = theme.Primary;
+            glowColor.a = .24f;
+            var glow = factory.RoundedImage("Technology Glow", parent, glowColor);
             TouchUiFactory.Anchor(glow.rectTransform, .55f, -.25f, 1.12f, 1.35f, 0, 0, 0, 0);
             glow.raycastTarget = false;
             for (var i = 0; i < 6; i++)
             {
-                var line = factory.Image("Technology Line " + i, parent,
-                    new Color(.12f, .55f, 1f, .08f + i * .015f));
+                var lineColor = theme.Primary;
+                lineColor.a = .055f + i * .012f;
+                var line = factory.Image("Technology Line " + i, parent, lineColor);
                 TouchUiFactory.Anchor(line.rectTransform, .48f + i * .07f, 0, .48f + i * .07f, 1,
                     0, 0, 2, 0);
                 line.raycastTarget = false;
             }
-            var horizon = factory.Image("Technology Horizon", parent, new Color(.12f, .55f, 1f, .12f));
+            var horizonColor = theme.Primary;
+            horizonColor.a = .10f;
+            var horizon = factory.Image("Technology Horizon", parent, horizonColor);
             TouchUiFactory.Anchor(horizon.rectTransform, .35f, .30f, 1, .30f, 0, 0, 0, 2);
             horizon.raycastTarget = false;
         }

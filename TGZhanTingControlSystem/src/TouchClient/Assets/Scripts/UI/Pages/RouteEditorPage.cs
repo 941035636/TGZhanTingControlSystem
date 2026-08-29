@@ -89,7 +89,7 @@ namespace TG.Control.Touch.UI.Pages
             var identity = factory.Rect("Route Draft Identity", headerSurface.transform);
             TouchUiFactory.Anchor(identity, 0, 0, 1, 1, 194, 14, -520, -14);
             modeLabel = factory.Label("Route Mode", identity, "临时组合", theme.Caption,
-                FontStyle.Bold, theme.ConfigurableAccent, TextAnchor.MiddleLeft);
+                FontStyle.Bold, theme.Primary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(modeLabel.rectTransform, 0, 1, .55f, 1, 0, -30, 0, 0);
             saveStateBadge = factory.RoundedImage("Route Save State Badge", identity, theme.PrimarySoft);
             TouchUiFactory.Anchor(saveStateBadge.rectTransform, 1, 1, 1, 1, -176, -32, 0, 0);
@@ -97,10 +97,11 @@ namespace TG.Control.Touch.UI.Pages
                 theme.Caption, FontStyle.Bold, theme.TextSecondary, TextAnchor.MiddleCenter);
             TouchUiFactory.Stretch(saveStateLabel.rectTransform, 8, 2, -8, -2);
 
-            routeNameInput = factory.Input(identity, "输入路线名称（临时组合可不填写）", theme.Body, 48);
+            routeNameInput = factory.Input(identity, "输入路线名称（临时组合可不填写）", theme.Body,
+                theme.CompactButtonHeight);
             routeNameInput.characterLimit = 60;
             TouchUiFactory.Anchor(routeNameInput.GetComponent<RectTransform>(), 0, 0, 1, 0,
-                0, 34, 0, 82);
+                0, 32, 0, 88);
             routeNameInput.onValueChanged.AddListener(value => NameChanged?.Invoke(value));
             statusLabel = factory.Label("Route Editor Status", identity, "请选择讲解主题。", theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
@@ -156,7 +157,7 @@ namespace TG.Control.Touch.UI.Pages
             TouchUiFactory.Anchor(selectedTitle.rectTransform, 0, 1, .65f, 1,
                 theme.PanelPadding, -54, 0, -16);
             selectedCaption = factory.Label("Selected Route Count", selectedSurface.transform, "0 个主题",
-                theme.Caption, FontStyle.Bold, theme.ConfigurableAccent, TextAnchor.MiddleRight);
+                theme.Caption, FontStyle.Bold, theme.Primary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(selectedCaption.rectTransform, .55f, 1, 1, 1,
                 0, -54, -theme.PanelPadding, -16);
             sequencePreview = factory.Label("Route Sequence Preview", selectedSurface.transform,
@@ -190,7 +191,7 @@ namespace TG.Control.Touch.UI.Pages
                 routeNameInput.SetTextWithoutNotify(draft.Name);
 
             modeLabel.text = draft.IsTemporary ? "临时组合 · 不会自动保存" : "正式路线 · 编辑现有预案";
-            modeLabel.color = theme.ConfigurableAccent;
+            modeLabel.color = theme.Primary;
             saveStateLabel.text = draft.IsDirty ? "存在未保存修改" : "当前草稿已保存";
             saveStateLabel.color = draft.IsDirty ? theme.Warning : theme.Success;
             saveStateBadge.color = draft.IsDirty
@@ -204,7 +205,11 @@ namespace TG.Control.Touch.UI.Pages
             var selectedModules = draft.ModuleIds.Select(id => modules.FirstOrDefault(module =>
                     string.Equals(module.id, id, StringComparison.OrdinalIgnoreCase)))
                 .Where(module => module != null).ToArray();
-            moduleCaption.text = modules.Length + " 个主题 · 点击卡片添加或移除";
+            var pendingCount = modules.Count(module => !HasConfiguredNarration(module));
+            moduleCaption.text = pendingCount > 0
+                ? modules.Length + " 个主题 · " + pendingCount + " 个内容待配置"
+                : modules.Length + " 个主题 · 点击卡片添加或移除";
+            moduleCaption.color = pendingCount > 0 ? theme.Warning : theme.TextSecondary;
             selectedCaption.text = selectedModules.Length + " 个主题";
             sequencePreview.text = BuildSequencePreview(selectedModules);
 
@@ -242,8 +247,8 @@ namespace TG.Control.Touch.UI.Pages
             headerFrame.color = theme.Border;
             moduleFrame.color = theme.Border;
             selectedFrame.color = theme.Border;
-            modeLabel.color = theme.ConfigurableAccent;
-            selectedCaption.color = theme.ConfigurableAccent;
+            modeLabel.color = theme.Primary;
+            selectedCaption.color = theme.Primary;
             moduleSignature = null;
             selectionSignature = null;
             foreach (var card in moduleCardViews) card.RefreshTheme();
@@ -299,7 +304,7 @@ namespace TG.Control.Touch.UI.Pages
         private void BuildSelectedItem(ExhibitionModule module, int index, int count, bool interactable)
         {
             var item = factory.RoundedImage("Selected Module - " + module.name, selectedGrid, theme.SurfaceSoft);
-            var order = factory.RoundedImage("Selected Module Order", item.transform, theme.ConfigurableAccent);
+            var order = factory.RoundedImage("Selected Module Order", item.transform, theme.Primary);
             TouchUiFactory.Anchor(order.rectTransform, 0, .5f, 0, .5f, 12, -25, 58, 25);
             var orderText = factory.Label("Selected Module Order Label", order.transform,
                 (index + 1).ToString("00"), theme.Body, FontStyle.Bold, theme.Background, TextAnchor.MiddleCenter);
@@ -324,6 +329,8 @@ namespace TG.Control.Touch.UI.Pages
             up.interactable = interactable && index > 0;
             down.interactable = interactable && index < count - 1;
             remove.interactable = interactable;
+            remove.GetComponent<Image>().color = Color.Lerp(theme.SurfaceSoft, theme.Error, .12f);
+            remove.GetComponentInChildren<Text>().color = theme.Error;
         }
 
         private void StyleDeleteButton(bool confirming)
