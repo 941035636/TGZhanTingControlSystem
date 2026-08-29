@@ -19,7 +19,7 @@ namespace TG.Control.Touch
         [SerializeField] private TouchApiClient apiClient;
         [SerializeField] private TouchControlFacade facade;
 
-        private enum PageState { Home, RouteEditor, Playback }
+        private enum PageState { Home, RouteEditor, Playback, SystemStatus }
 
         private readonly RouteDraftState routeDraft = new RouteDraftState();
         private readonly PlaybackDisplayContext playbackDisplay = new PlaybackDisplayContext();
@@ -41,10 +41,12 @@ namespace TG.Control.Touch
         private ReceptionHomePage receptionHomePage;
         private RouteEditorPage routeEditorPage;
         private PlaybackPage playbackPageView;
+        private SystemStatusPage systemStatusPageView;
         private TouchImageLoader imageLoader;
         private GameObject homePage;
         private GameObject editorPage;
         private GameObject playbackPageRoot;
+        private GameObject systemStatusPageRoot;
 
         private void Awake()
         {
@@ -112,6 +114,8 @@ namespace TG.Control.Touch
                 playbackPageView.StopRequested -= ConfirmStop;
                 playbackPageView.StopCancelled -= CancelStopConfirmation;
             }
+            if (systemStatusPageView != null)
+                systemStatusPageView.ViewPlaybackRequested -= ContinueCurrentPlayback;
             if (presenter == null) return;
             presenter.ConnectionChanged -= OnConnectionChanged;
             presenter.ContentLoaded -= OnContentLoaded;
@@ -176,9 +180,13 @@ namespace TG.Control.Touch
             playbackPageView.StopRequested += ConfirmStop;
             playbackPageView.StopCancelled += CancelStopConfirmation;
             playbackPageRoot = playbackPageView.Root.gameObject;
+            systemStatusPageView = new SystemStatusPage(uiFactory, theme, body);
+            systemStatusPageView.ViewPlaybackRequested += ContinueCurrentPlayback;
+            systemStatusPageRoot = systemStatusPageView.Root.gameObject;
             Stretch(homePage.GetComponent<RectTransform>());
             Stretch(editorPage.GetComponent<RectTransform>());
             Stretch(playbackPageRoot.GetComponent<RectTransform>());
+            Stretch(systemStatusPageRoot.GetComponent<RectTransform>());
             ShowPage(PageState.Home);
         }
 
@@ -464,12 +472,14 @@ namespace TG.Control.Touch
             if (homePage != null) homePage.SetActive(state == PageState.Home);
             if (editorPage != null) editorPage.SetActive(state == PageState.RouteEditor);
             if (playbackPageRoot != null) playbackPageRoot.SetActive(state == PageState.Playback);
+            if (systemStatusPageRoot != null) systemStatusPageRoot.SetActive(state == PageState.SystemStatus);
             if (state != PageState.Playback) confirmStop = false;
             if (appShell != null)
             {
                 var section = state == PageState.Playback ? TouchShellSection.Playback
                     : state == PageState.RouteEditor
                         ? (routeDraft.IsTemporary ? TouchShellSection.Combination : TouchShellSection.Routes)
+                        : state == PageState.SystemStatus ? TouchShellSection.SystemStatus
                         : TouchShellSection.ReceptionHome;
                 appShell.SetActiveSection(section);
             }
@@ -495,6 +505,18 @@ namespace TG.Control.Touch
                 return;
             }
 
+            if (section == TouchShellSection.SystemStatus)
+            {
+                if (pageState == PageState.RouteEditor)
+                {
+                    ReturnHome();
+                    if (pageState != PageState.Home) return;
+                }
+                ShowPage(PageState.SystemStatus);
+                Refresh();
+                return;
+            }
+
             if (pageState == PageState.RouteEditor)
             {
                 ReturnHome();
@@ -515,6 +537,7 @@ namespace TG.Control.Touch
             if (presenter != null) routeEditorPage?.Render(presenter.State, routeDraft, status, presenter.NormalizeAssetUrl);
             if (presenter != null) playbackPageView?.Render(presenter.State, playbackDisplay.RouteName,
                 playbackDisplay.ModuleIds, confirmStop);
+            if (presenter != null) systemStatusPageView?.Render(presenter.State, playbackDisplay.RouteName);
         }
 
         private void ApplyUiExperience(UiExperienceConfig config)
@@ -527,6 +550,7 @@ namespace TG.Control.Touch
                 receptionHomePage?.RefreshTheme();
                 routeEditorPage?.RefreshTheme();
                 playbackPageView?.RefreshTheme();
+                systemStatusPageView?.RefreshTheme();
             }
             background.sprite = null;
             background.color = ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out color)

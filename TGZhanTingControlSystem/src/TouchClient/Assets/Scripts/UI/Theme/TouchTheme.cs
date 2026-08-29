@@ -60,6 +60,9 @@ namespace TG.Control.Touch.UI.Theme
         public float RouteEditorSequenceItemHeight { get; } = 78;
         public float PlaybackHeaderHeight { get; } = 86;
         public float PlaybackControlHeight { get; } = 172;
+        public float SystemStatusSummaryHeight { get; } = 190;
+        public float SystemHealthCardHeight { get; } = 254;
+        public float SystemStatusSessionHeight { get; } = 132;
         public Vector2 RouteGridCellSize { get; } = new Vector2(500, 240);
         public Vector2 ModuleGridCellSize { get; } = new Vector2(370, 185);
         public Vector2 RouteEditorModuleCellSize { get; } = new Vector2(265, 166);
