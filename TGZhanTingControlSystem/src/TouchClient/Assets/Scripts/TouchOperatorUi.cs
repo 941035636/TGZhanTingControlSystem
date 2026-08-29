@@ -22,8 +22,8 @@ namespace TG.Control.Touch
         private enum PageState { Home, RouteEditor, Playback }
 
         private readonly RouteDraftState routeDraft = new RouteDraftState();
+        private readonly PlaybackDisplayContext playbackDisplay = new PlaybackDisplayContext();
         private PublishedContent content;
-        private PlaybackSessionStatus session;
         private SystemReadiness readiness;
         private NarrationRoute[] routes = Array.Empty<NarrationRoute>();
         private bool connected;
@@ -40,24 +40,11 @@ namespace TG.Control.Touch
         private TouchAppShell appShell;
         private ReceptionHomePage receptionHomePage;
         private RouteEditorPage routeEditorPage;
+        private PlaybackPage playbackPageView;
         private TouchImageLoader imageLoader;
-        private Text statusLabel;
         private GameObject homePage;
         private GameObject editorPage;
-        private GameObject playbackPage;
-        private Text playbackModuleLabel;
-        private Text playbackNodeLabel;
-        private Text playbackProgressLabel;
-        private Image playbackProgressFill;
-        private Button pauseButton;
-        private Button resumeButton;
-        private Button skipButton;
-        private Button retryButton;
-        private Button stopButton;
-
-        private Color Ink => theme.Ink;
-        private Color Muted => theme.Muted;
-        private Color Gold => theme.Gold;
+        private GameObject playbackPageRoot;
 
         private void Awake()
         {
@@ -116,6 +103,15 @@ namespace TG.Control.Touch
                 routeEditorPage.ModuleMoveRequested -= MoveSelection;
                 routeEditorPage.ModuleRemoveRequested -= RemoveSelection;
             }
+            if (playbackPageView != null)
+            {
+                playbackPageView.PauseRequested -= PausePlayback;
+                playbackPageView.ResumeRequested -= ResumePlayback;
+                playbackPageView.RetryRequested -= RetryPlayback;
+                playbackPageView.SkipRequested -= SkipPlayback;
+                playbackPageView.StopRequested -= ConfirmStop;
+                playbackPageView.StopCancelled -= CancelStopConfirmation;
+            }
             if (presenter == null) return;
             presenter.ConnectionChanged -= OnConnectionChanged;
             presenter.ContentLoaded -= OnContentLoaded;
@@ -172,59 +168,33 @@ namespace TG.Control.Touch
             routeEditorPage.ModuleMoveRequested += MoveSelection;
             routeEditorPage.ModuleRemoveRequested += RemoveSelection;
             editorPage = routeEditorPage.Root.gameObject;
-            playbackPage = BuildPlaybackPage(body).gameObject;
+            playbackPageView = new PlaybackPage(uiFactory, theme, body);
+            playbackPageView.PauseRequested += PausePlayback;
+            playbackPageView.ResumeRequested += ResumePlayback;
+            playbackPageView.RetryRequested += RetryPlayback;
+            playbackPageView.SkipRequested += SkipPlayback;
+            playbackPageView.StopRequested += ConfirmStop;
+            playbackPageView.StopCancelled += CancelStopConfirmation;
+            playbackPageRoot = playbackPageView.Root.gameObject;
             Stretch(homePage.GetComponent<RectTransform>());
             Stretch(editorPage.GetComponent<RectTransform>());
-            Stretch(playbackPage.GetComponent<RectTransform>());
+            Stretch(playbackPageRoot.GetComponent<RectTransform>());
             ShowPage(PageState.Home);
-        }
-
-        private RectTransform BuildPlaybackPage(Transform parent)
-        {
-            var page = Panel("Playback Page", parent, theme.SurfaceElevated);
-            var layout = page.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(150, 150, 90, 70);
-            layout.spacing = 14;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandHeight = false;
-
-            var state = LayoutLabel(page, "正在讲解", 20, FontStyle.Bold, accent, 38);
-            state.alignment = TextAnchor.MiddleCenter;
-            playbackModuleLabel = LayoutLabel(page, "正在准备讲解内容", 42, FontStyle.Bold, Ink, 84);
-            playbackModuleLabel.alignment = TextAnchor.MiddleCenter;
-            playbackNodeLabel = LayoutLabel(page, "请稍候…", 22, FontStyle.Normal, Muted, 52);
-            playbackNodeLabel.alignment = TextAnchor.MiddleCenter;
-
-            var spacer = Rect("Playback Spacer", page);
-            spacer.gameObject.AddComponent<LayoutElement>().preferredHeight = 70;
-            playbackProgressLabel = LayoutLabel(page, "0 / 0", 18, FontStyle.Bold, Ink, 34);
-            playbackProgressLabel.alignment = TextAnchor.MiddleCenter;
-            var progressTrack = Image("Playback Progress", page, theme.Border);
-            progressTrack.gameObject.AddComponent<LayoutElement>().preferredHeight = 18;
-            playbackProgressFill = Image("Progress Fill", progressTrack.transform, accent);
-            Anchor(playbackProgressFill.rectTransform, 0, 0, 0, 1, 0, 0, 0, 0);
-
-            var flexible = Rect("Playback Flexible Space", page);
-            flexible.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1;
-            statusLabel = LayoutLabel(page, status, 15, FontStyle.Normal, Muted, 42);
-            statusLabel.alignment = TextAnchor.MiddleCenter;
-
-            var controls = Row(page, 14, 86);
-            controls.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(180, 180, 0, 0);
-            pauseButton = Button(controls, "暂停讲解", false, () => facade.Pause());
-            resumeButton = Button(controls, "继续讲解", true, () => facade.Resume());
-            retryButton = Button(controls, "重试当前节点", false, () => facade.Retry());
-            skipButton = Button(controls, "跳过当前节点", false, () => facade.Skip());
-            stopButton = Button(controls, "终止讲解", false, ConfirmStop);
-            return page;
         }
 
         private void OnConnectionChanged(bool value)
         {
             connected = value;
             status = value ? "系统已连接，可以开始讲解。" : "服务器连接中断，正在自动重连…";
-            if (value) receptionHomePage?.ClearError();
+            if (value)
+            {
+                receptionHomePage?.ClearError();
+                playbackPageView?.ClearError();
+            }
+            else if (facade.HasActiveSession)
+            {
+                playbackPageView?.ShowError("服务器连接中断，系统正在自动重连。讲解状态恢复后可继续操作。");
+            }
             Refresh();
         }
 
@@ -263,8 +233,11 @@ namespace TG.Control.Touch
 
         private void OnSessionChanged(PlaybackSessionStatus value)
         {
-            session = value;
-            confirmStop = false;
+            var sameSession = value != null && string.Equals(playbackDisplay.SessionId, value.sessionId,
+                StringComparison.Ordinal);
+            if (!sameSession) confirmStop = false;
+            if (value != null) playbackDisplay.Bind(value.sessionId);
+            else playbackDisplay.Clear();
             if (value != null && navigateToPlaybackWhenSessionArrives)
             {
                 navigateToPlaybackWhenSessionArrives = false;
@@ -278,6 +251,7 @@ namespace TG.Control.Touch
         {
             status = value;
             receptionHomePage?.ClearError();
+            playbackPageView?.ClearError();
             if (facade.HasActiveSession && navigateToPlaybackWhenSessionArrives)
             {
                 navigateToPlaybackWhenSessionArrives = false;
@@ -291,6 +265,8 @@ namespace TG.Control.Touch
             navigateToPlaybackWhenSessionArrives = false;
             status = "操作失败：" + value;
             receptionHomePage?.ShowError(status);
+            playbackPageView?.ShowError(value);
+            if (!facade.HasActiveSession) playbackDisplay.ClearPending();
             Refresh();
         }
 
@@ -347,7 +323,9 @@ namespace TG.Control.Touch
             LoadRoute(route);
             status = "正在启动路线：“" + route.name + "”…";
             navigateToPlaybackWhenSessionArrives = true;
-            facade.StartModules(route.moduleIds ?? Array.Empty<string>());
+            var moduleIds = route.moduleIds ?? Array.Empty<string>();
+            playbackDisplay.Prepare(route.name, moduleIds);
+            facade.StartModules(moduleIds);
             Refresh();
         }
 
@@ -355,6 +333,9 @@ namespace TG.Control.Touch
         {
             status = "正在准备全部主题讲解…";
             navigateToPlaybackWhenSessionArrives = true;
+            playbackDisplay.Prepare("全部主题讲解", content?.modules?
+                .Where(module => module.enabled && module.nodes != null && module.nodes.Length > 0)
+                .OrderBy(module => module.order).Select(module => module.id).ToArray() ?? Array.Empty<string>());
             facade.StartAll();
             Refresh();
         }
@@ -405,7 +386,12 @@ namespace TG.Control.Touch
             if (routeDraft.ModuleIds.Count == 0) return;
             status = "正在准备讲解路线…";
             navigateToPlaybackWhenSessionArrives = true;
-            facade.StartModules(routeDraft.SnapshotModuleIds());
+            var moduleIds = routeDraft.SnapshotModuleIds();
+            var routeName = routeDraft.IsTemporary
+                ? (string.IsNullOrWhiteSpace(routeDraft.Name) ? "临时组合" : routeDraft.Name)
+                : routeDraft.Name;
+            playbackDisplay.Prepare(routeName, moduleIds);
+            facade.StartModules(moduleIds);
             Refresh();
         }
 
@@ -445,6 +431,18 @@ namespace TG.Control.Touch
             facade.Stop();
         }
 
+        private void CancelStopConfirmation()
+        {
+            confirmStop = false;
+            status = "已取消终止，本次讲解继续保持当前状态。";
+            Refresh();
+        }
+
+        private void PausePlayback() => facade.Pause();
+        private void ResumePlayback() => facade.Resume();
+        private void RetryPlayback() => facade.Retry();
+        private void SkipPlayback() => facade.Skip();
+
         private void RemoveSelection(string moduleId)
         {
             if (facade.HasActiveSession) return;
@@ -465,7 +463,8 @@ namespace TG.Control.Touch
             pageState = state;
             if (homePage != null) homePage.SetActive(state == PageState.Home);
             if (editorPage != null) editorPage.SetActive(state == PageState.RouteEditor);
-            if (playbackPage != null) playbackPage.SetActive(state == PageState.Playback);
+            if (playbackPageRoot != null) playbackPageRoot.SetActive(state == PageState.Playback);
+            if (state != PageState.Playback) confirmStop = false;
             if (appShell != null)
             {
                 var section = state == PageState.Playback ? TouchShellSection.Playback
@@ -514,25 +513,8 @@ namespace TG.Control.Touch
             appShell.SetGlobalState(connected, readiness, facade.HasActiveSession);
             if (presenter != null) receptionHomePage?.Render(presenter.State, presenter.NormalizeAssetUrl);
             if (presenter != null) routeEditorPage?.Render(presenter.State, routeDraft, status, presenter.NormalizeAssetUrl);
-            if (statusLabel != null) statusLabel.text = status;
-            if (playbackModuleLabel != null)
-                playbackModuleLabel.text = string.IsNullOrWhiteSpace(session?.moduleName) ? "正在准备讲解内容" : session.moduleName;
-            if (playbackNodeLabel != null)
-                playbackNodeLabel.text = string.IsNullOrWhiteSpace(session?.nodeName) ? "正在同步大屏与语音，请稍候…" : session.nodeName;
-            if (playbackProgressLabel != null)
-                playbackProgressLabel.text = session == null ? "0 / 0" : session.currentNodeNumber + " / " + session.totalNodes;
-            if (playbackProgressFill != null)
-            {
-                var progress = session == null || session.totalNodes <= 0 ? 0 : Mathf.Clamp01((float)session.currentNodeNumber / session.totalNodes);
-                playbackProgressFill.rectTransform.anchorMax = new Vector2(progress, 1);
-                playbackProgressFill.rectTransform.offsetMin = Vector2.zero;
-                playbackProgressFill.rectTransform.offsetMax = Vector2.zero;
-            }
-            var idle = !facade.HasActiveSession;
-            pauseButton.gameObject.SetActive(session != null && !session.paused);
-            resumeButton.gameObject.SetActive(session != null && session.paused);
-            pauseButton.interactable = resumeButton.interactable = retryButton.interactable = skipButton.interactable = stopButton.interactable = connected && !idle;
-            stopButton.GetComponentInChildren<Text>().text = confirmStop ? "确认终止" : "终止讲解";
+            if (presenter != null) playbackPageView?.Render(presenter.State, playbackDisplay.RouteName,
+                playbackDisplay.ModuleIds, confirmStop);
         }
 
         private void ApplyUiExperience(UiExperienceConfig config)
@@ -544,6 +526,7 @@ namespace TG.Control.Touch
                 theme.SetConfigurableAccent(color);
                 receptionHomePage?.RefreshTheme();
                 routeEditorPage?.RefreshTheme();
+                playbackPageView?.RefreshTheme();
             }
             background.sprite = null;
             background.color = ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out color)
@@ -563,15 +546,6 @@ namespace TG.Control.Touch
         private void OnUiExperienceLoadFailed(string message) =>
             Debug.LogWarning("读取中控界面配置失败：" + message);
 
-        private RectTransform Row(Transform parent, float spacing, float height) => uiFactory.Row(parent, spacing, height);
-        private Button Button(Transform parent, string text, bool primary, UnityEngine.Events.UnityAction action) => uiFactory.Button(parent, text, primary, action);
-        private RectTransform Panel(string name, Transform parent, Color color) => uiFactory.Panel(name, parent, color);
-        private Image Image(string name, Transform parent, Color color) => uiFactory.Image(name, parent, color);
-        private RectTransform Rect(string name, Transform parent) => uiFactory.Rect(name, parent);
-        private Text Label(string name, Transform parent, string value, int size, FontStyle style, Color color, TextAnchor alignment) => uiFactory.Label(name, parent, value, size, style, color, alignment);
-        private Text LayoutLabel(Transform parent, string value, int size, FontStyle style, Color color, float height) => uiFactory.LayoutLabel(parent, value, size, style, color, height);
-        private void Divider(Transform parent) => uiFactory.Divider(parent);
         private static void Stretch(RectTransform rect, float left = 0, float bottom = 0, float right = 0, float top = 0) => TouchUiFactory.Stretch(rect, left, bottom, right, top);
-        private static void Anchor(RectTransform rect, float minX, float minY, float maxX, float maxY, float left, float bottom, float right, float top) => TouchUiFactory.Anchor(rect, minX, minY, maxX, maxY, left, bottom, right, top);
     }
 }
