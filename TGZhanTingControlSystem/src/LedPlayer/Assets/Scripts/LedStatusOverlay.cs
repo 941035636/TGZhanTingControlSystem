@@ -45,6 +45,7 @@ namespace TG.Control.LedPlayer
             apiClient.ContentSyncChanged += OnContentSyncChanged;
             apiClient.UiExperienceChanged += ApplyConfig;
             if (playbackController != null) playbackController.PlaybackActiveChanged += OnPlaybackActiveChanged;
+            OnConnectionChanged(apiClient.IsConnected);
         }
 
         private void OnDestroy()

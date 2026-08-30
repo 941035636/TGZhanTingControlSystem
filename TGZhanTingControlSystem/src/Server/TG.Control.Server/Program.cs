@@ -157,11 +157,12 @@ app.MapGet("/api/tts/status", (HttpRequest request, AdminSessionStore sessions, 
     sessions.TryValidate(request, out _)
         ? Results.Ok(new { provider = options.Value.Provider, voice = options.Value.Voice, configured = !string.Equals(options.Value.Provider, "NotConfigured", StringComparison.OrdinalIgnoreCase) })
         : Results.Unauthorized());
-app.MapPost("/api/clients/register", (HttpRequest request, ClientRegistration registration, ICommandBroker broker,
-    IOptions<TerminalOptions> terminal) =>
+app.MapPost("/api/clients/register", async (HttpRequest request, ClientRegistration registration, ICommandBroker broker,
+    PlaybackCoordinator coordinator, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
 {
     if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
-    broker.Register(registration);
+    var newInstance = broker.Register(registration);
+    if (newInstance) await coordinator.RecoverClientAsync(registration.ClientId, ct);
     return Results.Ok(new { registered = true });
 });
 app.MapGet("/api/commands/next", async (string clientId, HttpRequest request, ICommandBroker broker,

@@ -25,7 +25,8 @@ public sealed class AssetStorage
     public string MediaDirectory { get; }
     public IFileProvider FileProvider { get; }
 
-    public string? ValidatePublishedReference(string url, long expectedSize, HostString requestHost)
+    public string? ValidatePublishedReference(string url, long expectedSize, HostString requestHost,
+        string? expectedSha256 = null)
     {
         if (string.IsNullOrWhiteSpace(url)) return "素材地址为空。";
         if (!Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var uri)) return $"素材地址格式无效：{url}";
@@ -61,6 +62,16 @@ public sealed class AssetStorage
         if (actualSize <= 0) return $"服务器文件为空：{path}";
         if (expectedSize > 0 && actualSize != expectedSize)
             return $"服务器文件大小不一致：记录 {expectedSize} 字节，实际 {actualSize} 字节。";
+        if (!string.IsNullOrWhiteSpace(expectedSha256))
+        {
+            if (expectedSha256.Length != 64 || expectedSha256.Any(value => !Uri.IsHexDigit(value)))
+                return $"SHA-256格式无效：{path}";
+            using var stream = File.OpenRead(filePath);
+            var actualSha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            if (!CryptographicOperations.FixedTimeEquals(
+                    Convert.FromHexString(expectedSha256), Convert.FromHexString(actualSha256)))
+                return $"服务器文件SHA-256不一致：记录 {expectedSha256.ToLowerInvariant()}，实际 {actualSha256}。";
+        }
         return null;
     }
 

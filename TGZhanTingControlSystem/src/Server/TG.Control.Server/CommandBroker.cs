@@ -6,7 +6,7 @@ namespace TG.Control.Server;
 
 public interface ICommandBroker
 {
-    void Register(ClientRegistration registration);
+    bool Register(ClientRegistration registration);
     IReadOnlyList<ClientRuntimeStatus> GetClientStatuses(TimeSpan onlineThreshold);
     long NextSequence();
     ValueTask PublishAsync(string clientId, PlaybackCommand command, CancellationToken cancellationToken);
@@ -19,22 +19,35 @@ public sealed class CommandBroker : ICommandBroker
     private readonly ConcurrentDictionary<string, ClientPresence> clients = new(StringComparer.OrdinalIgnoreCase);
     private long sequence;
 
-    public void Register(ClientRegistration registration)
+    public bool Register(ClientRegistration registration)
     {
         var now = DateTimeOffset.UtcNow;
+        var newInstance = false;
         clients.AddOrUpdate(registration.ClientId,
-            _ => new ClientPresence(registration.ClientId, registration.Kind, registration.AppVersion, now, now,
-                registration.ContentVersion, registration.Ready, registration.Status),
-            (_, current) => current with
+            _ =>
             {
-                Kind = registration.Kind,
-                AppVersion = registration.AppVersion,
-                LastSeenUtc = now,
-                ContentVersion = registration.ContentVersion,
-                Ready = registration.Ready,
-                Status = registration.Status
+                newInstance = true;
+                return new ClientPresence(registration.ClientId, registration.Kind, registration.AppVersion, now, now,
+                    registration.ContentVersion, registration.Ready, registration.Status, registration.InstanceId);
+            },
+            (_, current) =>
+            {
+                if (!string.IsNullOrWhiteSpace(registration.InstanceId) &&
+                    !string.Equals(current.InstanceId, registration.InstanceId, StringComparison.Ordinal))
+                    newInstance = true;
+                return current with
+                {
+                    Kind = registration.Kind,
+                    AppVersion = registration.AppVersion,
+                    LastSeenUtc = now,
+                    ContentVersion = registration.ContentVersion,
+                    Ready = registration.Ready,
+                    Status = registration.Status,
+                    InstanceId = string.IsNullOrWhiteSpace(registration.InstanceId) ? current.InstanceId : registration.InstanceId
+                };
             });
         GetChannel(registration.ClientId);
+        return newInstance;
     }
 
     public IReadOnlyList<ClientRuntimeStatus> GetClientStatuses(TimeSpan onlineThreshold)
@@ -83,5 +96,6 @@ public sealed class CommandBroker : ICommandBroker
         Channel.CreateUnbounded<PlaybackCommand>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false }));
 
     private sealed record ClientPresence(string ClientId, ClientKind Kind, string AppVersion,
-        DateTimeOffset RegisteredAtUtc, DateTimeOffset LastSeenUtc, long ContentVersion, bool Ready, string? Status);
+        DateTimeOffset RegisteredAtUtc, DateTimeOffset LastSeenUtc, long ContentVersion, bool Ready, string? Status,
+        string? InstanceId);
 }

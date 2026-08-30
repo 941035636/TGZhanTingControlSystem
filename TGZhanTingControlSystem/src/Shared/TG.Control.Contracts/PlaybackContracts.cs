@@ -36,7 +36,8 @@ public sealed record ClientRegistration(
     string AppVersion,
     long ContentVersion = 0,
     bool Ready = true,
-    string? Status = null);
+    string? Status = null,
+    string? InstanceId = null);
 
 public sealed record StartNarrationRequest(IReadOnlyList<string> ModuleIds, string RequestedBy);
 
@@ -141,4 +142,6 @@ public sealed record OperationalEvent(
     string Action,
     string Message,
     string? SessionId = null,
-    string? Detail = null);
+    string? Detail = null,
+    string? ClientId = null,
+    string? NodeId = null);

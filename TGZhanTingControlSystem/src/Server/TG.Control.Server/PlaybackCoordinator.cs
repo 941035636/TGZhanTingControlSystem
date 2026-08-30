@@ -15,6 +15,7 @@ public sealed class PlaybackCoordinator(
     private readonly PlaybackOptions settings = options.Value;
     private readonly ConcurrentDictionary<string, SessionState> sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim restoreGate = new(1, 1);
+    private readonly SemaphoreSlim startGate = new(1, 1);
     private bool restored;
 
     public async Task<IReadOnlyList<PlaybackSessionStatus>> GetSessionsAsync(CancellationToken cancellationToken)
@@ -40,6 +41,13 @@ public sealed class PlaybackCoordinator(
     }
 
     public async Task<StartNarrationResponse> StartAsync(StartNarrationRequest request, CancellationToken cancellationToken)
+    {
+        await startGate.WaitAsync(cancellationToken);
+        try { return await StartCoreAsync(request, cancellationToken); }
+        finally { startGate.Release(); }
+    }
+
+    private async Task<StartNarrationResponse> StartCoreAsync(StartNarrationRequest request, CancellationToken cancellationToken)
     {
         await EnsureRestoredAsync(cancellationToken);
         if (request.ModuleIds.Count == 0)
@@ -104,6 +112,8 @@ public sealed class PlaybackCoordinator(
                 if (!session.PlayPublished && session.ExpectedClients.IsSubsetOf(session.ReadyClients))
                 {
                     await PublishPlayAsync(session, DateTimeOffset.UtcNow.AddMilliseconds(settings.PrepareLeadMilliseconds), cancellationToken);
+                    if (session.Paused)
+                        await PublishControlAsync(session, PlaybackAction.Pause, cancellationToken);
                 }
                 await PersistAsync(session, cancellationToken);
                 return;
@@ -140,12 +150,14 @@ public sealed class PlaybackCoordinator(
                     sessions.TryRemove(session.SessionId, out _);
                     await sessionStore.ClearAsync(cancellationToken);
                     await eventLog.AppendAsync("Error", "Playback", "Failed",
-                        "讲解因节点故障策略停止。", report.SessionId, report.Error, cancellationToken);
+                        "讲解因节点故障策略停止。", report.SessionId, report.Error,
+                        report.ClientId, report.NodeId, cancellationToken);
                     logger.LogError("Narration session {SessionId} stopped at node {NodeId}: {Error}", report.SessionId, report.NodeId, report.Error);
                     return;
                 }
                 await eventLog.AppendAsync("Warning", "Playback", "NodeSkippedAfterFailure",
-                    $"节点“{session.Current.node.Name}”播放失败，已按策略跳过。", report.SessionId, report.Error, cancellationToken);
+                    $"节点“{session.Current.node.Name}”播放失败，已按策略跳过。", report.SessionId, report.Error,
+                    report.ClientId, report.NodeId, cancellationToken);
                 await StopCurrentNodeAsync(session, cancellationToken);
                 await AdvanceAsync(session, cancellationToken);
                 return;
@@ -213,6 +225,26 @@ public sealed class PlaybackCoordinator(
         finally
         {
             session.Gate.Release();
+        }
+    }
+
+    public async Task RecoverClientAsync(string clientId, CancellationToken cancellationToken)
+    {
+        await EnsureRestoredAsync(cancellationToken);
+        foreach (var session in sessions.Values)
+        {
+            await session.Gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (!session.ExpectedClients.Contains(clientId)) continue;
+                await PublishCurrentNodeAsync(session, cancellationToken);
+                await PersistAsync(session, cancellationToken);
+                await eventLog.AppendAsync("Warning", "Playback", "ClientRecovered",
+                    $"客户端“{clientId}”重新连接，已重新准备当前讲解节点。", session.SessionId,
+                    clientId: clientId, nodeId: session.Current.node.Id,
+                    cancellationToken: cancellationToken);
+            }
+            finally { session.Gate.Release(); }
         }
     }
 

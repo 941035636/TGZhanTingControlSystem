@@ -46,7 +46,8 @@ public static class ContentValidator
                     if (string.IsNullOrWhiteSpace(asset.Name) || string.IsNullOrWhiteSpace(asset.Url)) Add(nodeKey, "素材名称和地址不能为空。");
                     else
                     {
-                        var assetError = assetStorage.ValidatePublishedReference(asset.Url, asset.SizeBytes, requestHost);
+                        var assetError = assetStorage.ValidatePublishedReference(asset.Url, asset.SizeBytes, requestHost,
+                            asset.Sha256);
                         if (assetError is not null)
                             Add($"{nodeKey}.assets[{asset.Id}]",
                                 $"模块“{module.Name}” / 节点“{node.Name}” / 素材“{asset.Name}”：{assetError}");

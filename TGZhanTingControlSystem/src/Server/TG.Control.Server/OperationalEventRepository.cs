@@ -18,10 +18,11 @@ public sealed class OperationalEventRepository
     }
 
     public async Task<OperationalEvent> AppendAsync(string level, string category, string action, string message,
-        string? sessionId = null, string? detail = null, CancellationToken cancellationToken = default)
+        string? sessionId = null, string? detail = null, string? clientId = null, string? nodeId = null,
+        CancellationToken cancellationToken = default)
     {
         var item = new OperationalEvent(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow,
-            level, category, action, message, sessionId, detail);
+            level, category, action, message, sessionId, detail, clientId, nodeId);
         var line = JsonSerializer.Serialize(item, jsonOptions) + Environment.NewLine;
         await gate.WaitAsync(cancellationToken);
         try { await File.AppendAllTextAsync(filePath, line, cancellationToken); }

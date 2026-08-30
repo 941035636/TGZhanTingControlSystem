@@ -16,6 +16,7 @@ namespace TG.Control.UnityContracts
         public long contentVersion;
         public bool ready = true;
         public string status;
+        public string instanceId;
     }
 
     [Serializable]

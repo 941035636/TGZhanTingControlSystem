@@ -17,6 +17,7 @@ namespace TG.Control.LedPlayer
         public event Action<ContentSyncProgress> ContentSyncChanged;
         public event Action<UiExperienceConfig> UiExperienceChanged;
         private bool running;
+        private readonly string instanceId = Guid.NewGuid().ToString("N");
         private bool connected;
         private bool syncStarted;
         private bool syncing;
@@ -29,6 +30,7 @@ namespace TG.Control.LedPlayer
         private string contentStatus = "LED正在检查内容版本";
 
         public string ClientId => clientId;
+        public bool IsConnected => connected;
         public bool IsSyncing => syncing;
         public long SyncedContentVersion => syncedContentVersion;
         private string BaseUrl => serverBaseUrl.TrimEnd('/');
@@ -90,7 +92,8 @@ namespace TG.Control.LedPlayer
                 {
                     clientId = clientId, kind = ClientKind.LedPlayer, appVersion = Application.version,
                     contentVersion = syncedContentVersion, ready = contentReady,
-                    status = contentReady ? "LED内容已就绪" : contentStatus
+                    status = contentReady ? "LED内容已就绪" : contentStatus,
+                    instanceId = instanceId
                 }, () => registered = true);
                 SetConnected(registered);
                 if (!registered) { syncStarted = false; yield return new WaitForSecondsRealtime(2); continue; }
@@ -159,6 +162,11 @@ namespace TG.Control.LedPlayer
                 }
 
                 var assets = manifest.assets ?? new ContentSyncAsset[0];
+                for (var index = 0; index < assets.Length; index++)
+                {
+                    var asset = assets[index];
+                    LedContentCache.Shared.RegisterValidation(NormalizeUrl(asset.url), asset.sizeBytes, asset.sha256);
+                }
                 var progress = new ContentSyncProgress { version = manifest.version, total = assets.Length, completed = 0 };
                 // The manifest version means this terminal understands the published route. Large media files may
                 // continue downloading in the background and must not keep the operator terminal globally locked.
@@ -176,7 +184,8 @@ namespace TG.Control.LedPlayer
                     ContentSyncChanged?.Invoke(progress);
                     var completed = false;
                     string error = null;
-                    yield return LedContentCache.Shared.Resolve(NormalizeUrl(asset.url), _ => completed = true, value => error = value, asset.sizeBytes);
+                    yield return LedContentCache.Shared.Resolve(NormalizeUrl(asset.url), _ => completed = true,
+                        value => error = value, asset.sizeBytes, expectedSha256: asset.sha256);
                     if (!string.IsNullOrWhiteSpace(error))
                     {
                         Debug.LogWarning("LED内容同步失败：" + error + " URL=" + asset.url);
@@ -270,7 +279,8 @@ namespace TG.Control.LedPlayer
                 appVersion = Application.version,
                 contentVersion = syncedContentVersion,
                 ready = ready,
-                status = state
+                status = state,
+                instanceId = instanceId
             });
         }
 

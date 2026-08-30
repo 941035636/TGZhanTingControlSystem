@@ -182,7 +182,6 @@ namespace TG.Control.LedPlayer
 
             preparedVideoUrl = command.mediaUrl;
             preparedNarrationUrl = command.narrationAudioUrl;
-            playbackPaused = false;
             apiClient.Report(command, PlaybackState.Ready);
             if (playAfterPrepare) yield return PlayPrepared(command, generation);
         }
@@ -210,8 +209,12 @@ namespace TG.Control.LedPlayer
                 narrationAudioSource.time = ClampAudioPosition(startPosition);
                 narrationAudioSource.Play();
             }
-            playbackPaused = false;
-            apiClient.Report(command, PlaybackState.Playing, startPosition);
+            if (playbackPaused)
+            {
+                if (videoPrepared) playbackAdapter.Pause();
+                if (narrationPrepared) narrationAudioSource.Pause();
+            }
+            apiClient.Report(command, playbackPaused ? PlaybackState.Paused : PlaybackState.Playing, startPosition);
 
             // Allow Unity and the native video backend to enter playing state before testing completion.
             yield return null;

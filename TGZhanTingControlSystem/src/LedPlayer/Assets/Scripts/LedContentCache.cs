@@ -3,6 +3,7 @@ using System.Collections;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -11,9 +12,18 @@ namespace TG.Control.LedPlayer
     public sealed class LedContentCache
     {
         public static LedContentCache Shared { get; } = new LedContentCache();
+        private readonly System.Collections.Generic.Dictionary<string, ValidationMetadata> validationByUrl =
+            new System.Collections.Generic.Dictionary<string, ValidationMetadata>(StringComparer.OrdinalIgnoreCase);
         private string contentDirectory;
 
-        public IEnumerator Resolve(string mediaUrl, Action<string> success, Action<string> failure, long expectedSize = 0, Action<float> progress = null)
+        public void RegisterValidation(string mediaUrl, long expectedSize, string expectedSha256)
+        {
+            if (string.IsNullOrWhiteSpace(mediaUrl)) return;
+            validationByUrl[mediaUrl] = new ValidationMetadata(expectedSize, expectedSha256);
+        }
+
+        public IEnumerator Resolve(string mediaUrl, Action<string> success, Action<string> failure, long expectedSize = 0,
+            Action<float> progress = null, string expectedSha256 = null)
         {
             if (string.IsNullOrWhiteSpace(mediaUrl))
             {
@@ -33,18 +43,30 @@ namespace TG.Control.LedPlayer
                 yield break;
             }
 
+            if (validationByUrl.TryGetValue(mediaUrl, out var metadata))
+            {
+                if (expectedSize <= 0) expectedSize = metadata.SizeBytes;
+                if (string.IsNullOrWhiteSpace(expectedSha256)) expectedSha256 = metadata.Sha256;
+            }
+
             var directory = GetContentDirectory();
             var extension = Path.GetExtension(new Uri(mediaUrl).AbsolutePath);
             if (string.IsNullOrWhiteSpace(extension)) extension = ".mp4";
             var finalPath = Path.Combine(directory, Hash(mediaUrl) + extension);
-            if (File.Exists(finalPath) && new FileInfo(finalPath).Length > 0 &&
-                (expectedSize <= 0 || new FileInfo(finalPath).Length == expectedSize))
+            if (File.Exists(finalPath))
             {
-                success(new Uri(finalPath).AbsoluteUri);
-                yield break;
+                bool valid = false;
+                string validationError = null;
+                yield return ValidateFile(finalPath, expectedSize, expectedSha256,
+                    (ok, error) => { valid = ok; validationError = error; });
+                if (valid)
+                {
+                    success(new Uri(finalPath).AbsoluteUri);
+                    yield break;
+                }
+                Debug.LogWarning("LED缓存文件校验失败，将重新下载：" + validationError);
+                File.Delete(finalPath);
             }
-
-            if (File.Exists(finalPath)) File.Delete(finalPath);
 
             var partialPath = finalPath + ".partial";
             var existingLength = File.Exists(partialPath) ? new FileInfo(partialPath).Length : 0;
@@ -76,8 +98,52 @@ namespace TG.Control.LedPlayer
                 }
             }
 
+            bool downloadedFileValid = false;
+            string downloadedFileError = null;
+            yield return ValidateFile(partialPath, expectedSize, expectedSha256,
+                (ok, error) => { downloadedFileValid = ok; downloadedFileError = error; });
+            if (!downloadedFileValid)
+            {
+                File.Delete(partialPath);
+                failure(downloadedFileError);
+                yield break;
+            }
+
             File.Move(partialPath, finalPath);
             success(new Uri(finalPath).AbsoluteUri);
+        }
+
+        private static IEnumerator ValidateFile(string path, long expectedSize, string expectedSha256,
+            Action<bool, string> completed)
+        {
+            var task = Task.Run(() => ValidateFileSync(path, expectedSize, expectedSha256));
+            while (!task.IsCompleted) yield return null;
+            if (task.IsFaulted)
+            {
+                completed(false, task.Exception?.GetBaseException().Message ?? "缓存文件校验失败。");
+                yield break;
+            }
+            completed(task.Result.Error == null, task.Result.Error);
+        }
+
+        private static ValidationResult ValidateFileSync(string path, long expectedSize, string expectedSha256)
+        {
+            var file = new FileInfo(path);
+            if (!file.Exists || file.Length <= 0) return new ValidationResult("缓存文件不存在或为空。");
+            if (expectedSize > 0 && file.Length != expectedSize)
+                return new ValidationResult("缓存文件大小不一致：预期 " + expectedSize + " 字节，实际 " + file.Length + " 字节。");
+            if (string.IsNullOrWhiteSpace(expectedSha256)) return new ValidationResult(null);
+            if (expectedSha256.Length != 64) return new ValidationResult("缓存文件SHA-256格式无效。");
+
+            using (var sha = SHA256.Create())
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024,
+                       FileOptions.SequentialScan))
+            {
+                var actual = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+                if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                    return new ValidationResult("缓存文件SHA-256不一致：预期 " + expectedSha256.ToLowerInvariant() + "，实际 " + actual + "。");
+            }
+            return new ValidationResult(null);
         }
 
         private string GetContentDirectory()
@@ -95,6 +161,24 @@ namespace TG.Control.LedPlayer
                 var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
                 return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
             }
+        }
+
+        private readonly struct ValidationMetadata
+        {
+            public ValidationMetadata(long sizeBytes, string sha256)
+            {
+                SizeBytes = sizeBytes;
+                Sha256 = sha256;
+            }
+
+            public long SizeBytes { get; }
+            public string Sha256 { get; }
+        }
+
+        private readonly struct ValidationResult
+        {
+            public ValidationResult(string error) => Error = error;
+            public string Error { get; }
         }
     }
 }

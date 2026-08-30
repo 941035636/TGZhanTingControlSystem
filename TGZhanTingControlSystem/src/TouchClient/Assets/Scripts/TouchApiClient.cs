@@ -18,6 +18,7 @@ namespace TG.Control.Touch
         public event Action<bool> ConnectionChanged;
 
         private bool running;
+        private readonly string instanceId = Guid.NewGuid().ToString("N");
         private bool connected;
         private long reportedContentVersion;
 
@@ -203,7 +204,8 @@ namespace TG.Control.Touch
             appVersion = Application.version,
             contentVersion = reportedContentVersion,
             ready = true,
-            status = reportedContentVersion > 0 ? "触控内容已加载" : "触控端正在加载内容"
+            status = reportedContentVersion > 0 ? "触控内容已加载" : "触控端正在加载内容",
+            instanceId = instanceId
         };
 
         [Serializable] private sealed class EmptyResponse { }
