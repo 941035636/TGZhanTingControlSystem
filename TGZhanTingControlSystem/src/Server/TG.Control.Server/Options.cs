@@ -25,6 +25,18 @@ public sealed class TtsOptions
     public string Voice { get; init; } = "default";
 }
 
+public sealed class TtsProductionOptions
+{
+    public const string SectionName = "TtsProduction";
+    public bool EnableDeterministicTestProvider { get; init; }
+    public int MaxTextLength { get; init; } = 5000;
+    public int MaxAttempts { get; init; } = 3;
+    public int AttemptTimeoutMilliseconds { get; init; } = 30000;
+    public int RetryDelayMilliseconds { get; init; } = 250;
+    public long MinAudioSizeBytes { get; init; } = 45;
+    public long MaxAudioSizeBytes { get; init; } = 100 * 1024 * 1024;
+}
+
 public sealed class AdminOptions
 {
     public const string SectionName = "Admin";

@@ -9,12 +9,21 @@ builder.Host.UseWindowsService(options => options.ServiceName = "TG Exhibition C
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<PlaybackOptions>(builder.Configuration.GetSection(PlaybackOptions.SectionName));
 builder.Services.Configure<TtsOptions>(builder.Configuration.GetSection(TtsOptions.SectionName));
+builder.Services.Configure<TtsProductionOptions>(builder.Configuration.GetSection(TtsProductionOptions.SectionName));
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.SectionName));
 builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection(TerminalOptions.SectionName));
 builder.Services.AddSingleton<IContentRepository, JsonContentRepository>();
 builder.Services.AddSingleton<ICommandBroker, CommandBroker>();
 builder.Services.AddSingleton<PlaybackCoordinator>();
 builder.Services.AddSingleton<ITtsService, UnconfiguredTtsService>();
+if (builder.Environment.IsDevelopment() &&
+    builder.Configuration.GetValue<bool>($"{TtsProductionOptions.SectionName}:EnableDeterministicTestProvider"))
+    builder.Services.AddSingleton<ITtsProvider, DeterministicTestTtsProvider>();
+builder.Services.AddSingleton<TtsProviderRegistry>();
+builder.Services.AddSingleton<TtsProductionRepository>();
+builder.Services.AddSingleton<TtsMediaValidator>();
+builder.Services.AddSingleton<TtsProductionService>();
+builder.Services.AddHostedService(services => services.GetRequiredService<TtsProductionService>());
 builder.Services.AddSingleton<AdminSessionStore>();
 builder.Services.AddSingleton<AssetStorage>();
 builder.Services.AddSingleton<NarrationAudioBindingService>();
@@ -155,6 +164,46 @@ app.MapGet("/api/tts/status", (HttpRequest request, AdminSessionStore sessions, 
     sessions.TryValidate(request, out _)
         ? Results.Ok(new { provider = options.Value.Provider, voice = options.Value.Voice, configured = !string.Equals(options.Value.Provider, "NotConfigured", StringComparison.OrdinalIgnoreCase) })
         : Results.Unauthorized());
+app.MapGet("/api/tts/providers", async (HttpRequest request, AdminSessionStore sessions,
+    TtsProductionService production, CancellationToken ct) =>
+    sessions.TryValidate(request, out _)
+        ? Results.Ok(await production.GetProvidersAsync(ct))
+        : Results.Unauthorized());
+app.MapPost("/api/tts/jobs", async (HttpRequest httpRequest, CreateTtsProductionJobRequest request,
+    AdminSessionStore sessions, TtsProductionService production, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
+    try
+    {
+        var result = await production.CreateAsync(request, username, ct);
+        return result.Created ? Results.Accepted($"/api/tts/jobs/{result.Job.JobId}", result) : Results.Ok(result);
+    }
+    catch (TtsProductionRequestException exception)
+    {
+        return Results.BadRequest(new { code = exception.ErrorCode, message = exception.Message });
+    }
+});
+app.MapGet("/api/tts/jobs/{jobId}", async (string jobId, HttpRequest request, AdminSessionStore sessions,
+    TtsProductionService production, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    var job = await production.GetJobAsync(jobId, ct);
+    return job is null ? Results.NotFound() : Results.Ok(job);
+});
+app.MapPost("/api/tts/jobs/{jobId}/cancel", async (string jobId, HttpRequest request,
+    AdminSessionStore sessions, TtsProductionService production, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    var job = await production.CancelAsync(jobId, ct);
+    return job is null ? Results.NotFound() : Results.Ok(job);
+});
+app.MapGet("/api/tts/candidates/{candidateId}", async (string candidateId, HttpRequest request,
+    AdminSessionStore sessions, TtsProductionService production, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    var candidate = await production.GetCandidateAsync(candidateId, ct);
+    return candidate is null ? Results.NotFound() : Results.Ok(candidate);
+});
 app.MapPost("/api/clients/register", async (HttpRequest request, ClientRegistration registration, ICommandBroker broker,
     PlaybackCoordinator coordinator, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
 {

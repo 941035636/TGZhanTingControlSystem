@@ -132,6 +132,56 @@ public sealed class AssetStorage
             ResolveMediaType(request.ContentType, extension));
     }
 
+    public async Task<ContentAsset> ImportValidatedAudioAsync(Stream source, string originalName, string mediaType,
+        double durationSeconds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (string.IsNullOrWhiteSpace(originalName)) throw new InvalidDataException("Generated audio file name is missing.");
+        var extension = Path.GetExtension(originalName);
+        if (!AllowedExtensions.Contains(extension)) throw new InvalidDataException($"Unsupported generated audio format: {extension}");
+        if (!string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(mediaType, "audio/wav", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Phase 9B generated audio storage accepts validated PCM WAV only.");
+
+        var storedName = $"{Guid.NewGuid():N}.wav";
+        var targetPath = Path.Combine(MediaDirectory, storedName);
+        long size = 0;
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = ArrayPool<byte>.Shared.Rent(1024 * 1024);
+        try
+        {
+            await using var target = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                buffer.Length, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            while (true)
+            {
+                var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+                if (read == 0) break;
+                size += read;
+                hash.AppendData(buffer, 0, read);
+                await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+        }
+        catch
+        {
+            if (File.Exists(targetPath)) File.Delete(targetPath);
+            throw;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        if (size == 0)
+        {
+            File.Delete(targetPath);
+            throw new InvalidDataException("Generated audio is empty.");
+        }
+
+        return new ContentAsset(Guid.NewGuid().ToString("N"), originalName, AssetKind.NarrationAudio,
+            $"/media/{storedName}", Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant(), size,
+            Math.Max(0, durationSeconds), "audio/wav");
+    }
+
     private static string ResolveMediaType(string? contentType, string extension)
     {
         var normalized = contentType?.Split(';', 2)[0].Trim().ToLowerInvariant();
