@@ -1,8 +1,10 @@
 export type AssetKind = 0 | 1 | 2 | 3
 
-export interface ContentAsset { id: string; name: string; kind: AssetKind; url: string; sha256: string; sizeBytes: number; durationSeconds: number }
+export interface ContentAsset { id: string; name: string; kind: AssetKind; url: string; sha256: string; sizeBytes: number; durationSeconds: number; mediaType?: string | null }
 export type AudioMixPolicy = 0 | 1 | 2
-export interface NarrationNode { id: string; name: string; order: number; narrationText: string; ttsAudioUrl: string | null; assets: ContentAsset[]; failurePolicy: 0 | 1; audioMixPolicy: AudioMixPolicy; videoVolume: number; narrationVolume: number }
+export interface TtsSynthesisConfiguration { providerKey: string; voice: string; language: string; rate: number; pitch: number; volume: number; outputMediaType: string; sampleRateHz: number; channels: number }
+export interface NarrationAudioBinding { asset: ContentAsset; narrationTextFingerprint: string; synthesisConfigurationFingerprint: string; synthesisConfiguration: TtsSynthesisConfiguration; origin: 0 | 1 | 2; boundAtUtc: string; fingerprintVersion: string; providerRequestId: string | null }
+export interface NarrationNode { id: string; name: string; order: number; narrationText: string; ttsAudioUrl: string | null; assets: ContentAsset[]; failurePolicy: 0 | 1; audioMixPolicy: AudioMixPolicy; videoVolume: number; narrationVolume: number; ttsConfiguration?: TtsSynthesisConfiguration | null; narrationAudio?: NarrationAudioBinding | null }
 export interface ExhibitionModule { id: string; name: string; order: number; description: string; coverUrl: string | null; enabled: boolean; nodes: NarrationNode[] }
 export interface PublishedContent { version: number; publishedAtUtc: string; publishedBy: string; modules: ExhibitionModule[] }
 export interface LoginResult { token: string; username: string; expiresAtUtc: string }
@@ -70,6 +72,7 @@ export const api = {
   rollbackContent: (version: number) => request<PublishedContent>(`/api/content/rollback/${version}`, { method: 'POST' }, true),
   operations: (count = 200) => request<OperationalEvent[]>(`/api/operations?count=${count}`, undefined, true),
   synthesize: (text: string, voice: string) => request<TtsResult>('/api/tts/synthesize', { method: 'POST', body: JSON.stringify({ text, voice, rate: 1, volume: 1, pitch: 0 }) }, true),
+  bindManualNarrationAudio: (asset: ContentAsset, narrationText: string, language = 'zh-CN') => request<NarrationAudioBinding>('/api/narration-audio/bind-upload', { method: 'POST', body: JSON.stringify({ asset, narrationText, language }) }, true),
   uploadAsset: (file: File, kind: AssetKind, durationSeconds: number, onProgress: (percent: number) => void) => new Promise<ContentAsset>((resolve, reject) => {
     const token = sessionStorage.getItem(tokenKey)
     if (!token) return reject(new Error('登录已过期，请重新登录。'))

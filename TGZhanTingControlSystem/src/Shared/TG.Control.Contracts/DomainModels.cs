@@ -21,6 +21,24 @@ public enum AudioMixPolicy
     MuteVideo
 }
 
+public enum NarrationAudioOrigin
+{
+    Generated,
+    ManualUpload,
+    Legacy
+}
+
+public enum NarrationAudioBindingStatus
+{
+    Missing,
+    Fresh,
+    StaleText,
+    StaleSynthesisConfiguration,
+    InvalidAsset,
+    InvalidBinding,
+    LegacyUnverified
+}
+
 public sealed record ContentAsset(
     string Id,
     string Name,
@@ -28,7 +46,29 @@ public sealed record ContentAsset(
     string Url,
     string Sha256,
     long SizeBytes,
-    double DurationSeconds);
+    double DurationSeconds,
+    string? MediaType = null);
+
+public sealed record TtsSynthesisConfiguration(
+    string ProviderKey,
+    string Voice,
+    string Language,
+    double Rate = 1,
+    double Pitch = 0,
+    double Volume = 1,
+    string OutputMediaType = "audio/mpeg",
+    int SampleRateHz = 24000,
+    int Channels = 1);
+
+public sealed record NarrationAudioBinding(
+    ContentAsset Asset,
+    string NarrationTextFingerprint,
+    string SynthesisConfigurationFingerprint,
+    TtsSynthesisConfiguration SynthesisConfiguration,
+    NarrationAudioOrigin Origin,
+    DateTimeOffset BoundAtUtc,
+    string FingerprintVersion,
+    string? ProviderRequestId = null);
 
 public sealed record NarrationNode(
     string Id,
@@ -40,7 +80,9 @@ public sealed record NarrationNode(
     FailurePolicy FailurePolicy = FailurePolicy.Skip,
     AudioMixPolicy AudioMixPolicy = AudioMixPolicy.Duck,
     double VideoVolume = 0.25,
-    double NarrationVolume = 1.0);
+    double NarrationVolume = 1.0,
+    TtsSynthesisConfiguration? TtsConfiguration = null,
+    NarrationAudioBinding? NarrationAudio = null);
 
 public sealed record ExhibitionModule(
     string Id,

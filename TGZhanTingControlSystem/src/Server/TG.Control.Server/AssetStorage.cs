@@ -128,6 +128,31 @@ public sealed class AssetStorage
         }
 
         return new ContentAsset(Guid.NewGuid().ToString("N"), originalName, kind, $"/media/{storedName}",
-            Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant(), size, Math.Max(0, durationSeconds));
+            Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant(), size, Math.Max(0, durationSeconds),
+            ResolveMediaType(request.ContentType, extension));
+    }
+
+    private static string ResolveMediaType(string? contentType, string extension)
+    {
+        var normalized = contentType?.Split(';', 2)[0].Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(normalized) &&
+            !string.Equals(normalized, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
+            return normalized;
+
+        return extension.ToLowerInvariant() switch
+        {
+            ".mp4" => "video/mp4",
+            ".mov" => "video/quicktime",
+            ".mkv" => "video/x-matroska",
+            ".webm" => "video/webm",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".aac" => "audio/aac",
+            ".m4a" => "audio/mp4",
+            _ => "application/octet-stream"
+        };
     }
 }

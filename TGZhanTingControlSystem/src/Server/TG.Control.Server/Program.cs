@@ -17,6 +17,7 @@ builder.Services.AddSingleton<PlaybackCoordinator>();
 builder.Services.AddSingleton<ITtsService, UnconfiguredTtsService>();
 builder.Services.AddSingleton<AdminSessionStore>();
 builder.Services.AddSingleton<AssetStorage>();
+builder.Services.AddSingleton<NarrationAudioBindingService>();
 builder.Services.AddSingleton<NarrationRouteRepository>();
 builder.Services.AddSingleton<UiExperienceRepository>();
 builder.Services.AddSingleton<PlaybackSessionStore>();
@@ -68,20 +69,7 @@ app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig co
 app.MapGet("/api/content/manifest", async (IContentRepository repository, CancellationToken ct) =>
 {
     var content = await repository.GetAsync(ct);
-    var assets = content.Modules
-        .SelectMany(module => module.Nodes ?? [])
-        .SelectMany(node =>
-        {
-            var nodeAssets = (node.Assets ?? []).Select(asset => new ContentSyncAsset(asset.Url, asset.Sha256, asset.SizeBytes)).ToList();
-            if (!string.IsNullOrWhiteSpace(node.TtsAudioUrl))
-                nodeAssets.Add(new ContentSyncAsset(node.TtsAudioUrl, string.Empty, 0));
-            return nodeAssets;
-        })
-        .Where(asset => !string.IsNullOrWhiteSpace(asset.Url))
-        .GroupBy(asset => asset.Url, StringComparer.OrdinalIgnoreCase)
-        .Select(group => group.First())
-        .ToArray();
-    return Results.Ok(new ContentSyncManifest(content.Version, assets));
+    return Results.Ok(ContentManifestBuilder.Build(content));
 });
 app.MapGet("/api/routes", async (NarrationRouteRepository repository, CancellationToken ct) =>
     Results.Ok(new { routes = await repository.GetAllAsync(ct) }));
@@ -109,9 +97,11 @@ app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishConte
     IContentRepository repository, AssetStorage assetStorage, OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
-    var validation = ContentValidator.Validate(request.Modules, assetStorage, httpRequest.Host);
+    var modules = NarrationAudioCompatibility.NormalizeModules(request.Modules);
+    var current = await repository.GetAsync(ct);
+    var validation = ContentValidator.Validate(modules, assetStorage, httpRequest.Host, current);
     if (validation.Count > 0) return Results.ValidationProblem(validation);
-    var content = await repository.SaveAsync(request.Modules, username, ct);
+    var content = await repository.SaveAsync(modules, username, ct);
     await events.AppendAsync("Information", "Content", "Publish", $"{username} 发布了内容版本 V{content.Version}。", cancellationToken: ct);
     return Results.Ok(content);
 });
@@ -124,7 +114,7 @@ app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpReq
     try
     {
         var target = await repository.GetVersionAsync(version, ct);
-        var validation = ContentValidator.Validate(target.Modules, assetStorage, request.Host);
+        var validation = ContentValidator.Validate(target.Modules, assetStorage, request.Host, legacyValidation: LegacyNarrationAudioValidation.AllowHistorical);
         if (validation.Count > 0) return Results.ValidationProblem(validation);
         var content = await repository.RollbackAsync(version, username, ct);
         await events.AppendAsync("Warning", "Content", "Rollback", $"{username} 将内容回滚至 V{version}，生成新版本 V{content.Version}。", cancellationToken: ct);
@@ -152,6 +142,14 @@ app.MapDelete("/api/assets/{storedName}", (string storedName, HttpRequest reques
 {
     if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
     return storage.Delete(storedName) ? Results.NoContent() : Results.NotFound();
+});
+app.MapPost("/api/narration-audio/bind-upload", (HttpRequest httpRequest,
+    CreateManualNarrationAudioBindingRequest request, AdminSessionStore sessions,
+    NarrationAudioBindingService bindingService) =>
+{
+    if (!sessions.TryValidate(httpRequest, out _)) return Results.Unauthorized();
+    try { return Results.Ok(bindingService.CreateManualBinding(request, httpRequest.Host)); }
+    catch (InvalidDataException exception) { return Results.BadRequest(new { message = exception.Message }); }
 });
 app.MapGet("/api/tts/status", (HttpRequest request, AdminSessionStore sessions, IOptions<TtsOptions> options) =>
     sessions.TryValidate(request, out _)

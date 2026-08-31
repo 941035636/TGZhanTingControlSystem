@@ -193,11 +193,11 @@ function bindNodeForm(module: ExhibitionModule, node: NarrationNode, modal: HTML
   bind<HTMLTextAreaElement>('#narration-text', textarea => node.narrationText=textarea.value)
   modal.querySelector('#done-node')?.addEventListener('click', closeNodeEditor)
   modal.querySelector('#delete-node')?.addEventListener('click', () => { module.nodes=module.nodes.filter(item=>item.id!==node.id); editingNodeId=module.nodes[0]?.id??null; markDirty(); renderNodeEditor() })
-  modal.querySelector('#remove-audio')?.addEventListener('click', () => { node.ttsAudioUrl=null; markDirty(); renderNodeEditor() })
+  modal.querySelector('#remove-audio')?.addEventListener('click', () => { node.ttsAudioUrl=null; node.narrationAudio=null; node.ttsConfiguration=null; markDirty(); renderNodeEditor() })
   modal.querySelectorAll<HTMLElement>('[data-remove-asset]').forEach(button => button.addEventListener('click', () => { node.assets=node.assets.filter(asset=>asset.id!==button.dataset.removeAsset); markDirty(); renderNodeEditor() }))
   modal.querySelector<HTMLInputElement>('#asset-file')?.addEventListener('change', event => uploadSelectedAsset(node, event.target as HTMLInputElement, false))
   modal.querySelector<HTMLInputElement>('#audio-file')?.addEventListener('change', event => uploadSelectedAsset(node, event.target as HTMLInputElement, true))
-  modal.querySelector('#generate-tts')?.addEventListener('click', async () => { try { const result=await api.synthesize(node.narrationText,ttsStatus.voice); node.ttsAudioUrl=result.audioUrl; markDirty(); renderNodeEditor() } catch(error){showToast(error instanceof Error?error.message:'TTS生成失败')} })
+  modal.querySelector('#generate-tts')?.addEventListener('click', async () => { try { const result=await api.synthesize(node.narrationText,ttsStatus.voice); node.ttsAudioUrl=result.audioUrl; node.narrationAudio=null; node.ttsConfiguration=null; markDirty(); renderNodeEditor() } catch(error){showToast(error instanceof Error?error.message:'TTS生成失败')} })
 }
 
 async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement, narrationAudio: boolean): Promise<void> {
@@ -208,12 +208,15 @@ async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement,
   const progress=modal.querySelector<HTMLElement>('#upload-progress')!; progress.classList.add('visible')
   try {
     const asset=await api.uploadAsset(file,kind,duration,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`})
-    if(narrationAudio) node.ttsAudioUrl=asset.url; else node.assets.push(asset)
+    if(narrationAudio) {
+      const binding=await api.bindManualNarrationAudio(asset,node.narrationText)
+      node.narrationAudio=binding;node.ttsConfiguration=binding.synthesisConfiguration;node.ttsAudioUrl=binding.asset.url
+    } else node.assets.push(asset)
     markDirty(); renderNodeEditor(); showToast(`${file.name} 上传成功。`)
   } catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'上传失败')}
 }
 
-function addNode(module: ExhibitionModule): void { const order=Math.max(0,...module.nodes.map(item=>item.order))+1; const node:NarrationNode={id:crypto.randomUUID(),name:`讲解节点 ${order}`,order,narrationText:'',ttsAudioUrl:null,assets:[],failurePolicy:0,audioMixPolicy:0,videoVolume:0.25,narrationVolume:1}; module.nodes.push(node);editingNodeId=node.id;markDirty();renderNodeEditor() }
+function addNode(module: ExhibitionModule): void { const order=Math.max(0,...module.nodes.map(item=>item.order))+1; const node:NarrationNode={id:crypto.randomUUID(),name:`讲解节点 ${order}`,order,narrationText:'',ttsAudioUrl:null,assets:[],failurePolicy:0,audioMixPolicy:0,videoVolume:0.25,narrationVolume:1,ttsConfiguration:null,narrationAudio:null}; module.nodes.push(node);editingNodeId=node.id;markDirty();renderNodeEditor() }
 function closeNodeEditor(): void { document.querySelector('#node-modal')?.remove(); editingModuleId=null;editingNodeId=null;renderDashboard() }
 
 function openUiEditor(): void {

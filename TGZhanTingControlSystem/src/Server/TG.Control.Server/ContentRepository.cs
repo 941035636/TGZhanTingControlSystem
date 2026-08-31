@@ -43,8 +43,9 @@ public sealed class JsonContentRepository : IContentRepository
             }
 
             await using var stream = File.OpenRead(filePath);
-            return await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions, cancellationToken)
+            var content = await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions, cancellationToken)
                 ?? throw new InvalidDataException("Published content file is empty or invalid.");
+            return NarrationAudioCompatibility.Normalize(content);
         }
         finally
         {
@@ -64,7 +65,8 @@ public sealed class JsonContentRepository : IContentRepository
                 currentVersion = (await JsonSerializer.DeserializeAsync<PublishedContent>(read, jsonOptions, cancellationToken))?.Version ?? 0;
             }
 
-            var content = new PublishedContent(currentVersion + 1, DateTimeOffset.UtcNow, publishedBy, modules);
+            var content = new PublishedContent(currentVersion + 1, DateTimeOffset.UtcNow, publishedBy,
+                NarrationAudioCompatibility.NormalizeModules(modules));
             await WriteAsync(content, cancellationToken);
             await ArchiveAsync(content, cancellationToken);
             return content;
@@ -105,8 +107,9 @@ public sealed class JsonContentRepository : IContentRepository
             var path = HistoryPath(version);
             if (!File.Exists(path)) throw new KeyNotFoundException($"内容版本 V{version} 不存在。");
             await using var stream = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions, cancellationToken)
+            var content = await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions, cancellationToken)
                 ?? throw new InvalidDataException($"内容版本 V{version} 无效。");
+            return NarrationAudioCompatibility.Normalize(content);
         }
         finally { gate.Release(); }
     }
@@ -121,6 +124,7 @@ public sealed class JsonContentRepository : IContentRepository
             await using var source = File.OpenRead(path);
             var target = await JsonSerializer.DeserializeAsync<PublishedContent>(source, jsonOptions, cancellationToken)
                 ?? throw new InvalidDataException($"内容版本 V{version} 无效。");
+            target = NarrationAudioCompatibility.Normalize(target);
             var current = await ReadCurrentAsync(cancellationToken);
             var restored = new PublishedContent(current.Version + 1, DateTimeOffset.UtcNow,
                 publishedBy + $"（回滚自 V{version}）", target.Modules);
@@ -135,8 +139,9 @@ public sealed class JsonContentRepository : IContentRepository
     {
         if (!File.Exists(filePath)) return new PublishedContent(0, DateTimeOffset.UtcNow, "system", DefaultModules.Create());
         await using var stream = File.OpenRead(filePath);
-        return await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions, cancellationToken)
+        var content = await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions, cancellationToken)
             ?? throw new InvalidDataException("Published content file is empty or invalid.");
+        return NarrationAudioCompatibility.Normalize(content);
     }
 
     private async Task ArchiveAsync(PublishedContent content, CancellationToken cancellationToken)
