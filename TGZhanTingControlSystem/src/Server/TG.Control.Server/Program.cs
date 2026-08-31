@@ -3,7 +3,11 @@ using Microsoft.AspNetCore.Http.Features;
 using TG.Control.Contracts;
 using TG.Control.Server;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    WebRootPath = Path.Combine(AppContext.BaseDirectory, "AdminWeb")
+});
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = null);
 builder.Host.UseWindowsService(options => options.ServiceName = "TG Exhibition Control Server");
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));

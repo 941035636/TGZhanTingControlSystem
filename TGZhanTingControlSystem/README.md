@@ -60,6 +60,11 @@ powershell -ExecutionPolicy Bypass -File scripts\Build-All.ps1
 dotnet run --project src\Server\TG.Control.Server\TG.Control.Server.csproj
 ```
 
+Server工程会在正常构建、运行和发布前自动执行`npm ci`与AdminWeb生产构建，并将产物刷新到
+Server输出目录的`AdminWeb`文件夹。运行时静态文件直接由该目录托管，因此从GitHub全新拉取后
+无需手工复制管理端文件；构建环境需要安装Node.js/npm。
+仅在明确只做Server诊断时可传入`-p:SkipAdminWebBuild=true`跳过该步骤。
+
 访问：
 
 - 管理端：`http://localhost:5080/`

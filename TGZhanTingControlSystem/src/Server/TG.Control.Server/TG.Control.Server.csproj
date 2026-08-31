@@ -5,9 +5,45 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AdminWebRoot>$(MSBuildProjectDirectory)\..\..\AdminWeb</AdminWebRoot>
+    <AdminWebDist>$(AdminWebRoot)\dist</AdminWebDist>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../Shared/TG.Control.Contracts/TG.Control.Contracts.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
   </ItemGroup>
+  <Target Name="BuildAdminWeb" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipAdminWebBuild)' != 'true'">
+    <Message Importance="high" Text="Building AdminWeb and refreshing Server output..." />
+    <Error Condition="!Exists('$(AdminWebRoot)\package-lock.json')"
+           Text="AdminWeb package-lock.json was not found at $(AdminWebRoot)." />
+    <Exec WorkingDirectory="$(AdminWebRoot)" Command="npm ci --no-audit --no-fund" />
+    <Exec WorkingDirectory="$(AdminWebRoot)" Command="npm run build" />
+    <Error Condition="!Exists('$(AdminWebDist)\index.html')"
+           Text="AdminWeb build completed without producing dist/index.html." />
+  </Target>
+  <Target Name="CopyAdminWebToOutput" AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipAdminWebBuild)' != 'true'">
+    <RemoveDir Directories="$(TargetDir)AdminWeb" />
+    <MakeDir Directories="$(TargetDir)AdminWeb" />
+    <ItemGroup>
+      <AdminWebOutputFiles Include="$(AdminWebDist)\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AdminWebOutputFiles)"
+          DestinationFiles="@(AdminWebOutputFiles->'$(TargetDir)AdminWeb\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Error Condition="!Exists('$(TargetDir)AdminWeb\index.html')"
+           Text="AdminWeb was not copied to the Server output directory." />
+  </Target>
+  <Target Name="CopyAdminWebToPublish" AfterTargets="Publish"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipAdminWebBuild)' != 'true'">
+    <RemoveDir Directories="$(PublishDir)AdminWeb" />
+    <MakeDir Directories="$(PublishDir)AdminWeb" />
+    <ItemGroup>
+      <AdminWebPublishFiles Include="$(AdminWebDist)\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AdminWebPublishFiles)"
+          DestinationFiles="@(AdminWebPublishFiles->'$(PublishDir)AdminWeb\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Error Condition="!Exists('$(PublishDir)AdminWeb\index.html')"
+           Text="AdminWeb was not copied to the Server publish directory." />
+  </Target>
 </Project>
