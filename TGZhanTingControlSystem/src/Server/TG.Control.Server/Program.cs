@@ -27,6 +27,8 @@ builder.Services.AddHostedService(services => services.GetRequiredService<TtsPro
 builder.Services.AddSingleton<AdminSessionStore>();
 builder.Services.AddSingleton<AssetStorage>();
 builder.Services.AddSingleton<NarrationAudioBindingService>();
+builder.Services.AddSingleton<ContentDraftRepository>();
+builder.Services.AddSingleton<ContentDraftWorkflowService>();
 builder.Services.AddSingleton<NarrationRouteRepository>();
 builder.Services.AddSingleton<UiExperienceRepository>();
 builder.Services.AddSingleton<PlaybackSessionStore>();
@@ -58,6 +60,19 @@ app.MapPost("/api/auth/logout", (HttpRequest request, AdminSessionStore sessions
     return Results.NoContent();
 });
 app.MapGet("/api/content/current", (IContentRepository repository, CancellationToken ct) => repository.GetAsync(ct));
+app.MapGet("/api/content/draft", async (HttpRequest request, AdminSessionStore sessions,
+    ContentDraftWorkflowService drafts, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    return Results.Ok(await drafts.GetAsync(request.Host, ct));
+});
+app.MapPut("/api/content/draft", async (HttpRequest httpRequest, SaveContentDraftRequest request,
+    AdminSessionStore sessions, ContentDraftWorkflowService drafts, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
+    try { return Results.Ok(await drafts.SaveAsync(request, username, httpRequest.Host, ct)); }
+    catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
+});
 app.MapGet("/api/ui/current", (UiExperienceRepository repository, CancellationToken ct) => repository.GetAsync(ct));
 app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig config, AdminSessionStore sessions,
     UiExperienceRepository repository, AssetStorage assetStorage, CancellationToken ct) =>
@@ -103,21 +118,36 @@ app.MapDelete("/api/routes/{id}", async (string id, HttpRequest httpRequest, Nar
     return Results.NoContent();
 });
 app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishContentRequest request, AdminSessionStore sessions,
-    IContentRepository repository, AssetStorage assetStorage, OperationalEventRepository events, CancellationToken ct) =>
+    IContentRepository repository, AssetStorage assetStorage, ContentDraftWorkflowService drafts,
+    OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
     var modules = NarrationAudioCompatibility.NormalizeModules(request.Modules);
+    if (request.BaseContentVersion.HasValue && request.ExpectedDraftRevision.HasValue)
+    {
+        try
+        {
+            var result = await drafts.PublishAsync(new SaveContentDraftRequest(request.BaseContentVersion.Value,
+                request.ExpectedDraftRevision.Value, modules), username, httpRequest.Host, ct);
+            await events.AppendAsync("Information", "Content", "Publish", $"{username} published content V{result.Version}.", cancellationToken: ct);
+            return Results.Ok(result);
+        }
+        catch (ContentDraftValidationException exception) { return Results.ValidationProblem(exception.Errors); }
+        catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
+    }
     var current = await repository.GetAsync(ct);
     var validation = ContentValidator.Validate(modules, assetStorage, httpRequest.Host, current);
     if (validation.Count > 0) return Results.ValidationProblem(validation);
     var content = await repository.SaveAsync(modules, username, ct);
+    await drafts.ResetAsync(content, ct);
     await events.AppendAsync("Information", "Content", "Publish", $"{username} 发布了内容版本 V{content.Version}。", cancellationToken: ct);
     return Results.Ok(content);
 });
 app.MapGet("/api/content/versions", async (HttpRequest request, AdminSessionStore sessions, IContentRepository repository, CancellationToken ct) =>
     sessions.TryValidate(request, out _) ? Results.Ok(await repository.GetHistoryAsync(ct)) : Results.Unauthorized());
 app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpRequest request, AdminSessionStore sessions,
-    IContentRepository repository, AssetStorage assetStorage, OperationalEventRepository events, CancellationToken ct) =>
+    IContentRepository repository, AssetStorage assetStorage, ContentDraftWorkflowService drafts,
+    OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
     try
@@ -126,6 +156,7 @@ app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpReq
         var validation = ContentValidator.Validate(target.Modules, assetStorage, request.Host, legacyValidation: LegacyNarrationAudioValidation.AllowHistorical);
         if (validation.Count > 0) return Results.ValidationProblem(validation);
         var content = await repository.RollbackAsync(version, username, ct);
+        await drafts.ResetAsync(content, ct);
         await events.AppendAsync("Warning", "Content", "Rollback", $"{username} 将内容回滚至 V{version}，生成新版本 V{content.Version}。", cancellationToken: ct);
         return Results.Ok(content);
     }
@@ -203,6 +234,20 @@ app.MapGet("/api/tts/candidates/{candidateId}", async (string candidateId, HttpR
     if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
     var candidate = await production.GetCandidateAsync(candidateId, ct);
     return candidate is null ? Results.NotFound() : Results.Ok(candidate);
+});
+app.MapGet("/api/tts/candidates/{candidateId}/evaluation", async (string candidateId, HttpRequest request,
+    AdminSessionStore sessions, ContentDraftWorkflowService drafts, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    return Results.Ok(await drafts.EvaluateCandidateAsync(candidateId, request.Host, ct));
+});
+app.MapPost("/api/tts/candidates/{candidateId}/adopt", async (string candidateId, HttpRequest httpRequest,
+    AdoptNarrationAudioCandidateRequest request, AdminSessionStore sessions,
+    ContentDraftWorkflowService drafts, CancellationToken ct) =>
+{
+    if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
+    try { return Results.Ok(await drafts.AdoptAsync(candidateId, request, username, httpRequest.Host, ct)); }
+    catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
 });
 app.MapPost("/api/clients/register", async (HttpRequest request, ClientRegistration registration, ICommandBroker broker,
     PlaybackCoordinator coordinator, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
@@ -313,4 +358,12 @@ static bool HasOperatorAccess(HttpRequest request, AdminSessionStore sessions, I
     return false;
 }
 
-public sealed record PublishContentRequest(IReadOnlyList<ExhibitionModule> Modules);
+static IResult DraftWorkflowError(ContentDraftWorkflowException exception) => exception.Failure switch
+{
+    ContentDraftWorkflowFailure.NotFound => Results.NotFound(new { code = exception.ErrorCode, message = exception.Message }),
+    ContentDraftWorkflowFailure.InvalidAsset => Results.BadRequest(new { code = exception.ErrorCode, message = exception.Message }),
+    _ => Results.Conflict(new { code = exception.ErrorCode, message = exception.Message })
+};
+
+public sealed record PublishContentRequest(IReadOnlyList<ExhibitionModule> Modules,
+    long? BaseContentVersion = null, long? ExpectedDraftRevision = null);

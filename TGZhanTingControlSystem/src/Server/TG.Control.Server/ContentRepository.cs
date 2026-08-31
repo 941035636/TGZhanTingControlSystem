@@ -8,6 +8,8 @@ public interface IContentRepository
 {
     Task<PublishedContent> GetAsync(CancellationToken cancellationToken);
     Task<PublishedContent> SaveAsync(IReadOnlyList<ExhibitionModule> modules, string publishedBy, CancellationToken cancellationToken);
+    Task<PublishedContent> SaveIfVersionAsync(IReadOnlyList<ExhibitionModule> modules, long expectedVersion,
+        string publishedBy, CancellationToken cancellationToken);
     Task<PublishedContent> GetVersionAsync(long version, CancellationToken cancellationToken);
     Task<IReadOnlyList<ContentVersionSummary>> GetHistoryAsync(CancellationToken cancellationToken);
     Task<PublishedContent> RollbackAsync(long version, string publishedBy, CancellationToken cancellationToken);
@@ -75,6 +77,24 @@ public sealed class JsonContentRepository : IContentRepository
         {
             gate.Release();
         }
+    }
+
+    public async Task<PublishedContent> SaveIfVersionAsync(IReadOnlyList<ExhibitionModule> modules, long expectedVersion,
+        string publishedBy, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await ReadCurrentAsync(cancellationToken);
+            if (current.Version != expectedVersion)
+                throw new ContentVersionConflictException(expectedVersion, current.Version);
+            var content = new PublishedContent(current.Version + 1, DateTimeOffset.UtcNow, publishedBy,
+                NarrationAudioCompatibility.NormalizeModules(modules));
+            await WriteAsync(content, cancellationToken);
+            await ArchiveAsync(content, cancellationToken);
+            return content;
+        }
+        finally { gate.Release(); }
     }
 
     public async Task<IReadOnlyList<ContentVersionSummary>> GetHistoryAsync(CancellationToken cancellationToken)
@@ -166,4 +186,11 @@ public sealed class JsonContentRepository : IContentRepository
 
         File.Move(tempPath, filePath, true);
     }
+}
+
+public sealed class ContentVersionConflictException(long expectedVersion, long actualVersion)
+    : InvalidOperationException($"Content version changed from V{expectedVersion} to V{actualVersion}.")
+{
+    public long ExpectedVersion { get; } = expectedVersion;
+    public long ActualVersion { get; } = actualVersion;
 }

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
+    "test": "node --test tests/tts-workflow.test.ts",
     "preview": "vite preview --host 0.0.0.0"
   },
   "devDependencies": {

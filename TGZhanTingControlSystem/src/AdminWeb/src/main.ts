@@ -1,11 +1,21 @@
 import './style.css'
-import { api, type AssetKind, type ClientRuntimeStatus, type ContentVersionSummary, type ExhibitionModule, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsStatus, type UiExperienceConfig } from './api'
+import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentDraftSnapshot, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiExperienceConfig } from './api'
+import { bindingStatusLabel, jobStatusLabel, TtsWorkflowController, type TtsWorkflowApi } from './tts-workflow'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('App root was not found')
 const root = app
 let content: PublishedContent | null = null
-let ttsStatus: TtsStatus = { provider: 'NotConfigured', voice: 'default', configured: false }
+let ttsProviders: TtsProviderDescriptor[] = []
+let draftBaseVersion = 0
+let draftRevision = 0
+let draftStatuses: NarrationAudioDraftStatus[] = []
+let draftConflict = ''
+let draftMutationSequence = 0
+let draftSyncedSequence = 0
+let draftSyncTimer: number | null = null
+let draftSyncInFlight: Promise<void> | null = null
+let ttsController: TtsWorkflowController | null = null
 let username = ''
 let dirty = false
 let editingModuleId: string | null = null
@@ -20,6 +30,16 @@ let operationEvents: OperationalEvent[] = []
 let publishError = ''
 let activeView: 'content'|'routes'|'versions'|'operations' = 'content'
 const draftKey = 'tg-content-draft-v1'
+
+const ttsWorkflowApi: TtsWorkflowApi = {
+  listProviders: api.ttsProviders,
+  createJob: api.createTtsJob,
+  getJob: api.getTtsJob,
+  cancelJob: api.cancelTtsJob,
+  getCandidate: api.getTtsCandidate,
+  evaluateCandidate: api.evaluateTtsCandidate,
+  adoptCandidate: api.adoptTtsCandidate,
+}
 
 const escapeHtml = (value: string | null | undefined): string => (value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] ?? character)
 const assetKindName = (kind: AssetKind): string => ['宣传视频', '展示图片', '动画素材', '讲解音频'][kind] ?? '素材'
@@ -44,22 +64,27 @@ async function login(event: SubmitEvent): Promise<void> {
 async function loadDashboard(): Promise<void> {
   root.innerHTML = '<main class="loading">正在读取正式内容版本…</main>'
   try {
-    const [published, status, clients, sessions, ui, routeResult, ready, history, events] = await Promise.all([
-      api.getContent(), api.ttsStatus(), api.clientStatuses(), api.playbackSessions(), api.getUi(), api.routes(), api.readiness(), api.contentVersions(), api.operations()
+    draftConflict = ''
+    const [published, serverDraft, providers, clients, sessions, ui, routeResult, ready, history, events] = await Promise.all([
+      api.getContent(), api.getDraft(), api.ttsProviders().catch(() => []), api.clientStatuses(), api.playbackSessions(), api.getUi(), api.routes(), api.readiness(), api.contentVersions(), api.operations()
     ])
-    const restored = restoreDraft(published)
-    content = restored.content; ttsStatus = status; clientStatuses = clients; playbackSessions = sessions; uiConfig = ui
-    routes = routeResult.routes ?? []; readiness = ready; versions = history; operationEvents = events; dirty = restored.dirty; renderDashboard()
+    const restored = restoreDraft(published, serverDraft)
+    content = restored.content; ttsProviders = providers; clientStatuses = clients; playbackSessions = sessions; uiConfig = ui
+    draftBaseVersion = serverDraft.baseContentVersion; draftRevision = serverDraft.revision; draftStatuses = serverDraft.narrationAudioStatuses
+    routes = routeResult.routes ?? []; readiness = ready; versions = history; operationEvents = events; dirty = restored.dirty
+    draftMutationSequence = restored.needsSync ? 1 : 0; draftSyncedSequence = 0; renderDashboard()
+    if (restored.needsSync) void syncDraftNow()
   } catch (error) { root.innerHTML = `<main class="error"><h1>无法连接管理服务</h1><p>${escapeHtml(error instanceof Error ? error.message : String(error))}</p></main>` }
 }
 
 function renderDashboard(): void {
   if (!content) return
-  root.innerHTML = `<header class="topbar"><div><p class="eyebrow">TG EXHIBITION CONTROL</p><h1>展厅自动讲解管理平台</h1><p class="meta">正式版本 V${content.version} · ${content.modules.length} 个模块 · 发布人 ${escapeHtml(content.publishedBy || '系统初始化')}</p></div><div class="actions"><div class="tts-badge ${ttsStatus.configured ? 'ready' : ''}"><span>TTS服务</span><strong>${ttsStatus.configured ? escapeHtml(ttsStatus.provider) : '接口待配置'}</strong></div><div class="account"><span>当前账号</span><strong>${escapeHtml(username)}</strong></div><button id="logout">退出</button><button id="publish" class="primary" ${dirty ? '' : 'disabled'}>发布新版本</button></div></header>
+  const availableProviders = ttsProviders.filter(item => item.available && item.voices.length > 0)
+  root.innerHTML = `<header class="topbar"><div><p class="eyebrow">TG EXHIBITION CONTROL</p><h1>展厅自动讲解管理平台</h1><p class="meta">正式版本 V${content.version} · 草稿 r${draftRevision} · ${content.modules.length} 个模块 · 发布人 ${escapeHtml(content.publishedBy || '系统初始化')}</p></div><div class="actions"><div class="tts-badge ${availableProviders.length ? 'ready' : ''}"><span>语音合成服务</span><strong>${availableProviders.length ? `${availableProviders.length} 个可用 Provider` : '当前未配置'}</strong></div><div class="account"><span>当前账号</span><strong>${escapeHtml(username)}</strong></div><button id="logout">退出</button><button id="publish" class="primary" ${dirty && !draftConflict ? '' : 'disabled'}>发布新版本</button></div></header>
     <nav class="workspace-nav">${navButton('content','内容中心')}${navButton('routes','讲解路线')}${navButton('versions','发布与回滚')}${navButton('operations','终端与运行')}</nav>
     <main>${renderWorkspace()}</main><div id="toast" class="toast" aria-live="polite"></div>`
   root.querySelector('#publish')?.addEventListener('click', publish)
-  root.querySelector('#logout')?.addEventListener('click', async () => { await api.logout(); content = null; username = ''; renderLogin() })
+  root.querySelector('#logout')?.addEventListener('click', async () => { disposeNodeRuntime(); await api.logout(); content = null; username = ''; renderLogin() })
   root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => button.addEventListener('click',()=>{activeView=button.dataset.view as typeof activeView;renderDashboard()}))
   if(activeView==='content'){
     root.querySelector('#add')?.addEventListener('click', addModule)
@@ -78,8 +103,8 @@ function renderWorkspace():string{
   if(activeView==='routes')return renderRoutesView()
   if(activeView==='versions')return renderVersionsView()
   if(activeView==='operations')return renderOperationsView()
-  return `${publishError?`<section class="publish-validation-error"><strong>发布已阻止：请修复以下素材</strong><p>${escapeHtml(publishError).replaceAll('；','<br/>')}</p></section>`:''}<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>讲解节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).length + (item.nodes.filter(node => node.ttsAudioUrl).length), 0)}</strong><span>展示与音频素材</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
-  <section class="section-title"><div><p class="eyebrow">CONTENT</p><h2>内容中心</h2><p class="section-note">配置模块、讲解节点、TTS文案和大屏素材；发布前的修改仅保留在当前浏览器草稿中。</p></div><div class="section-actions"><button id="edit-ui">终端界面设置</button><button id="add">新增模块</button></div></section><section class="module-grid">${content.modules.sort((a,b) => a.order-b.order).map(moduleCard).join('')}</section>`
+  return `${draftConflict?`<section class="publish-validation-error"><strong>草稿同步冲突</strong><p>${escapeHtml(draftConflict)}</p></section>`:''}${publishError?`<section class="publish-validation-error"><strong>发布已阻止：请修复以下素材</strong><p>${escapeHtml(publishError).replaceAll('；','<br/>')}</p></section>`:''}<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>讲解节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).length + (item.nodes.filter(node => node.ttsAudioUrl).length), 0)}</strong><span>展示与音频素材</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
+  <section class="section-title"><div><p class="eyebrow">CONTENT</p><h2>内容中心</h2><p class="section-note">配置模块、讲解节点、讲解语音和大屏素材；修改会安全保存到服务器草稿，发布后终端才会更新。</p></div><div class="section-actions"><button id="edit-ui">终端界面设置</button><button id="add">新增模块</button></div></section><section class="module-grid">${content.modules.sort((a,b) => a.order-b.order).map(moduleCard).join('')}</section>`
 }
 
 function renderRoutesView():string{
@@ -127,7 +152,7 @@ function renderVersionsView():string{
 }
 
 function bindVersionManagement():void{
-  root.querySelectorAll<HTMLElement>('[data-rollback]').forEach(button=>button.addEventListener('click',async()=>{const version=Number(button.dataset.rollback);if(!window.confirm(`确定将正式内容回滚到 V${version} 吗？`))return;try{content=await api.rollbackContent(version);dirty=false;localStorage.removeItem(draftKey);versions=await api.contentVersions();renderDashboard();showToast(`已回滚并生成新版本 V${content.version}。`)}catch(error){showToast(error instanceof Error?error.message:'回滚失败')}}))
+  root.querySelectorAll<HTMLElement>('[data-rollback]').forEach(button=>button.addEventListener('click',async()=>{const version=Number(button.dataset.rollback);if(!window.confirm(`确定将正式内容回滚到 V${version} 吗？`))return;try{content=await api.rollbackContent(version);const draft=await api.getDraft();draftBaseVersion=draft.baseContentVersion;draftRevision=draft.revision;draftStatuses=draft.narrationAudioStatuses;draftConflict='';dirty=false;draftMutationSequence=0;draftSyncedSequence=0;localStorage.removeItem(draftKey);versions=await api.contentVersions();renderDashboard();showToast(`已回滚并生成新版本 V${content.version}。`)}catch(error){showToast(error instanceof Error?error.message:'回滚失败')}}))
 }
 
 function renderOperationsView():string{
@@ -160,6 +185,7 @@ function openNodeEditor(moduleId: string): void {
 }
 
 function renderNodeEditor(): void {
+  disposeNodeRuntime()
   document.querySelector('#node-modal')?.remove()
   const module = content?.modules.find(item => item.id === editingModuleId); if (!module) return
   const nodes = module.nodes.sort((a,b)=>a.order-b.order)
@@ -171,15 +197,209 @@ function renderNodeEditor(): void {
   modal.addEventListener('click', event => { if (event.target === modal) closeNodeEditor() })
   modal.querySelector('#add-node')?.addEventListener('click', () => addNode(module))
   modal.querySelectorAll<HTMLElement>('[data-node-id]').forEach(button => button.addEventListener('click', () => { editingNodeId=button.dataset.nodeId!; renderNodeEditor() }))
-  if (node) bindNodeForm(module, node, modal)
+  if (node) { initializeTtsController(module, node, modal); bindNodeForm(module, node, modal) }
 }
 
 function nodeForm(node: NarrationNode): string {
   return `<div class="editor-fields"><div class="field-row"><label>节点名称<input id="node-name" value="${escapeHtml(node.name)}"/></label><label class="short-field">顺序<input id="node-order" type="number" min="1" value="${node.order}"/></label><label class="short-field">故障策略<select id="failure-policy"><option value="0" ${node.failurePolicy===0?'selected':''}>跳过继续</option><option value="1" ${node.failurePolicy===1?'selected':''}>停止讲解</option></select></label></div><div class="field-row"><label>声画混音策略<select id="audio-mix-policy"><option value="0" ${node.audioMixPolicy===0?'selected':''}>讲解时压低视频原声</option><option value="1" ${node.audioMixPolicy===1?'selected':''}>保留视频原声音量</option><option value="2" ${node.audioMixPolicy===2?'selected':''}>讲解时静音视频</option></select></label><label class="short-field">讲解时视频音量<input id="video-volume" type="number" min="0" max="1" step="0.05" value="${node.videoVolume || 0.25}"/></label><label class="short-field">讲解音量<input id="narration-volume" type="number" min="0" max="1" step="0.05" value="${node.narrationVolume || 1}"/></label></div><label>讲解文案<textarea id="narration-text" class="narration-text" placeholder="输入供TTS合成和讲解员查看的完整文案">${escapeHtml(node.narrationText)}</textarea></label>
-    <section class="tts-section"><div><strong>TTS讲解音频</strong><p>${ttsStatus.configured ? `已连接 ${escapeHtml(ttsStatus.provider)}，默认音色 ${escapeHtml(ttsStatus.voice)}` : '已预留TTS服务接口，等待配置供应商密钥；当前可上传已生成的讲解音频。'}</p></div><button id="generate-tts" ${ttsStatus.configured?'':'disabled'}>生成TTS</button><label class="upload-audio">上传音频<input id="audio-file" type="file" accept="audio/*"/></label></section>
-    <div class="audio-url">${node.ttsAudioUrl ? `<span>已配置讲解音频</span><a href="${escapeHtml(node.ttsAudioUrl)}" target="_blank">${escapeHtml(node.ttsAudioUrl.split('/').pop())}</a><button id="remove-audio">移除</button>` : '<span>尚未配置讲解音频</span>'}</div>
+    <section id="tts-workspace" class="tts-workspace">${ttsPanel(node)}</section>
     <section class="assets-section"><div class="assets-heading"><div><strong>LED大屏素材</strong><p>建议1920×1080 H.264 MP4；超大视频将直接流式写入服务器磁盘。</p></div></div><div class="upload-row"><select id="asset-kind"><option value="0">宣传视频</option><option value="1">展示图片</option><option value="2">动画素材</option></select><label>时长（秒）<input id="asset-duration" type="number" min="0" step="0.1" value="0"/></label><label class="upload-button">选择并上传<input id="asset-file" type="file" accept="video/*,image/*,.mov,.mkv,.webm"/></label><div id="upload-progress" class="upload-progress"><span></span></div></div><div class="asset-list">${node.assets.length ? node.assets.map(asset => `<article><div class="asset-icon">${asset.kind===0?'▶':asset.kind===1?'▧':'◆'}</div><div><strong>${escapeHtml(asset.name)}</strong><p>${assetKindName(asset.kind)} · ${formatSize(asset.sizeBytes)}${asset.durationSeconds?` · ${asset.durationSeconds}s`:''}</p></div><a href="${escapeHtml(asset.url)}" target="_blank">查看</a><button data-remove-asset="${asset.id}">移除</button></article>`).join('') : '<div class="empty-assets">尚未上传大屏素材</div>'}</div></section>
     <footer class="editor-footer"><span>修改保存在当前草稿中，点击主页面“发布新版本”后终端才会更新。</span><button id="delete-node" class="danger">删除当前节点</button><button id="done-node" class="primary">完成编辑</button></footer></div>`
+}
+
+function ttsPanel(node: NarrationNode): string {
+  const status = draftStatuses.find(item => item.moduleId === editingModuleId && item.nodeId === node.id)
+  const statusValue = status?.status ?? (node.narrationAudio ? 5 : node.ttsAudioUrl ? 6 : 0)
+  const availableProviders = ttsProviders.filter(item => item.available && item.voices.length > 0)
+  const configuration = selectTtsConfiguration(node, availableProviders)
+  const selectedProvider = configuration
+    ? availableProviders.find(item => item.providerId === configuration.providerKey) ?? null
+    : null
+  const selectedVoice = selectedProvider?.voices.find(item => item.voiceId === configuration?.voice) ?? null
+  const workflow = ttsController?.current ?? null
+  const candidate = workflow?.candidate ?? null
+  const evaluation = workflow?.evaluation ?? null
+  const adopted = node.narrationAudio
+  const currentAudioUrl = adopted?.asset.url ?? node.ttsAudioUrl
+  const currentOrigin = adopted ? ['TTS 生成', '人工上传', '旧版语音'][adopted.origin] : node.ttsAudioUrl ? '旧版语音' : '未配置'
+  const providerOptions = availableProviders.map(provider =>
+    `<option value="${escapeHtml(provider.providerId)}" ${configuration?.providerKey === provider.providerId ? 'selected' : ''}>${escapeHtml(provider.displayName)}${provider.developmentOnly ? '（开发测试）' : ''}</option>`).join('')
+  const voiceOptions = (selectedProvider?.voices ?? []).map(voice =>
+    `<option value="${escapeHtml(voice.voiceId)}" ${configuration?.voice === voice.voiceId ? 'selected' : ''}>${escapeHtml(selectedProvider?.developmentOnly ? '开发测试音色' : voice.displayName)} · ${escapeHtml(voice.language)}</option>`).join('')
+  const providersUnavailable = !availableProviders.length
+    ? `<div class="tts-empty"><strong>当前未配置语音合成服务</strong><p>生成操作已禁用；仍可继续使用下方“上传讲解音频”。</p>${ttsProviders.filter(item => !item.available).map(item => `<small>${escapeHtml(item.displayName)}：${escapeHtml(item.unavailableReason ?? '当前不可用')}</small>`).join('')}</div>`
+    : ''
+  const developmentWarning = selectedProvider?.developmentOnly
+    ? '<div class="tts-development-note">当前选择的是开发测试音色，仅用于流程验证，不代表正式商用语音效果。</div>'
+    : ''
+  const currentAudio = currentAudioUrl
+    ? `<article class="tts-current-audio"><div><span class="tts-card-label">${draftRevision > 0 ? '当前草稿已采用语音 · 等待发布' : '当前已发布语音'}</span><strong>${escapeHtml(adopted?.asset.name ?? currentAudioUrl.split('/').pop() ?? '讲解音频')}</strong><p>${escapeHtml(currentOrigin)}${adopted ? ` · ${formatSize(adopted.asset.sizeBytes)} · ${escapeHtml(adopted.synthesisConfiguration.voice || '人工音频')}` : ''}</p></div><a href="${escapeHtml(resolveAssetUrl(currentAudioUrl))}" target="_blank" rel="noreferrer">打开音频</a><button id="remove-audio" class="danger-text">移除</button></article>`
+    : '<div class="tts-current-empty">当前尚未采用讲解语音</div>'
+  const job = workflow?.job
+  const jobView = job
+    ? `<div class="tts-job ${job.status === 3 ? 'error' : job.status === 2 ? 'success' : ''}"><span>${jobStatusLabel(job.status)}</span><small>任务创建于 ${formatTime(job.createdAtUtc)}${job.retryCount ? ` · 已重试 ${job.retryCount} 次` : ''}</small>${job.status === 0 || job.status === 1 ? '<button id="cancel-tts">取消生成</button>' : ''}</div>`
+    : ''
+  const draftPending = draftSyncedSequence < draftMutationSequence
+  const candidateView = candidate
+    ? `<article class="tts-candidate"><header><div><span class="tts-card-label">待采用的候选语音</span><strong>${escapeHtml(ttsProviders.find(item => item.providerId === candidate.providerId)?.developmentOnly ? '开发测试音色' : candidate.voice)}</strong></div><span class="status-pill ${evaluation?.adoptable ? 'fresh' : 'warning'}">${evaluation?.adoptable ? '可以采用' : '需要重新确认'}</span></header><dl><div><dt>Provider</dt><dd>${escapeHtml(ttsProviders.find(item => item.providerId === candidate.providerId)?.displayName ?? candidate.providerId)}</dd></div><div><dt>生成时间</dt><dd>${formatTime(candidate.createdAtUtc)}</dd></div><div><dt>时长</dt><dd>${candidate.validation.durationSeconds > 0 ? `${candidate.validation.durationSeconds.toFixed(1)} 秒` : '未提供'}</dd></div><div><dt>匹配检查</dt><dd>${evaluation ? `${evaluation.narrationTextMatches ? '文案一致' : '文案已变化'} · ${evaluation.synthesisConfigurationMatches ? '配置一致' : '配置已变化'}` : '正在由服务器检查'}</dd></div></dl>${evaluation && !evaluation.adoptable ? `<p class="candidate-warning">${escapeHtml(candidateEvaluationMessage(evaluation))}</p>` : ''}<footer><button id="preview-candidate">${workflow?.previewing ? '暂停试听' : '播放试听'}</button><button id="replay-candidate">重新播放</button><button id="abandon-candidate">放弃候选</button><button id="adopt-candidate" class="primary" ${evaluation?.adoptable && !workflow?.adopting && !draftConflict && !draftPending ? '' : 'disabled'}>${workflow?.adopting ? '正在采用…' : '采用到草稿'}</button></footer></article>`
+    : ''
+  const workflowError = workflow?.error ? `<div class="tts-error">${escapeHtml(workflow.error)}</div>` : ''
+  const unsynced = draftPending
+    ? '<div class="tts-sync-note">草稿变更正在提交服务器，状态检查完成后才能采用候选语音。</div>'
+    : ''
+  return `<div class="tts-heading"><div><strong>讲解语音</strong><p>生成、试听和采用彼此独立；采用后仍需发布才会进入正式内容。</p></div><span class="status-pill status-${statusValue}">${bindingStatusLabel(statusValue)}</span></div>
+    ${statusValue !== 1 ? `<p class="tts-status-message">${bindingStatusDescription(statusValue)}</p>` : ''}
+    ${currentAudio}
+    <div class="tts-config-grid"><label>Provider<select id="tts-provider" ${providersUnavailable ? 'disabled' : ''}>${providerOptions}</select></label><label>Voice<select id="tts-voice" ${providersUnavailable ? 'disabled' : ''}>${voiceOptions}</select></label><label>Language<input id="tts-language" value="${escapeHtml(configuration?.language ?? selectedVoice?.language ?? 'zh-CN')}" readonly/></label><label>Rate<input id="tts-rate" type="number" step="0.05" min="${selectedProvider?.capabilities.minRate ?? 0.5}" max="${selectedProvider?.capabilities.maxRate ?? 2}" value="${configuration?.rate ?? 1}" ${providersUnavailable ? 'disabled' : ''}/></label><label>Pitch<input id="tts-pitch" type="number" step="0.05" min="${selectedProvider?.capabilities.minPitch ?? -1}" max="${selectedProvider?.capabilities.maxPitch ?? 1}" value="${configuration?.pitch ?? 0}" ${providersUnavailable ? 'disabled' : ''}/></label><button id="generate-tts" class="primary" ${providersUnavailable || !node.narrationText.trim() || workflow?.generating || Boolean(draftConflict) ? 'disabled' : ''}>${workflow?.generating ? '正在生成…' : '生成候选语音'}</button></div>
+    ${providersUnavailable}${developmentWarning}${unsynced}${jobView}${workflowError}${candidateView}
+    <div class="tts-manual-upload"><div><strong>人工上传讲解音频</strong><p>上传文件同样进入不可变素材与完整性校验体系。</p></div><label class="upload-audio">选择音频<input id="audio-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac"/></label></div>`
+}
+
+function bindingStatusDescription(status: number): string {
+  return [
+    '当前节点尚未采用讲解音频。',
+    '',
+    '服务器检测到讲解词与已采用语音不一致，重新生成并采用后才能恢复有效状态。',
+    '服务器检测到音色或合成参数已变化，重新生成并采用后才能恢复有效状态。',
+    '已绑定音频缺少有效素材、大小或校验信息，请重新生成或上传。',
+    '语音绑定信息不完整，请重新生成或上传。',
+    '该语音来自旧版本，只能兼容展示，需重新生成或上传后才能获得完整校验。',
+  ][status] ?? '服务器暂时无法确认当前语音状态。'
+}
+
+function candidateEvaluationMessage(evaluation: NarrationAudioCandidateEvaluation): string {
+  if (!evaluation.candidateExists) return '候选语音不存在或已经失效，请重新生成。'
+  if (!evaluation.locationMatches) return '候选语音对应的模块或节点已经变化，请重新生成。'
+  if (!evaluation.narrationTextMatches) return '讲解词已修改，旧候选语音不能采用，请重新生成。'
+  if (!evaluation.synthesisConfigurationMatches) return '音色或合成参数已变化，旧候选语音不能采用，请重新生成。'
+  if (!evaluation.assetValid) return '候选音频未通过完整性验证，请重新生成。'
+  return '候选语音当前不可采用。'
+}
+
+function selectTtsConfiguration(node: NarrationNode, providers = ttsProviders.filter(item => item.available && item.voices.length > 0)): TtsSynthesisConfiguration | null {
+  if (!providers.length) return null
+  const existingProvider = providers.find(item => item.providerId === node.ttsConfiguration?.providerKey)
+  const provider = existingProvider ?? providers[0]
+  const existingVoice = provider.voices.find(item => item.voiceId === node.ttsConfiguration?.voice)
+  const voice = existingVoice ?? provider.voices[0]
+  if (!voice) return null
+  return {
+    providerKey: provider.providerId,
+    voice: voice.voiceId,
+    language: voice.language,
+    rate: existingProvider && existingVoice ? node.ttsConfiguration?.rate ?? 1 : 1,
+    pitch: existingProvider && existingVoice ? node.ttsConfiguration?.pitch ?? 0 : 0,
+    volume: existingProvider && existingVoice ? node.ttsConfiguration?.volume ?? 1 : 1,
+    outputMediaType: provider.capabilities.supportedMediaTypes[0] ?? 'audio/wav',
+    sampleRateHz: existingProvider && existingVoice ? node.ttsConfiguration?.sampleRateHz ?? 24000 : 24000,
+    channels: existingProvider && existingVoice ? node.ttsConfiguration?.channels ?? 1 : 1,
+  }
+}
+
+function configurationFromEditor(node: NarrationNode, modal: HTMLElement): TtsSynthesisConfiguration | null {
+  const providerId = modal.querySelector<HTMLSelectElement>('#tts-provider')?.value
+  const provider = ttsProviders.find(item => item.available && item.providerId === providerId)
+  const voiceId = modal.querySelector<HTMLSelectElement>('#tts-voice')?.value
+  const voice = provider?.voices.find(item => item.voiceId === voiceId)
+  if (!provider || !voice) return null
+  const rate = Number(modal.querySelector<HTMLInputElement>('#tts-rate')?.value ?? 1)
+  const pitch = Number(modal.querySelector<HTMLInputElement>('#tts-pitch')?.value ?? 0)
+  return {
+    providerKey: provider.providerId,
+    voice: voice.voiceId,
+    language: voice.language,
+    rate: Math.min(provider.capabilities.maxRate, Math.max(provider.capabilities.minRate, rate)),
+    pitch: Math.min(provider.capabilities.maxPitch, Math.max(provider.capabilities.minPitch, pitch)),
+    volume: node.ttsConfiguration?.volume ?? 1,
+    outputMediaType: provider.capabilities.supportedMediaTypes[0] ?? 'audio/wav',
+    sampleRateHz: node.ttsConfiguration?.sampleRateHz ?? 24000,
+    channels: node.ttsConfiguration?.channels ?? 1,
+  }
+}
+
+function initializeTtsController(module: ExhibitionModule, node: NarrationNode, modal: HTMLElement): void {
+  ttsController = new TtsWorkflowController(ttsWorkflowApi, module.id, node.id, state => {
+    if (state.providersLoaded) ttsProviders = [...state.providers]
+    refreshTtsWorkspace(module, node, modal)
+  })
+  void ttsController.loadProviders()
+}
+
+function refreshTtsWorkspace(module: ExhibitionModule, node: NarrationNode, modal: HTMLElement): void {
+  if (!document.body.contains(modal) || editingModuleId !== module.id || editingNodeId !== node.id) return
+  const workspace = modal.querySelector<HTMLElement>('#tts-workspace')
+  if (!workspace) return
+  workspace.innerHTML = ttsPanel(node)
+  bindTtsActions(module, node, modal)
+}
+
+function disposeNodeRuntime(): void {
+  ttsController?.dispose()
+  ttsController = null
+}
+
+function bindTtsActions(module: ExhibitionModule, node: NarrationNode, modal: HTMLElement): void {
+  modal.querySelector('#remove-audio')?.addEventListener('click', () => {
+    node.ttsAudioUrl = null; node.narrationAudio = null; node.ttsConfiguration = null
+    markDirty(); renderNodeEditor()
+  })
+  modal.querySelector<HTMLInputElement>('#audio-file')?.addEventListener('change', event =>
+    uploadSelectedAsset(node, event.target as HTMLInputElement, true))
+  const providerSelect = modal.querySelector<HTMLSelectElement>('#tts-provider')
+  providerSelect?.addEventListener('change', () => {
+    const provider = ttsProviders.find(item => item.providerId === providerSelect.value)
+    const voice = provider?.voices[0]
+    if (!provider || !voice) return
+    node.ttsConfiguration = { providerKey: provider.providerId, voice: voice.voiceId, language: voice.language, rate: 1, pitch: 0, volume: 1, outputMediaType: provider.capabilities.supportedMediaTypes[0] ?? 'audio/wav', sampleRateHz: 24000, channels: 1 }
+    markDirty(); refreshTtsWorkspace(module, node, modal)
+  })
+  modal.querySelector<HTMLSelectElement>('#tts-voice')?.addEventListener('change', () => {
+    const configuration = configurationFromEditor(node, modal)
+    if (!configuration) return
+    node.ttsConfiguration = configuration; markDirty(); refreshTtsWorkspace(module, node, modal)
+  })
+  ;['#tts-rate', '#tts-pitch'].forEach(selector => modal.querySelector<HTMLInputElement>(selector)?.addEventListener('change', () => {
+    const configuration = configurationFromEditor(node, modal)
+    if (!configuration) return
+    node.ttsConfiguration = configuration; markDirty(); refreshTtsWorkspace(module, node, modal)
+  }))
+  modal.querySelector('#generate-tts')?.addEventListener('click', async () => {
+    const configuration = configurationFromEditor(node, modal)
+    if (!node.narrationText.trim()) return showToast('请先填写讲解文案。')
+    if (!configuration) return showToast('当前未配置可用的语音合成服务。')
+    node.ttsConfiguration = configuration; markDirty()
+    try {
+      await syncDraftNow()
+      if (draftConflict) return
+      const retryFailed = ttsController?.current.job?.status === 3 || ttsController?.current.job?.status === 4
+      await ttsController?.generate(node.narrationText, configuration, retryFailed)
+    } catch { /* syncDraftNow already shows a safe error */ }
+  })
+  modal.querySelector('#cancel-tts')?.addEventListener('click', () => void ttsController?.cancel())
+  const candidateUrl = ttsController?.current.candidate?.asset.url
+  modal.querySelector('#preview-candidate')?.addEventListener('click', () => { if (candidateUrl) void ttsController?.togglePreview(resolveAssetUrl(candidateUrl)) })
+  modal.querySelector('#replay-candidate')?.addEventListener('click', () => { if (candidateUrl) void ttsController?.replay(resolveAssetUrl(candidateUrl)) })
+  modal.querySelector('#abandon-candidate')?.addEventListener('click', () => ttsController?.abandon())
+  modal.querySelector('#adopt-candidate')?.addEventListener('click', async () => {
+    try {
+      await syncDraftNow()
+      await ttsController?.refreshEvaluation()
+      if (!ttsController?.current.evaluation?.adoptable) return showToast('候选语音已过期或草稿已变化，请重新生成。')
+      const result = await ttsController.adopt(draftBaseVersion, draftRevision)
+      if (!result) {
+        const message = ttsController.current.error
+        if (message.includes('内容已发生变化') || message.includes('版本已发生变化')) {
+          draftConflict = '当前内容已发生变化，请刷新后重新确认。'
+          root.querySelector<HTMLButtonElement>('#publish')?.setAttribute('disabled', '')
+        }
+        if (message) showToast(message)
+        return
+      }
+      applyDraftSnapshot(result.draft)
+      dirty = true; saveLocalDraft(); showToast('候选语音已采用到草稿，发布后才会进入正式内容。')
+      renderNodeEditor()
+    } catch (error) { handleDraftError(error) }
+  })
 }
 
 function bindNodeForm(module: ExhibitionModule, node: NarrationNode, modal: HTMLElement): void {
@@ -190,14 +410,14 @@ function bindNodeForm(module: ExhibitionModule, node: NarrationNode, modal: HTML
   bind<HTMLSelectElement>('#audio-mix-policy', select => node.audioMixPolicy=Number(select.value) as 0|1|2)
   bind<HTMLInputElement>('#video-volume', input => node.videoVolume=Math.min(1,Math.max(0,Number(input.value)||0)))
   bind<HTMLInputElement>('#narration-volume', input => node.narrationVolume=Math.min(1,Math.max(0,Number(input.value)||0)))
-  bind<HTMLTextAreaElement>('#narration-text', textarea => node.narrationText=textarea.value)
+  modal.querySelector<HTMLTextAreaElement>('#narration-text')?.addEventListener('input', event => {
+    node.narrationText=(event.target as HTMLTextAreaElement).value;markDirty();refreshTtsWorkspace(module,node,modal)
+  })
   modal.querySelector('#done-node')?.addEventListener('click', closeNodeEditor)
   modal.querySelector('#delete-node')?.addEventListener('click', () => { module.nodes=module.nodes.filter(item=>item.id!==node.id); editingNodeId=module.nodes[0]?.id??null; markDirty(); renderNodeEditor() })
-  modal.querySelector('#remove-audio')?.addEventListener('click', () => { node.ttsAudioUrl=null; node.narrationAudio=null; node.ttsConfiguration=null; markDirty(); renderNodeEditor() })
   modal.querySelectorAll<HTMLElement>('[data-remove-asset]').forEach(button => button.addEventListener('click', () => { node.assets=node.assets.filter(asset=>asset.id!==button.dataset.removeAsset); markDirty(); renderNodeEditor() }))
   modal.querySelector<HTMLInputElement>('#asset-file')?.addEventListener('change', event => uploadSelectedAsset(node, event.target as HTMLInputElement, false))
-  modal.querySelector<HTMLInputElement>('#audio-file')?.addEventListener('change', event => uploadSelectedAsset(node, event.target as HTMLInputElement, true))
-  modal.querySelector('#generate-tts')?.addEventListener('click', async () => { try { const result=await api.synthesize(node.narrationText,ttsStatus.voice); node.ttsAudioUrl=result.audioUrl; node.narrationAudio=null; node.ttsConfiguration=null; markDirty(); renderNodeEditor() } catch(error){showToast(error instanceof Error?error.message:'TTS生成失败')} })
+  bindTtsActions(module,node,modal)
 }
 
 async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement, narrationAudio: boolean): Promise<void> {
@@ -212,12 +432,14 @@ async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement,
       const binding=await api.bindManualNarrationAudio(asset,node.narrationText)
       node.narrationAudio=binding;node.ttsConfiguration=binding.synthesisConfiguration;node.ttsAudioUrl=binding.asset.url
     } else node.assets.push(asset)
-    markDirty(); renderNodeEditor(); showToast(`${file.name} 上传成功。`)
+    markDirty()
+    await syncDraftNow()
+    renderNodeEditor(); showToast(`${file.name} 上传成功。`)
   } catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'上传失败')}
 }
 
 function addNode(module: ExhibitionModule): void { const order=Math.max(0,...module.nodes.map(item=>item.order))+1; const node:NarrationNode={id:crypto.randomUUID(),name:`讲解节点 ${order}`,order,narrationText:'',ttsAudioUrl:null,assets:[],failurePolicy:0,audioMixPolicy:0,videoVolume:0.25,narrationVolume:1,ttsConfiguration:null,narrationAudio:null}; module.nodes.push(node);editingNodeId=node.id;markDirty();renderNodeEditor() }
-function closeNodeEditor(): void { document.querySelector('#node-modal')?.remove(); editingModuleId=null;editingNodeId=null;renderDashboard() }
+function closeNodeEditor(): void { disposeNodeRuntime(); document.querySelector('#node-modal')?.remove(); editingModuleId=null;editingNodeId=null;renderDashboard() }
 
 function openUiEditor(): void {
   if (!uiConfig) return
@@ -244,7 +466,14 @@ async function uploadUiAsset(input:HTMLInputElement,kind:AssetKind,target:'touch
   const progress=modal.querySelector<HTMLElement>('#ui-upload-progress')!;progress.classList.add('visible')
   try{const asset=await api.uploadAsset(file,kind,0,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`});if(target==='touch')uiConfig.touchBackgroundUrl=asset.url;else{uiConfig.ledIdleMediaUrl=asset.url;uiConfig.ledIdleMediaKind=target==='led-video'?'video':'image'};modal.remove();openUiEditor();showToast(`${file.name} 上传成功，请点击“发布界面配置”。`)}catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'界面素材上传失败')}
 }
-function markDirty(rerender=false): void { dirty=true;saveDraft();if(rerender)renderDashboard(); else root.querySelector<HTMLButtonElement>('#publish')?.removeAttribute('disabled') }
+function markDirty(rerender=false): void {
+  dirty = true
+  draftMutationSequence++
+  saveLocalDraft()
+  scheduleDraftSync()
+  if (rerender) renderDashboard()
+  else if (!draftConflict) root.querySelector<HTMLButtonElement>('#publish')?.removeAttribute('disabled')
+}
 function addModule(): void { if(!content)return;const order=Math.max(0,...content.modules.map(item=>item.order))+1;content.modules.push({id:crypto.randomUUID(),name:'新模块',order,description:'',coverUrl:null,enabled:true,nodes:[]});markDirty(true) }
 
 function validateDraft(modules: ExhibitionModule[]): string | null {
@@ -252,10 +481,122 @@ function validateDraft(modules: ExhibitionModule[]): string | null {
   return null
 }
 
-async function publish(): Promise<void> { if(!content)return;const validation=validateDraft(content.modules);if(validation)return showToast(validation);try{content=await api.publish(content.modules);publishError='';dirty=false;localStorage.removeItem(draftKey);versions=await api.contentVersions();renderDashboard();showToast(`版本 V${content.version} 发布成功。`)}catch(error){if(!api.hasSession()){renderLogin('登录已过期，请重新登录。');return}publishError=error instanceof Error?error.message:'发布失败';activeView='content';renderDashboard();showToast('发布已阻止，请根据页面提示修复素材。')} }
+async function publish(): Promise<void> {
+  if (!content) return
+  const validation = validateDraft(content.modules)
+  if (validation) return showToast(validation)
+  try {
+    await syncDraftNow()
+    if (draftConflict) return
+    content = await api.publish(content.modules, draftBaseVersion, draftRevision)
+    const draft = await api.getDraft()
+    draftBaseVersion = draft.baseContentVersion; draftRevision = draft.revision
+    draftStatuses = draft.narrationAudioStatuses; draftConflict = ''; publishError = ''; dirty = false
+    draftMutationSequence = 0; draftSyncedSequence = 0
+    localStorage.removeItem(draftKey)
+    versions = await api.contentVersions(); renderDashboard(); showToast(`版本 V${content.version} 发布成功。`)
+  } catch (error) {
+    if (!api.hasSession()) { renderLogin('登录已过期，请重新登录。'); return }
+    if (handleDraftError(error)) return
+    publishError = error instanceof Error ? error.message : '发布失败'
+    activeView = 'content'; renderDashboard(); showToast('发布已阻止，请根据页面提示修复素材。')
+  }
+}
 
-function saveDraft():void{if(!content)return;localStorage.setItem(draftKey,JSON.stringify({baseVersion:content.version,modules:content.modules,savedAt:new Date().toISOString()}))}
-function restoreDraft(published:PublishedContent):{content:PublishedContent;dirty:boolean}{try{const value=JSON.parse(localStorage.getItem(draftKey)??'null') as {baseVersion:number;modules:ExhibitionModule[]}|null;if(value?.baseVersion===published.version&&Array.isArray(value.modules))return{content:{...published,modules:value.modules},dirty:true};if(value)localStorage.removeItem(draftKey)}catch{localStorage.removeItem(draftKey)}return{content:published,dirty:false}}
+function scheduleDraftSync(): void {
+  if (draftSyncTimer !== null) window.clearTimeout(draftSyncTimer)
+  draftSyncTimer = window.setTimeout(() => {
+    draftSyncTimer = null
+    void syncDraftNow().catch(() => { /* visible error is handled centrally */ })
+  }, 500)
+}
+
+async function syncDraftNow(): Promise<void> {
+  if (!content || draftConflict) {
+    if (draftConflict) throw new Error(draftConflict)
+    return
+  }
+  if (draftSyncTimer !== null) { window.clearTimeout(draftSyncTimer); draftSyncTimer = null }
+  if (draftSyncInFlight) return draftSyncInFlight
+  const synchronize = async (): Promise<void> => {
+    while (content && draftSyncedSequence < draftMutationSequence) {
+      const targetSequence = draftMutationSequence
+      const modules = structuredClone(content.modules)
+      try {
+        const snapshot = await api.saveDraft(draftBaseVersion, draftRevision, modules)
+        draftBaseVersion = snapshot.baseContentVersion
+        draftRevision = snapshot.revision
+        draftStatuses = snapshot.narrationAudioStatuses
+        draftSyncedSequence = targetSequence
+        draftConflict = ''
+        saveLocalDraft()
+        void ttsController?.refreshEvaluation()
+        refreshOpenTtsWorkspace()
+      } catch (error) {
+        handleDraftError(error)
+        throw error
+      }
+    }
+  }
+  draftSyncInFlight = synchronize().finally(() => { draftSyncInFlight = null })
+  return draftSyncInFlight
+}
+
+function refreshOpenTtsWorkspace(): void {
+  const modal = document.querySelector<HTMLElement>('#node-modal')
+  const module = content?.modules.find(item => item.id === editingModuleId)
+  const node = module?.nodes.find(item => item.id === editingNodeId)
+  if (modal && module && node) refreshTtsWorkspace(module, node, modal)
+}
+
+function handleDraftError(error: unknown): boolean {
+  if (error instanceof ApiError && (error.status === 409 || error.code?.includes('conflict'))) {
+    draftConflict = '当前内容已发生变化，请刷新后重新确认。'
+    root.querySelector<HTMLButtonElement>('#publish')?.setAttribute('disabled', '')
+    refreshOpenTtsWorkspace()
+    showToast(draftConflict)
+    return true
+  }
+  if (error instanceof Error) showToast(`草稿尚未同步：${error.message}`)
+  return false
+}
+
+function applyDraftSnapshot(snapshot: ContentDraftSnapshot): void {
+  if (!content) return
+  content = { ...content, modules: snapshot.modules }
+  draftBaseVersion = snapshot.baseContentVersion
+  draftRevision = snapshot.revision
+  draftStatuses = snapshot.narrationAudioStatuses
+  draftConflict = ''
+  draftMutationSequence++
+  draftSyncedSequence = draftMutationSequence
+}
+
+function saveLocalDraft(): void {
+  if (!content) return
+  localStorage.setItem(draftKey, JSON.stringify({
+    baseVersion: draftBaseVersion,
+    serverRevision: draftRevision,
+    modules: content.modules,
+    savedAt: new Date().toISOString(),
+  }))
+}
+
+function restoreDraft(published: PublishedContent, serverDraft: ContentDraftSnapshot): {content: PublishedContent; dirty: boolean; needsSync: boolean} {
+  try {
+    const local = JSON.parse(localStorage.getItem(draftKey) ?? 'null') as {baseVersion:number;serverRevision?:number;modules:ExhibitionModule[]}|null
+    if (local?.baseVersion === published.version && Array.isArray(local.modules)) {
+      const canMerge = local.serverRevision === serverDraft.revision || (serverDraft.revision === 0 && local.serverRevision === undefined)
+      if (canMerge) {
+        const needsSync = JSON.stringify(local.modules) !== JSON.stringify(serverDraft.modules)
+        return { content: { ...published, modules: needsSync ? local.modules : serverDraft.modules }, dirty: true, needsSync }
+      }
+      localStorage.removeItem(draftKey)
+    } else if (local) localStorage.removeItem(draftKey)
+  } catch { localStorage.removeItem(draftKey) }
+  const serverDirty = serverDraft.revision > 0
+  return { content: { ...published, modules: serverDraft.modules }, dirty: serverDirty, needsSync: false }
+}
 function showToast(message:string):void { let toast=root.querySelector<HTMLDivElement>('#toast');if(!toast){toast=document.createElement('div');toast.id='toast';toast.className='toast';root.appendChild(toast)}toast.textContent=message;toast.classList.add('visible');window.setTimeout(()=>toast?.classList.remove('visible'),3600) }
 
 async function start():Promise<void>{if(!api.hasSession())return renderLogin();try{const me=await api.me();username=me.username;await loadDashboard()}catch{renderLogin('登录已过期，请重新登录。')}}
