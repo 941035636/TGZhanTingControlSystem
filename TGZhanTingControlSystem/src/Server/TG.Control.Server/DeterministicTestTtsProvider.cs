@@ -20,7 +20,8 @@ public sealed class DeterministicTestTtsProvider : ITtsProvider
         return Task.FromResult(new TtsProviderDescriptor(Id, "Deterministic test tone (TEST ONLY)", true, true,
             null,
             [new TtsVoiceDescriptor(VoiceId, "Deterministic test tone", "zh-CN")],
-            new TtsProviderCapabilities(5000, 0.5, 2, -1, 1, ["audio/wav"])));
+            new TtsProviderCapabilities(5000, 0.5, 2, -1, 1, ["audio/wav"],
+                DefaultSampleRateHz: 24000, DefaultChannels: 1)));
     }
 
     public Task<TtsProviderAudioResult> SynthesizeAsync(TtsProviderSynthesisRequest request,

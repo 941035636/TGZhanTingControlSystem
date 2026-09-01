@@ -26,6 +26,14 @@ src/LedPlayer/*.sln
 .env
 .env.*
 
+# MeloTTS generated Windows bundle (built by deployment script, never source-controlled)
+src/TtsWorker/MeloTtsLocal/runtime/
+src/TtsWorker/MeloTtsLocal/models/
+src/TtsWorker/MeloTtsLocal/vendor/
+src/TtsWorker/MeloTtsLocal/bundle-manifest.json
+**/__pycache__/
+*.py[cod]
+
 # IDE / OS
 .vs/
 .idea/

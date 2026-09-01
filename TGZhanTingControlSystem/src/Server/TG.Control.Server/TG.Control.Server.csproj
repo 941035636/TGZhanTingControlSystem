@@ -12,6 +12,18 @@
     <ProjectReference Include="../../Shared/TG.Control.Contracts/TG.Control.Contracts.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../TtsWorker/MeloTtsLocal/worker.py" Link="TtsWorker/MeloTtsLocal/worker.py"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../TtsWorker/MeloTtsLocal/melotts-v0.1.2-windows-offline.patch"
+             Link="TtsWorker/MeloTtsLocal/melotts-v0.1.2-windows-offline.patch"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../TtsWorker/MeloTtsLocal/requirements-windows-cpu.txt"
+             Link="TtsWorker/MeloTtsLocal/requirements-windows-cpu.txt"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../TtsWorker/MeloTtsLocal/README.md" Link="TtsWorker/MeloTtsLocal/README.md"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <Target Name="BuildAdminWeb" BeforeTargets="PrepareForBuild"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipAdminWebBuild)' != 'true'">
     <Message Importance="high" Text="Building AdminWeb and refreshing Server output..." />

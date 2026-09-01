@@ -105,7 +105,11 @@ export class TtsWorkflowController {
     this.stopPolling()
     this.patch({ generating: true, adopted: false, candidate: null, evaluation: null, error: '' })
     try {
-      const result = await this.api.createJob(this.moduleId, this.nodeId, narrationText, configuration, retryFailed)
+      let result = await this.api.createJob(this.moduleId, this.nodeId, narrationText, configuration, retryFailed)
+      // After a page reload the controller no longer knows about an idempotent failed/cancelled Job.
+      // Re-enter the existing bounded Server retry path once so one user action still means "generate/retry".
+      if (!retryFailed && (result.job.status === 3 || result.job.status === 4))
+        result = await this.api.createJob(this.moduleId, this.nodeId, narrationText, configuration, true)
       if (this.disposed) return
       this.patch({ job: result.job, generating: result.job.status === 0 || result.job.status === 1 })
       if (result.job.status === 2) await this.loadCandidate(result.job)

@@ -92,6 +92,22 @@ test('generate failure is shown as a bounded friendly state', async () => {
   controller.dispose()
 })
 
+test('page reload transparently re-enters the bounded Server retry path for an idempotent failed Job', async () => {
+  const retryFlags: boolean[] = []
+  const controller = new TtsWorkflowController(fakeApi({
+    createJob: async (_moduleId, _nodeId, _text, _configuration, retryFailed) => {
+      retryFlags.push(retryFailed)
+      return retryFailed
+        ? { job: makeJob(2, candidate.candidateId), created: true }
+        : { job: makeJob(3), created: false }
+    },
+  }), 'module-1', 'node-1', () => {})
+  await controller.generate('讲解词', configuration)
+  assert.deepEqual(retryFlags, [false, true])
+  assert.equal(controller.current.candidate?.candidateId, candidate.candidateId)
+  controller.dispose()
+})
+
 test('rapid duplicate Generate is suppressed while request is active', async () => {
   const pending = deferred<{job:TtsProductionJob;created:boolean}>()
   let calls = 0

@@ -1,0 +1,183 @@
+diff --git a/melo/download_utils.py b/melo/download_utils.py
+index 5d538ef..28b220e 100644
+--- a/melo/download_utils.py
++++ b/melo/download_utils.py
+@@ -1,7 +1,6 @@
+ import torch
+ import os
+ from . import utils
+-from cached_path import cached_path
+ DOWNLOAD_CKPT_URLS = {
+     'EN': 'https://myshell-public-repo-hosting.s3.amazonaws.com/openvoice/basespeakers/EN/checkpoint.pth',
+     'EN_V2': 'https://myshell-public-repo-hosting.s3.amazonaws.com/openvoice/basespeakers/EN_V2/checkpoint.pth',
+@@ -23,12 +22,20 @@ DOWNLOAD_CONFIG_URLS = {
+ }
+ 
+ def load_or_download_config(locale):
++    local_path = os.environ.get('MELOTTS_CONFIG_PATH')
++    if local_path:
++        return utils.get_hparams_from_file(local_path)
++    from cached_path import cached_path
+     language = locale.split('-')[0].upper()
+     assert language in DOWNLOAD_CONFIG_URLS
+     config_path = cached_path(DOWNLOAD_CONFIG_URLS[language])
+     return utils.get_hparams_from_file(config_path)
+ 
+ def load_or_download_model(locale, device):
++    local_path = os.environ.get('MELOTTS_CHECKPOINT_PATH')
++    if local_path:
++        return torch.load(local_path, map_location=device)
++    from cached_path import cached_path
+     language = locale.split('-')[0].upper()
+     assert language in DOWNLOAD_CKPT_URLS
+     ckpt_path = cached_path(DOWNLOAD_CKPT_URLS[language])
+diff --git a/melo/text/__init__.py b/melo/text/__init__.py
+index 6e482be..935636a 100644
+--- a/melo/text/__init__.py
++++ b/melo/text/__init__.py
+@@ -21,15 +21,9 @@ def cleaned_text_to_sequence(cleaned_text, tones, language, symbol_to_id=None):
+ 
+ 
+ def get_bert(norm_text, word2ph, language, device):
+-    from .chinese_bert import get_bert_feature as zh_bert
+-    from .english_bert import get_bert_feature as en_bert
+-    from .japanese_bert import get_bert_feature as jp_bert
+-    from .chinese_mix import get_bert_feature as zh_mix_en_bert
+-    from .spanish_bert import get_bert_feature as sp_bert
+-    from .french_bert import get_bert_feature as fr_bert
+-    from .korean import get_bert_feature as kr_bert
+-
+-    lang_bert_func_map = {"ZH": zh_bert, "EN": en_bert, "JP": jp_bert, 'ZH_MIX_EN': zh_mix_en_bert, 
+-                          'FR': fr_bert, 'SP': sp_bert, 'ES': sp_bert, "KR": kr_bert}
+-    bert = lang_bert_func_map[language](norm_text, word2ph, device)
+-    return bert
++    module_names = {"ZH": "chinese_bert", "EN": "english_bert", "JP": "japanese_bert",
++                    'ZH_MIX_EN': "chinese_mix", 'FR': "french_bert", 'SP': "spanish_bert",
++                    'ES': "spanish_bert", "KR": "korean"}
++    from importlib import import_module
++    module = import_module(f"{__package__}.{module_names[language]}")
++    return module.get_bert_feature(norm_text, word2ph, device)
+diff --git a/melo/text/chinese_mix.py b/melo/text/chinese_mix.py
+index b4e149f..82380fc 100644
+--- a/melo/text/chinese_mix.py
++++ b/melo/text/chinese_mix.py
+@@ -96,7 +96,7 @@ def _get_initials_finals(word):
+         finals.append(v)
+     return initials, finals
+ 
+-model_id = 'bert-base-multilingual-uncased'
++model_id = os.environ.get('MELOTTS_BERT_PATH', 'bert-base-multilingual-uncased')
+ tokenizer = AutoTokenizer.from_pretrained(model_id)
+ def _g2p(segments):
+     phones_list = []
+@@ -196,7 +196,7 @@ def text_normalize(text):
+ 
+ def get_bert_feature(text, word2ph, device):
+     from . import chinese_bert
+-    return chinese_bert.get_bert_feature(text, word2ph, model_id='bert-base-multilingual-uncased', device=device)
++    return chinese_bert.get_bert_feature(text, word2ph, model_id=model_id, device=device)
+ 
+ from .chinese import _g2p as _chinese_g2p
+ def _g2p_v2(segments):
+diff --git a/melo/text/cleaner.py b/melo/text/cleaner.py
+index fdf2609..6cdb23c 100644
+--- a/melo/text/cleaner.py
++++ b/melo/text/cleaner.py
+@@ -1,20 +1,23 @@
+-from . import chinese, japanese, english, chinese_mix, korean, french, spanish
+ from . import cleaned_text_to_sequence
++from importlib import import_module
+ import copy
+ 
+-language_module_map = {"ZH": chinese, "JP": japanese, "EN": english, 'ZH_MIX_EN': chinese_mix, 'KR': korean,
+-                    'FR': french, 'SP': spanish, 'ES': spanish}
++language_module_map = {"ZH": "chinese", "JP": "japanese", "EN": "english", 'ZH_MIX_EN': "chinese_mix",
++                    'KR': "korean", 'FR': "french", 'SP': "spanish", 'ES': "spanish"}
++
++def get_language_module(language):
++    return import_module(f"{__package__}.{language_module_map[language]}")
+ 
+ 
+ def clean_text(text, language):
+-    language_module = language_module_map[language]
++    language_module = get_language_module(language)
+     norm_text = language_module.text_normalize(text)
+     phones, tones, word2ph = language_module.g2p(norm_text)
+     return norm_text, phones, tones, word2ph
+ 
+ 
+ def clean_text_bert(text, language, device=None):
+-    language_module = language_module_map[language]
++    language_module = get_language_module(language)
+     norm_text = language_module.text_normalize(text)
+     phones, tones, word2ph = language_module.g2p(norm_text)
+     
+diff --git a/melo/text/english.py b/melo/text/english.py
+index d1152fe..6be582a 100644
+--- a/melo/text/english.py
++++ b/melo/text/english.py
+@@ -8,10 +8,16 @@ from . import symbols
+ from .english_utils.abbreviations import expand_abbreviations
+ from .english_utils.time_norm import expand_time_english
+ from .english_utils.number_norm import normalize_numbers
+-from .japanese import distribute_phone
+-
+ from transformers import AutoTokenizer
+ 
++def distribute_phone(n_phone, n_word):
++    phones_per_word = [0] * n_word
++    for _ in range(n_phone):
++        min_tasks = min(phones_per_word)
++        min_index = phones_per_word.index(min_tasks)
++        phones_per_word[min_index] += 1
++    return phones_per_word
++
+ current_file_path = os.path.dirname(__file__)
+ CMU_DICT_PATH = os.path.join(current_file_path, "cmudict.rep")
+ CACHE_PATH = os.path.join(current_file_path, "cmudict_cache.pickle")
+@@ -186,9 +192,16 @@ def text_normalize(text):
+     return text
+ 
+ model_id = 'bert-base-uncased'
+-tokenizer = AutoTokenizer.from_pretrained(model_id)
++tokenizer = None
++
++def get_tokenizer():
++    global tokenizer
++    if tokenizer is None:
++        tokenizer = AutoTokenizer.from_pretrained(model_id)
++    return tokenizer
++
+ def g2p_old(text):
+-    tokenized = tokenizer.tokenize(text)
++    tokenized = get_tokenizer().tokenize(text)
+     # import pdb; pdb.set_trace()
+     phones = []
+     tones = []
+@@ -216,7 +229,7 @@ def g2p_old(text):
+ 
+ def g2p(text, pad_start_end=True, tokenized=None):
+     if tokenized is None:
+-        tokenized = tokenizer.tokenize(text)
++        tokenized = get_tokenizer().tokenize(text)
+     # import pdb; pdb.set_trace()
+     phs = []
+     ph_groups = []
+diff --git a/setup.py b/setup.py
+index bffc6d9..92e6805 100644
+--- a/setup.py
++++ b/setup.py
+@@ -2,11 +2,9 @@ import os
+ from setuptools import setup, find_packages
+ from setuptools.command.develop import develop
+ from setuptools.command.install import install
+-from pip.req import parse_requirements
+-
+ cwd = os.path.dirname(os.path.abspath(__file__))
+-install_reqs = parse_requirements('requirements.txt')
+-reqs = [str(ir.req) for ir in install_reqs]
++with open('requirements.txt') as requirements_file:
++    reqs = requirements_file.read().splitlines()
+ class PostInstallCommand(install):
+     """Post-installation for installation mode."""
+     def run(self):

@@ -30,7 +30,14 @@ public sealed record TtsProviderCapabilities(
     double MaxRate,
     double MinPitch,
     double MaxPitch,
-    IReadOnlyList<string> SupportedMediaTypes);
+    IReadOnlyList<string> SupportedMediaTypes,
+    bool SupportsRate = true,
+    bool SupportsPitch = true,
+    bool SupportsVolume = true,
+    int DefaultSampleRateHz = 0,
+    int DefaultChannels = 0,
+    int FixedSampleRateHz = 0,
+    int FixedChannels = 0);
 
 public sealed record TtsProviderDescriptor(
     string ProviderId,

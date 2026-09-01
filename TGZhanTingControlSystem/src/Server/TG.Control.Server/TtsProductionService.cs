@@ -341,16 +341,28 @@ public sealed class TtsProductionService(
         if (request.SynthesisConfiguration.Rate < descriptor.Capabilities.MinRate ||
             request.SynthesisConfiguration.Rate > descriptor.Capabilities.MaxRate)
             throw InvalidRequest("invalid_rate", "Speech rate is outside the provider capability range.");
+        if (!descriptor.Capabilities.SupportsRate && request.SynthesisConfiguration.Rate != 1)
+            throw InvalidRequest("invalid_rate", "The provider does not support changing speech rate.");
         if (request.SynthesisConfiguration.Pitch < descriptor.Capabilities.MinPitch ||
             request.SynthesisConfiguration.Pitch > descriptor.Capabilities.MaxPitch)
             throw InvalidRequest("invalid_pitch", "Pitch is outside the provider capability range.");
+        if (!descriptor.Capabilities.SupportsPitch && request.SynthesisConfiguration.Pitch != 0)
+            throw InvalidRequest("invalid_pitch", "The provider does not support changing pitch.");
         if (request.SynthesisConfiguration.Volume > 2)
             throw InvalidRequest("invalid_volume", "Volume must be between 0 and 2.");
+        if (!descriptor.Capabilities.SupportsVolume && request.SynthesisConfiguration.Volume != 1)
+            throw InvalidRequest("invalid_volume", "The provider does not support changing synthesis volume.");
         if (request.SynthesisConfiguration.SampleRateHz != 0 &&
             request.SynthesisConfiguration.SampleRateHz is < 8000 or > 48000)
             throw InvalidRequest("invalid_sample_rate", "PCM sample rate must be 8-48 kHz or zero for provider default.");
+        if (descriptor.Capabilities.FixedSampleRateHz > 0 && request.SynthesisConfiguration.SampleRateHz != 0 &&
+            request.SynthesisConfiguration.SampleRateHz != descriptor.Capabilities.FixedSampleRateHz)
+            throw InvalidRequest("invalid_sample_rate", "Requested sample rate is not supported by the provider.");
         if (request.SynthesisConfiguration.Channels is not (0 or 1 or 2))
             throw InvalidRequest("invalid_channels", "PCM channel count must be mono, stereo, or zero for provider default.");
+        if (descriptor.Capabilities.FixedChannels > 0 && request.SynthesisConfiguration.Channels != 0 &&
+            request.SynthesisConfiguration.Channels != descriptor.Capabilities.FixedChannels)
+            throw InvalidRequest("invalid_channels", "Requested channel count is not supported by the provider.");
         if (!string.Equals(request.SynthesisConfiguration.OutputMediaType, "audio/wav", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(request.SynthesisConfiguration.OutputMediaType, "audio/x-wav", StringComparison.OrdinalIgnoreCase))
             throw InvalidRequest("invalid_media_type", "Phase 9B production accepts PCM WAV output only.");

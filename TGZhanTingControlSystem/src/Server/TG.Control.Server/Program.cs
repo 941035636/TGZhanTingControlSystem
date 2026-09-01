@@ -14,6 +14,7 @@ builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(Stor
 builder.Services.Configure<PlaybackOptions>(builder.Configuration.GetSection(PlaybackOptions.SectionName));
 builder.Services.Configure<TtsOptions>(builder.Configuration.GetSection(TtsOptions.SectionName));
 builder.Services.Configure<TtsProductionOptions>(builder.Configuration.GetSection(TtsProductionOptions.SectionName));
+builder.Services.Configure<MeloTtsLocalOptions>(builder.Configuration.GetSection(MeloTtsLocalOptions.SectionName));
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.SectionName));
 builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection(TerminalOptions.SectionName));
 builder.Services.AddSingleton<IContentRepository, JsonContentRepository>();
@@ -23,6 +24,15 @@ builder.Services.AddSingleton<ITtsService, UnconfiguredTtsService>();
 if (builder.Environment.IsDevelopment() &&
     builder.Configuration.GetValue<bool>($"{TtsProductionOptions.SectionName}:EnableDeterministicTestProvider"))
     builder.Services.AddSingleton<ITtsProvider, DeterministicTestTtsProvider>();
+if (builder.Configuration.GetValue<bool>($"{MeloTtsLocalOptions.SectionName}:Enabled", true))
+{
+    builder.Services.AddHttpClient(MeloTtsLocalProvider.HttpClientName)
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false });
+    builder.Services.AddSingleton<MeloTtsWorkerSupervisor>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<MeloTtsWorkerSupervisor>());
+    builder.Services.AddSingleton<MeloTtsLocalProvider>();
+    builder.Services.AddSingleton<ITtsProvider>(services => services.GetRequiredService<MeloTtsLocalProvider>());
+}
 builder.Services.AddSingleton<TtsProviderRegistry>();
 builder.Services.AddSingleton<TtsProductionRepository>();
 builder.Services.AddSingleton<TtsMediaValidator>();

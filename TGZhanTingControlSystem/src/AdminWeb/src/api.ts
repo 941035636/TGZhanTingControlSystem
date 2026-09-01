@@ -17,7 +17,7 @@ export interface NarrationAudioPublishSummary { fresh: number; missing: number; 
 export interface ContentPublishReadiness { canPublish: boolean; narrationAudio: NarrationAudioPublishSummary; issues: ContentPublishIssue[] }
 export interface ContentDraftSnapshot { baseContentVersion: number; revision: number; updatedAtUtc: string; updatedBy: string; modules: ExhibitionModule[]; narrationAudioStatuses: NarrationAudioDraftStatus[]; publishReadiness: ContentPublishReadiness | null }
 export interface TtsVoiceDescriptor { voiceId: string; displayName: string; language: string }
-export interface TtsProviderCapabilities { maxTextLength: number; minRate: number; maxRate: number; minPitch: number; maxPitch: number; supportedMediaTypes: string[] }
+export interface TtsProviderCapabilities { maxTextLength: number; minRate: number; maxRate: number; minPitch: number; maxPitch: number; supportedMediaTypes: string[]; supportsRate?: boolean; supportsPitch?: boolean; supportsVolume?: boolean; defaultSampleRateHz?: number; defaultChannels?: number; fixedSampleRateHz?: number; fixedChannels?: number }
 export interface TtsProviderDescriptor { providerId: string; displayName: string; available: boolean; developmentOnly: boolean; unavailableReason: string | null; voices: TtsVoiceDescriptor[]; capabilities: TtsProviderCapabilities }
 export type TtsProductionJobStatus = 0 | 1 | 2 | 3 | 4
 export interface TtsProductionJobAttempt { attemptNumber: number; startedAtUtc: string; completedAtUtc: string; succeeded: boolean; errorCategory: number | null; errorCode: string | null; errorMessage: string | null }

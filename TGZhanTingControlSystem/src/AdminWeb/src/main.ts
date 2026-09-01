@@ -255,10 +255,12 @@ function ttsPanel(node: NarrationNode): string {
   const unsynced = draftPending
     ? '<div class="tts-sync-note">草稿变更正在提交服务器，状态检查完成后才能采用候选语音。</div>'
     : ''
+  const rateSupported = selectedProvider?.capabilities.supportsRate !== false
+  const pitchSupported = selectedProvider?.capabilities.supportsPitch !== false
   return `<div class="tts-heading"><div><strong>讲解语音</strong><p>生成、试听和采用彼此独立；采用后仍需发布才会进入正式内容。</p></div><span class="status-pill status-${statusValue}">${bindingStatusLabel(statusValue)}</span></div>
     ${statusValue !== 1 ? `<p class="tts-status-message">${bindingStatusDescription(statusValue)}</p>` : ''}
     ${currentAudio}
-    <div class="tts-config-grid"><label>Provider<select id="tts-provider" ${providersUnavailable ? 'disabled' : ''}>${providerOptions}</select></label><label>Voice<select id="tts-voice" ${providersUnavailable ? 'disabled' : ''}>${voiceOptions}</select></label><label>Language<input id="tts-language" value="${escapeHtml(configuration?.language ?? selectedVoice?.language ?? 'zh-CN')}" readonly/></label><label>Rate<input id="tts-rate" type="number" step="0.05" min="${selectedProvider?.capabilities.minRate ?? 0.5}" max="${selectedProvider?.capabilities.maxRate ?? 2}" value="${configuration?.rate ?? 1}" ${providersUnavailable ? 'disabled' : ''}/></label><label>Pitch<input id="tts-pitch" type="number" step="0.05" min="${selectedProvider?.capabilities.minPitch ?? -1}" max="${selectedProvider?.capabilities.maxPitch ?? 1}" value="${configuration?.pitch ?? 0}" ${providersUnavailable ? 'disabled' : ''}/></label><button id="generate-tts" class="primary" ${providersUnavailable || !node.narrationText.trim() || workflow?.generating || Boolean(draftConflict) ? 'disabled' : ''}>${workflow?.generating ? '正在生成…' : '生成候选语音'}</button></div>
+    <div class="tts-config-grid"><label>Provider<select id="tts-provider" ${providersUnavailable ? 'disabled' : ''}>${providerOptions}</select></label><label>Voice<select id="tts-voice" ${providersUnavailable ? 'disabled' : ''}>${voiceOptions}</select></label><label>Language<input id="tts-language" value="${escapeHtml(configuration?.language ?? selectedVoice?.language ?? 'zh-CN')}" readonly/></label><label>Rate<input id="tts-rate" type="number" step="0.05" min="${selectedProvider?.capabilities.minRate ?? 0.5}" max="${selectedProvider?.capabilities.maxRate ?? 2}" value="${configuration?.rate ?? 1}" ${providersUnavailable || !rateSupported ? 'disabled' : ''}/>${rateSupported ? '' : '<small>当前音色不支持语速调整</small>'}</label><label>Pitch<input id="tts-pitch" type="number" step="0.05" min="${selectedProvider?.capabilities.minPitch ?? 0}" max="${selectedProvider?.capabilities.maxPitch ?? 0}" value="${configuration?.pitch ?? 0}" ${providersUnavailable || !pitchSupported ? 'disabled' : ''}/>${pitchSupported ? '' : '<small>当前音色不支持音调调整</small>'}</label><button id="generate-tts" class="primary" ${providersUnavailable || !node.narrationText.trim() || workflow?.generating || Boolean(draftConflict) ? 'disabled' : ''}>${workflow?.generating ? '正在生成…' : '生成候选语音'}</button></div>
     ${providersUnavailable}${developmentWarning}${unsynced}${jobView}${workflowError}${candidateView}
     <div class="tts-manual-upload"><div><strong>人工上传讲解音频</strong><p>上传文件同样进入不可变素材与完整性校验体系。</p></div><label class="upload-audio">选择音频<input id="audio-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac"/></label></div>`
 }
@@ -295,12 +297,12 @@ function selectTtsConfiguration(node: NarrationNode, providers = ttsProviders.fi
     providerKey: provider.providerId,
     voice: voice.voiceId,
     language: voice.language,
-    rate: existingProvider && existingVoice ? node.ttsConfiguration?.rate ?? 1 : 1,
-    pitch: existingProvider && existingVoice ? node.ttsConfiguration?.pitch ?? 0 : 0,
-    volume: existingProvider && existingVoice ? node.ttsConfiguration?.volume ?? 1 : 1,
+    rate: provider.capabilities.supportsRate === false ? 1 : existingProvider && existingVoice ? node.ttsConfiguration?.rate ?? 1 : 1,
+    pitch: provider.capabilities.supportsPitch === false ? 0 : existingProvider && existingVoice ? node.ttsConfiguration?.pitch ?? 0 : 0,
+    volume: provider.capabilities.supportsVolume === false ? 1 : existingProvider && existingVoice ? node.ttsConfiguration?.volume ?? 1 : 1,
     outputMediaType: provider.capabilities.supportedMediaTypes[0] ?? 'audio/wav',
-    sampleRateHz: existingProvider && existingVoice ? node.ttsConfiguration?.sampleRateHz ?? 24000 : 24000,
-    channels: existingProvider && existingVoice ? node.ttsConfiguration?.channels ?? 1 : 1,
+    sampleRateHz: provider.capabilities.defaultSampleRateHz || (existingProvider && existingVoice ? node.ttsConfiguration?.sampleRateHz : 0) || 24000,
+    channels: provider.capabilities.defaultChannels || (existingProvider && existingVoice ? node.ttsConfiguration?.channels : 0) || 1,
   }
 }
 
@@ -316,12 +318,12 @@ function configurationFromEditor(node: NarrationNode, modal: HTMLElement): TtsSy
     providerKey: provider.providerId,
     voice: voice.voiceId,
     language: voice.language,
-    rate: Math.min(provider.capabilities.maxRate, Math.max(provider.capabilities.minRate, rate)),
-    pitch: Math.min(provider.capabilities.maxPitch, Math.max(provider.capabilities.minPitch, pitch)),
-    volume: node.ttsConfiguration?.volume ?? 1,
+    rate: provider.capabilities.supportsRate === false ? 1 : Math.min(provider.capabilities.maxRate, Math.max(provider.capabilities.minRate, rate)),
+    pitch: provider.capabilities.supportsPitch === false ? 0 : Math.min(provider.capabilities.maxPitch, Math.max(provider.capabilities.minPitch, pitch)),
+    volume: provider.capabilities.supportsVolume === false ? 1 : node.ttsConfiguration?.volume ?? 1,
     outputMediaType: provider.capabilities.supportedMediaTypes[0] ?? 'audio/wav',
-    sampleRateHz: node.ttsConfiguration?.sampleRateHz ?? 24000,
-    channels: node.ttsConfiguration?.channels ?? 1,
+    sampleRateHz: provider.capabilities.defaultSampleRateHz || node.ttsConfiguration?.sampleRateHz || 24000,
+    channels: provider.capabilities.defaultChannels || node.ttsConfiguration?.channels || 1,
   }
 }
 
@@ -358,7 +360,7 @@ function bindTtsActions(module: ExhibitionModule, node: NarrationNode, modal: HT
     const provider = ttsProviders.find(item => item.providerId === providerSelect.value)
     const voice = provider?.voices[0]
     if (!provider || !voice) return
-    node.ttsConfiguration = { providerKey: provider.providerId, voice: voice.voiceId, language: voice.language, rate: 1, pitch: 0, volume: 1, outputMediaType: provider.capabilities.supportedMediaTypes[0] ?? 'audio/wav', sampleRateHz: 24000, channels: 1 }
+    node.ttsConfiguration = { providerKey: provider.providerId, voice: voice.voiceId, language: voice.language, rate: 1, pitch: 0, volume: 1, outputMediaType: provider.capabilities.supportedMediaTypes[0] ?? 'audio/wav', sampleRateHz: provider.capabilities.defaultSampleRateHz || 24000, channels: provider.capabilities.defaultChannels || 1 }
     markDirty(); refreshTtsWorkspace(module, node, modal)
   })
   modal.querySelector<HTMLSelectElement>('#tts-voice')?.addEventListener('change', () => {

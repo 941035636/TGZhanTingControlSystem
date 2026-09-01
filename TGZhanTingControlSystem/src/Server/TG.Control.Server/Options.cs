@@ -37,6 +37,22 @@ public sealed class TtsProductionOptions
     public long MaxAudioSizeBytes { get; init; } = 100 * 1024 * 1024;
 }
 
+public sealed class MeloTtsLocalOptions
+{
+    public const string SectionName = "MeloTtsLocal";
+    public bool Enabled { get; init; } = true;
+    public bool AutoStartWorker { get; init; } = true;
+    public string BaseAddress { get; init; } = "http://127.0.0.1:5091";
+    public string PythonExecutablePath { get; init; } = "TtsWorker/MeloTtsLocal/runtime/python.exe";
+    public string WorkerScriptPath { get; init; } = "TtsWorker/MeloTtsLocal/worker.py";
+    public string MeloTtsSourcePath { get; init; } = "TtsWorker/MeloTtsLocal/vendor/MeloTTS";
+    public string AcousticModelPath { get; init; } = "TtsWorker/MeloTtsLocal/models/MeloTTS-Chinese";
+    public string BertModelPath { get; init; } = "TtsWorker/MeloTtsLocal/models/bert-base-multilingual-uncased";
+    public string NltkDataPath { get; init; } = "TtsWorker/MeloTtsLocal/runtime/nltk_data";
+    public int HealthTimeoutMilliseconds { get; init; } = 2500;
+    public int RestartDelayMilliseconds { get; init; } = 5000;
+}
+
 public sealed class AdminOptions
 {
     public const string SectionName = "Admin";
