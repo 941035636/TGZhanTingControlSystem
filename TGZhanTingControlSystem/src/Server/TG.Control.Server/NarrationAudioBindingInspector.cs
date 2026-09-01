@@ -7,6 +7,13 @@ public sealed record NarrationAudioBindingEvaluation(NarrationAudioBindingStatus
 
 public static class NarrationAudioBindingInspector
 {
+    private static readonly IReadOnlyDictionary<string, string> SupportedMediaExtensions =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["audio/wav"] = ".wav",
+            ["audio/mpeg"] = ".mp3"
+        };
+
     public static NarrationAudioBindingEvaluation Evaluate(NarrationNode node, AssetStorage assetStorage,
         HostString requestHost)
     {
@@ -87,9 +94,15 @@ public static class NarrationAudioBindingInspector
             return false;
         }
         if (string.IsNullOrWhiteSpace(asset.MediaType) ||
-            !asset.MediaType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+            !SupportedMediaExtensions.TryGetValue(asset.MediaType.Trim(), out var expectedExtension))
         {
-            error = "讲解音频缺少有效媒体格式。";
+            error = "讲解音频媒体格式不受正式LED播放链路支持；当前仅支持 audio/wav 和 audio/mpeg。";
+            return false;
+        }
+        var path = asset.Url.Split('?', '#')[0];
+        if (!string.Equals(Path.GetExtension(path), expectedExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"讲解音频媒体类型 {asset.MediaType} 与文件扩展名不一致。";
             return false;
         }
 

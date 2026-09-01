@@ -15,9 +15,6 @@ public static class ContentValidator
         LegacyNarrationAudioValidation legacyValidation = LegacyNarrationAudioValidation.PreserveOnly)
     {
         var errors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var currentNodes = (currentContent?.Modules ?? [])
-            .SelectMany(module => (module.Nodes ?? []).Select(node => (Key: NodeKey(module.Id, node.Id), Node: node)))
-            .ToDictionary(item => item.Key, item => item.Node, StringComparer.OrdinalIgnoreCase);
         void Add(string key, string message)
         {
             if (!errors.TryGetValue(key, out var values)) errors[key] = values = [];
@@ -47,8 +44,10 @@ public static class ContentValidator
                 var nodeKey = $"{moduleKey}.nodes[{node.Order}]";
                 if (string.IsNullOrWhiteSpace(node.Id) || !nodeIds.Add(node.Id)) Add(nodeKey, "节点ID不能为空且不能重复。");
                 if (string.IsNullOrWhiteSpace(node.Name)) Add(nodeKey, "节点名称不能为空。");
+                var hasPlayableVisual = (node.Assets ?? []).Any(asset =>
+                    asset.Kind is AssetKind.Video or AssetKind.Animation && !string.IsNullOrWhiteSpace(asset.Url));
                 if (string.IsNullOrWhiteSpace(node.NarrationText) && string.IsNullOrWhiteSpace(node.TtsAudioUrl) &&
-                    node.NarrationAudio is null)
+                    node.NarrationAudio is null && !hasPlayableVisual)
                     Add(nodeKey, "讲解文案和讲解音频至少填写一项。");
                 if (node.VideoVolume is < 0 or > 1) Add(nodeKey, "讲解时视频音量必须在0到1之间。");
                 if (node.NarrationVolume is < 0 or > 1) Add(nodeKey, "讲解音量必须在0到1之间。");
@@ -64,41 +63,15 @@ public static class ContentValidator
                                 $"模块“{module.Name}” / 节点“{node.Name}” / 素材“{asset.Name}”：{assetError}");
                     }
                 }
-                if (node.NarrationAudio is not null)
-                {
-                    var evaluation = NarrationAudioBindingInspector.Evaluate(node, assetStorage, requestHost);
-                    if (evaluation.Status != NarrationAudioBindingStatus.Fresh)
-                        Add($"{nodeKey}.narrationAudio",
-                            $"模块“{module.Name}” / 节点“{node.Name}” / 讲解音频：{evaluation.Message}");
-                }
-                else if (!string.IsNullOrWhiteSpace(node.TtsAudioUrl))
-                {
-                    var audioError = assetStorage.ValidatePublishedReference(node.TtsAudioUrl, 0, requestHost);
-                    if (audioError is not null)
-                        Add($"{nodeKey}.ttsAudioUrl",
-                            $"模块“{module.Name}” / 节点“{node.Name}” / 讲解音频：{audioError}");
-
-                    if (legacyValidation == LegacyNarrationAudioValidation.PreserveOnly)
-                    {
-                        currentNodes.TryGetValue(NodeKey(module.Id, node.Id), out var currentNode);
-                        var sameLegacyAudio = currentNode?.NarrationAudio is null &&
-                                              string.Equals(currentNode?.TtsAudioUrl, node.TtsAudioUrl,
-                                                  StringComparison.OrdinalIgnoreCase);
-                        var sameNarrationText = currentNode is not null &&
-                                                string.Equals(
-                                                    NarrationAudioFingerprint.ComputeText(currentNode.NarrationText),
-                                                    NarrationAudioFingerprint.ComputeText(node.NarrationText),
-                                                    StringComparison.OrdinalIgnoreCase);
-                        if (!sameLegacyAudio || !sameNarrationText)
-                            Add($"{nodeKey}.ttsAudioUrl",
-                                $"模块“{module.Name}” / 节点“{node.Name}” / 历史讲解音频未绑定当前讲解词；请重新上传形成完整音频绑定。");
-                    }
-                }
             }
         }
 
+        var publishReadiness = ContentPublishPolicy.Evaluate(modules, assetStorage, requestHost,
+            currentContent, legacyValidation);
+        foreach (var issue in publishReadiness.Issues.Where(item =>
+                     item.Severity == ContentPublishIssueSeverity.Error))
+            Add($"modules[{issue.ModuleId}].nodes[{issue.NodeId}].narrationAudio", issue.Message);
+
         return errors.ToDictionary(item => item.Key, item => item.Value.ToArray());
     }
-
-    private static string NodeKey(string moduleId, string nodeId) => moduleId + "\u001f" + nodeId;
 }

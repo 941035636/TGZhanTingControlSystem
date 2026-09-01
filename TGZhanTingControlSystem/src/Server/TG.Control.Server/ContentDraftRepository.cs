@@ -41,6 +41,13 @@ public sealed class ContentDraftRepository
         finally { gate.Release(); }
     }
 
+    public async Task<ContentDraftDocument?> GetExistingAsync(CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try { return await ReadAsync(cancellationToken); }
+        finally { gate.Release(); }
+    }
+
     public async Task<ContentDraftDocument> ReplaceAsync(long expectedBaseVersion, long expectedRevision,
         IReadOnlyList<ExhibitionModule> modules, string updatedBy, CancellationToken cancellationToken)
     {

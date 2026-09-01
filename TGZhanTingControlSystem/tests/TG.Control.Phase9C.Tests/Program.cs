@@ -183,12 +183,18 @@ internal static class Program
     private static async Task DraftPublishUsesOptimisticVersion()
     {
         await using var context = await TestContext.CreateAsync();
+        var candidate = await context.GenerateAsync("Narration A");
         var draft = await context.Workflow.GetAsync(Host, CancellationToken.None);
-        var published = await context.Workflow.PublishAsync(new SaveContentDraftRequest(draft.BaseContentVersion,
-            draft.Revision, draft.Modules), "admin", Host, CancellationToken.None);
-        Equal(draft.BaseContentVersion + 1, published.Version);
+        var adopted = await context.Workflow.AdoptAsync(candidate.CandidateId,
+            new AdoptNarrationAudioCandidateRequest(draft.BaseContentVersion, draft.Revision),
+            "admin", Host, CancellationToken.None);
+        var published = await context.Workflow.PublishAsync(new SaveContentDraftRequest(
+            adopted.Draft.BaseContentVersion, adopted.Draft.Revision, adopted.Draft.Modules),
+            "admin", Host, CancellationToken.None);
+        Equal(adopted.Draft.BaseContentVersion + 1, published.Version);
         await ThrowsWorkflowAsync("content_version_conflict", () => context.Workflow.PublishAsync(
-            new SaveContentDraftRequest(draft.BaseContentVersion, draft.Revision, draft.Modules),
+            new SaveContentDraftRequest(adopted.Draft.BaseContentVersion, adopted.Draft.Revision,
+                adopted.Draft.Modules),
             "admin", Host, CancellationToken.None));
     }
 

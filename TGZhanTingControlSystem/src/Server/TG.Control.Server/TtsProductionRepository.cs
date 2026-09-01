@@ -104,6 +104,14 @@ public sealed class TtsProductionRepository
         finally { gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<NarrationAudioCandidate>> GetCandidatesAsync(CancellationToken cancellationToken)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+        await gate.WaitAsync(cancellationToken);
+        try { return state.Candidates.ToArray(); }
+        finally { gate.Release(); }
+    }
+
     public async Task<TtsProductionJob> UpdateJobAsync(string jobId, Func<TtsProductionJob, TtsProductionJob> update,
         CancellationToken cancellationToken)
     {

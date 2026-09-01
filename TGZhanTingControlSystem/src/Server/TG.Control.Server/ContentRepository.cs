@@ -11,8 +11,11 @@ public interface IContentRepository
     Task<PublishedContent> SaveIfVersionAsync(IReadOnlyList<ExhibitionModule> modules, long expectedVersion,
         string publishedBy, CancellationToken cancellationToken);
     Task<PublishedContent> GetVersionAsync(long version, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PublishedContent>> GetAllVersionsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<ContentVersionSummary>> GetHistoryAsync(CancellationToken cancellationToken);
     Task<PublishedContent> RollbackAsync(long version, string publishedBy, CancellationToken cancellationToken);
+    Task<PublishedContent> RollbackIfVersionAsync(long version, long expectedCurrentVersion, string publishedBy,
+        CancellationToken cancellationToken);
 }
 
 public sealed class JsonContentRepository : IContentRepository
@@ -134,6 +137,25 @@ public sealed class JsonContentRepository : IContentRepository
         finally { gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<PublishedContent>> GetAllVersionsAsync(CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var result = new List<PublishedContent>();
+            foreach (var path in Directory.EnumerateFiles(historyDirectory, "content-v*.json"))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await using var stream = File.OpenRead(path);
+                var content = await JsonSerializer.DeserializeAsync<PublishedContent>(stream, jsonOptions,
+                    cancellationToken);
+                if (content is not null) result.Add(NarrationAudioCompatibility.Normalize(content));
+            }
+            return result.OrderBy(item => item.Version).ToArray();
+        }
+        finally { gate.Release(); }
+    }
+
     public async Task<PublishedContent> RollbackAsync(long version, string publishedBy, CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
@@ -146,6 +168,31 @@ public sealed class JsonContentRepository : IContentRepository
                 ?? throw new InvalidDataException($"内容版本 V{version} 无效。");
             target = NarrationAudioCompatibility.Normalize(target);
             var current = await ReadCurrentAsync(cancellationToken);
+            var restored = new PublishedContent(current.Version + 1, DateTimeOffset.UtcNow,
+                publishedBy + $"（回滚自 V{version}）", target.Modules);
+            await WriteAsync(restored, cancellationToken);
+            await ArchiveAsync(restored, cancellationToken);
+            return restored;
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<PublishedContent> RollbackIfVersionAsync(long version, long expectedCurrentVersion,
+        string publishedBy, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var path = HistoryPath(version);
+            if (!File.Exists(path)) throw new KeyNotFoundException($"内容版本 V{version} 不存在。");
+            var current = await ReadCurrentAsync(cancellationToken);
+            if (current.Version != expectedCurrentVersion)
+                throw new ContentVersionConflictException(expectedCurrentVersion, current.Version);
+            await using var source = File.OpenRead(path);
+            var target = await JsonSerializer.DeserializeAsync<PublishedContent>(source, jsonOptions,
+                             cancellationToken)
+                         ?? throw new InvalidDataException($"内容版本 V{version} 无效。");
+            target = NarrationAudioCompatibility.Normalize(target);
             var restored = new PublishedContent(current.Version + 1, DateTimeOffset.UtcNow,
                 publishedBy + $"（回滚自 V{version}）", target.Modules);
             await WriteAsync(restored, cancellationToken);

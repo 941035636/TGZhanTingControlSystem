@@ -43,7 +43,7 @@ public sealed class ContentDraftWorkflowService(
         {
             var published = await publishedRepository.GetAsync(cancellationToken);
             var draft = await draftRepository.GetOrCreateAsync(published, cancellationToken);
-            return BuildSnapshot(draft, requestHost);
+            return BuildSnapshot(draft, requestHost, published);
         }
         finally { gate.Release(); }
     }
@@ -62,7 +62,7 @@ public sealed class ContentDraftWorkflowService(
             await draftRepository.GetOrCreateAsync(published, cancellationToken);
             var draft = await draftRepository.ReplaceAsync(request.BaseContentVersion, request.ExpectedRevision,
                 request.Modules, actor, cancellationToken);
-            return BuildSnapshot(draft, requestHost);
+            return BuildSnapshot(draft, requestHost, published);
         }
         catch (ContentDraftConflictException)
         {
@@ -142,7 +142,7 @@ public sealed class ContentDraftWorkflowService(
             modules[moduleIndex] = modules[moduleIndex] with { Nodes = nodes };
             var updated = await draftRepository.ReplaceAsync(draft.BaseContentVersion, draft.Revision,
                 modules, actor, cancellationToken);
-            var snapshot = BuildSnapshot(updated, requestHost);
+            var snapshot = BuildSnapshot(updated, requestHost, published);
             var adoptedStatus = snapshot.NarrationAudioStatuses.First(item =>
                 string.Equals(item.ModuleId, job.ModuleId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.NodeId, job.NodeId, StringComparison.OrdinalIgnoreCase));
@@ -204,6 +204,39 @@ public sealed class ContentDraftWorkflowService(
         finally { gate.Release(); }
     }
 
+    public async Task<PublishedContent> RollbackAsync(long targetVersion, RollbackContentRequest request,
+        string actor, HostString requestHost, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var published = await publishedRepository.GetAsync(cancellationToken);
+            if (published.Version != request.ExpectedContentVersion)
+                throw Conflict("content_version_conflict");
+            var draft = await draftRepository.GetOrCreateAsync(published, cancellationToken);
+            if (draft.Revision != request.ExpectedDraftRevision)
+                throw Conflict("draft_revision_conflict");
+            var target = await publishedRepository.GetVersionAsync(targetVersion, cancellationToken);
+            var validation = ContentValidator.Validate(target.Modules, assetStorage, requestHost,
+                legacyValidation: LegacyNarrationAudioValidation.AllowHistorical);
+            if (validation.Count > 0) throw new ContentDraftValidationException(validation);
+            PublishedContent result;
+            try
+            {
+                result = await publishedRepository.RollbackIfVersionAsync(targetVersion, published.Version,
+                    actor, cancellationToken);
+            }
+            catch (ContentVersionConflictException)
+            {
+                throw Conflict("content_version_conflict");
+            }
+            await draftRepository.ResetAsync(result, cancellationToken);
+            return result;
+        }
+        finally { gate.Release(); }
+    }
+
     private async Task<NarrationAudioCandidateEvaluation> EvaluateCandidateCoreAsync(string candidateId,
         ContentDraftDocument draft, HostString requestHost, CancellationToken cancellationToken)
     {
@@ -244,15 +277,23 @@ public sealed class ContentDraftWorkflowService(
             locationMatches, textMatches, configurationMatches, assetValid, adoptable, message);
     }
 
-    private ContentDraftSnapshot BuildSnapshot(ContentDraftDocument draft, HostString requestHost)
+    private ContentDraftSnapshot BuildSnapshot(ContentDraftDocument draft, HostString requestHost,
+        PublishedContent published)
     {
-        var statuses = draft.Modules.SelectMany(module => module.Nodes.Select(node =>
+        var evaluations = draft.Modules.SelectMany(module => module.Nodes.Select(node =>
         {
             var evaluation = NarrationAudioBindingInspector.Evaluate(node, assetStorage, requestHost);
-            return new NarrationAudioDraftStatus(module.Id, node.Id, evaluation.Status, evaluation.Message);
+            return (Key: ContentPublishPolicy.NodeKey(module.Id, node.Id), ModuleId: module.Id,
+                NodeId: node.Id, Evaluation: evaluation);
         })).ToArray();
+        var statuses = evaluations.Select(item => new NarrationAudioDraftStatus(item.ModuleId, item.NodeId,
+            item.Evaluation.Status, item.Evaluation.Message)).ToArray();
+        var known = evaluations.ToDictionary(item => item.Key, item => item.Evaluation,
+            StringComparer.OrdinalIgnoreCase);
+        var readiness = ContentPublishPolicy.Evaluate(draft.Modules, assetStorage, requestHost, published,
+            knownEvaluations: known);
         return new ContentDraftSnapshot(draft.BaseContentVersion, draft.Revision, draft.UpdatedAtUtc,
-            draft.UpdatedBy, draft.Modules, statuses);
+            draft.UpdatedBy, draft.Modules, statuses, readiness);
     }
 
     private static NarrationAudioCandidateEvaluation Evaluation(string candidateId, ContentDraftDocument draft,

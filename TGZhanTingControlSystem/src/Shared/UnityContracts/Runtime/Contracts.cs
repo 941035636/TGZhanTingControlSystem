@@ -175,6 +175,8 @@ namespace TG.Control.UnityContracts
         public string url;
         public string sha256;
         public long sizeBytes;
+        public string assetId;
+        public string mediaType;
     }
 
     [Serializable]

@@ -1,5 +1,5 @@
 import './style.css'
-import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentDraftSnapshot, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiExperienceConfig } from './api'
+import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentDraftSnapshot, type ContentPublishReadiness, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiExperienceConfig } from './api'
 import { bindingStatusLabel, jobStatusLabel, TtsWorkflowController, type TtsWorkflowApi } from './tts-workflow'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -10,6 +10,7 @@ let ttsProviders: TtsProviderDescriptor[] = []
 let draftBaseVersion = 0
 let draftRevision = 0
 let draftStatuses: NarrationAudioDraftStatus[] = []
+let publishReadiness: ContentPublishReadiness | null = null
 let draftConflict = ''
 let draftMutationSequence = 0
 let draftSyncedSequence = 0
@@ -70,7 +71,7 @@ async function loadDashboard(): Promise<void> {
     ])
     const restored = restoreDraft(published, serverDraft)
     content = restored.content; ttsProviders = providers; clientStatuses = clients; playbackSessions = sessions; uiConfig = ui
-    draftBaseVersion = serverDraft.baseContentVersion; draftRevision = serverDraft.revision; draftStatuses = serverDraft.narrationAudioStatuses
+    draftBaseVersion = serverDraft.baseContentVersion; draftRevision = serverDraft.revision; draftStatuses = serverDraft.narrationAudioStatuses; publishReadiness = serverDraft.publishReadiness
     routes = routeResult.routes ?? []; readiness = ready; versions = history; operationEvents = events; dirty = restored.dirty
     draftMutationSequence = restored.needsSync ? 1 : 0; draftSyncedSequence = 0; renderDashboard()
     if (restored.needsSync) void syncDraftNow()
@@ -80,7 +81,7 @@ async function loadDashboard(): Promise<void> {
 function renderDashboard(): void {
   if (!content) return
   const availableProviders = ttsProviders.filter(item => item.available && item.voices.length > 0)
-  root.innerHTML = `<header class="topbar"><div><p class="eyebrow">TG EXHIBITION CONTROL</p><h1>展厅自动讲解管理平台</h1><p class="meta">正式版本 V${content.version} · 草稿 r${draftRevision} · ${content.modules.length} 个模块 · 发布人 ${escapeHtml(content.publishedBy || '系统初始化')}</p></div><div class="actions"><div class="tts-badge ${availableProviders.length ? 'ready' : ''}"><span>语音合成服务</span><strong>${availableProviders.length ? `${availableProviders.length} 个可用 Provider` : '当前未配置'}</strong></div><div class="account"><span>当前账号</span><strong>${escapeHtml(username)}</strong></div><button id="logout">退出</button><button id="publish" class="primary" ${dirty && !draftConflict ? '' : 'disabled'}>发布新版本</button></div></header>
+  root.innerHTML = `<header class="topbar"><div><p class="eyebrow">TG EXHIBITION CONTROL</p><h1>展厅自动讲解管理平台</h1><p class="meta">正式版本 V${content.version} · 草稿 r${draftRevision} · ${content.modules.length} 个模块 · 发布人 ${escapeHtml(content.publishedBy || '系统初始化')}</p></div><div class="actions"><div class="tts-badge ${availableProviders.length ? 'ready' : ''}"><span>语音合成服务</span><strong>${availableProviders.length ? `${availableProviders.length} 个可用 Provider` : '当前未配置'}</strong></div><div class="account"><span>当前账号</span><strong>${escapeHtml(username)}</strong></div><button id="logout">退出</button><button id="publish" class="primary" ${dirty && !draftConflict && publishReadiness?.canPublish === true ? '' : 'disabled'}>发布新版本</button></div></header>
     <nav class="workspace-nav">${navButton('content','内容中心')}${navButton('routes','讲解路线')}${navButton('versions','发布与回滚')}${navButton('operations','终端与运行')}</nav>
     <main>${renderWorkspace()}</main><div id="toast" class="toast" aria-live="polite"></div>`
   root.querySelector('#publish')?.addEventListener('click', publish)
@@ -103,8 +104,15 @@ function renderWorkspace():string{
   if(activeView==='routes')return renderRoutesView()
   if(activeView==='versions')return renderVersionsView()
   if(activeView==='operations')return renderOperationsView()
-  return `${draftConflict?`<section class="publish-validation-error"><strong>草稿同步冲突</strong><p>${escapeHtml(draftConflict)}</p></section>`:''}${publishError?`<section class="publish-validation-error"><strong>发布已阻止：请修复以下素材</strong><p>${escapeHtml(publishError).replaceAll('；','<br/>')}</p></section>`:''}<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>讲解节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).length + (item.nodes.filter(node => node.ttsAudioUrl).length), 0)}</strong><span>展示与音频素材</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
+  return `${draftConflict?`<section class="publish-validation-error"><strong>草稿同步冲突</strong><p>${escapeHtml(draftConflict)}</p></section>`:''}${publishError?`<section class="publish-validation-error"><strong>发布已阻止：请修复以下素材</strong><p>${escapeHtml(publishError).replaceAll('；','<br/>')}</p></section>`:''}${renderNarrationPublishSummary()}<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>讲解节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).length + (item.nodes.filter(node => node.ttsAudioUrl).length), 0)}</strong><span>展示与音频素材</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
   <section class="section-title"><div><p class="eyebrow">CONTENT</p><h2>内容中心</h2><p class="section-note">配置模块、讲解节点、讲解语音和大屏素材；修改会安全保存到服务器草稿，发布后终端才会更新。</p></div><div class="section-actions"><button id="edit-ui">终端界面设置</button><button id="add">新增模块</button></div></section><section class="module-grid">${content.modules.sort((a,b) => a.order-b.order).map(moduleCard).join('')}</section>`
+}
+
+function renderNarrationPublishSummary(): string {
+  if (!publishReadiness) return '<section id="narration-publish-summary" class="narration-publish-summary checking"><strong>正在由服务器检查讲解语音发布状态…</strong></section>'
+  const summary = publishReadiness.narrationAudio
+  const issues = publishReadiness.issues.map(issue => `<li class="${issue.severity === 1 ? 'blocking' : 'warning'}"><strong>${issue.severity === 1 ? '阻止发布' : '发布提醒'}</strong><span>${escapeHtml(issue.message)}</span></li>`).join('')
+  return `<section id="narration-publish-summary" class="narration-publish-summary ${publishReadiness.canPublish ? 'ready' : 'blocked'}"><header><div><span>讲解语音发布检查</span><strong>${publishReadiness.canPublish ? '可以发布' : `存在 ${summary.blockingIssues} 项阻塞问题`}</strong></div><p>结论来自 Server，发布时会再次执行完整校验。</p></header><div class="narration-publish-counts"><span><b>${summary.fresh}</b> 个语音有效</span><span><b>${summary.missing}</b> 个缺失</span><span><b>${summary.staleText + summary.staleSynthesisConfiguration}</b> 个已过期</span><span><b>${summary.legacyUnverified}</b> 个旧版</span><span><b>${summary.invalidAsset + summary.invalidBinding}</b> 个异常</span></div>${issues ? `<ul>${issues}</ul>` : '<p class="publish-ready-note">所有需要正式讲解音频的节点均已通过检查。</p>'}</section>`
 }
 
 function renderRoutesView():string{
@@ -152,7 +160,7 @@ function renderVersionsView():string{
 }
 
 function bindVersionManagement():void{
-  root.querySelectorAll<HTMLElement>('[data-rollback]').forEach(button=>button.addEventListener('click',async()=>{const version=Number(button.dataset.rollback);if(!window.confirm(`确定将正式内容回滚到 V${version} 吗？`))return;try{content=await api.rollbackContent(version);const draft=await api.getDraft();draftBaseVersion=draft.baseContentVersion;draftRevision=draft.revision;draftStatuses=draft.narrationAudioStatuses;draftConflict='';dirty=false;draftMutationSequence=0;draftSyncedSequence=0;localStorage.removeItem(draftKey);versions=await api.contentVersions();renderDashboard();showToast(`已回滚并生成新版本 V${content.version}。`)}catch(error){showToast(error instanceof Error?error.message:'回滚失败')}}))
+  root.querySelectorAll<HTMLElement>('[data-rollback]').forEach(button=>button.addEventListener('click',async()=>{const version=Number(button.dataset.rollback);if(!content||!window.confirm(`确定将正式内容回滚到 V${version} 吗？`))return;try{content=await api.rollbackContent(version,content.version,draftRevision);const draft=await api.getDraft();draftBaseVersion=draft.baseContentVersion;draftRevision=draft.revision;draftStatuses=draft.narrationAudioStatuses;publishReadiness=draft.publishReadiness;draftConflict='';dirty=false;draftMutationSequence=0;draftSyncedSequence=0;localStorage.removeItem(draftKey);versions=await api.contentVersions();renderDashboard();showToast(`已回滚并生成新版本 V${content.version}。`)}catch(error){showToast(error instanceof Error?error.message:'回滚失败')}}))
 }
 
 function renderOperationsView():string{
@@ -468,11 +476,12 @@ async function uploadUiAsset(input:HTMLInputElement,kind:AssetKind,target:'touch
 }
 function markDirty(rerender=false): void {
   dirty = true
+  publishReadiness = null
   draftMutationSequence++
   saveLocalDraft()
   scheduleDraftSync()
   if (rerender) renderDashboard()
-  else if (!draftConflict) root.querySelector<HTMLButtonElement>('#publish')?.removeAttribute('disabled')
+  else root.querySelector<HTMLButtonElement>('#publish')?.setAttribute('disabled', '')
 }
 function addModule(): void { if(!content)return;const order=Math.max(0,...content.modules.map(item=>item.order))+1;content.modules.push({id:crypto.randomUUID(),name:'新模块',order,description:'',coverUrl:null,enabled:true,nodes:[]});markDirty(true) }
 
@@ -491,7 +500,7 @@ async function publish(): Promise<void> {
     content = await api.publish(content.modules, draftBaseVersion, draftRevision)
     const draft = await api.getDraft()
     draftBaseVersion = draft.baseContentVersion; draftRevision = draft.revision
-    draftStatuses = draft.narrationAudioStatuses; draftConflict = ''; publishError = ''; dirty = false
+    draftStatuses = draft.narrationAudioStatuses; publishReadiness = draft.publishReadiness; draftConflict = ''; publishError = ''; dirty = false
     draftMutationSequence = 0; draftSyncedSequence = 0
     localStorage.removeItem(draftKey)
     versions = await api.contentVersions(); renderDashboard(); showToast(`版本 V${content.version} 发布成功。`)
@@ -527,8 +536,10 @@ async function syncDraftNow(): Promise<void> {
         draftBaseVersion = snapshot.baseContentVersion
         draftRevision = snapshot.revision
         draftStatuses = snapshot.narrationAudioStatuses
+        publishReadiness = snapshot.publishReadiness
         draftSyncedSequence = targetSequence
         draftConflict = ''
+        refreshPublishReadiness()
         saveLocalDraft()
         void ttsController?.refreshEvaluation()
         refreshOpenTtsWorkspace()
@@ -567,9 +578,19 @@ function applyDraftSnapshot(snapshot: ContentDraftSnapshot): void {
   draftBaseVersion = snapshot.baseContentVersion
   draftRevision = snapshot.revision
   draftStatuses = snapshot.narrationAudioStatuses
+  publishReadiness = snapshot.publishReadiness
   draftConflict = ''
   draftMutationSequence++
   draftSyncedSequence = draftMutationSequence
+  refreshPublishReadiness()
+}
+
+function refreshPublishReadiness(): void {
+  const summary = root.querySelector<HTMLElement>('#narration-publish-summary')
+  if (summary) summary.outerHTML = renderNarrationPublishSummary()
+  const button = root.querySelector<HTMLButtonElement>('#publish')
+  if (!button) return
+  button.disabled = !dirty || Boolean(draftConflict) || publishReadiness?.canPublish !== true
 }
 
 function saveLocalDraft(): void {

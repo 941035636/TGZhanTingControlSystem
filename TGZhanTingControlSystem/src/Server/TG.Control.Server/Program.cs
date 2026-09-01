@@ -30,6 +30,7 @@ builder.Services.AddSingleton<TtsProductionService>();
 builder.Services.AddHostedService(services => services.GetRequiredService<TtsProductionService>());
 builder.Services.AddSingleton<AdminSessionStore>();
 builder.Services.AddSingleton<AssetStorage>();
+builder.Services.AddSingleton<AssetReferenceProtectionService>();
 builder.Services.AddSingleton<NarrationAudioBindingService>();
 builder.Services.AddSingleton<ContentDraftRepository>();
 builder.Services.AddSingleton<ContentDraftWorkflowService>();
@@ -122,48 +123,43 @@ app.MapDelete("/api/routes/{id}", async (string id, HttpRequest httpRequest, Nar
     return Results.NoContent();
 });
 app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishContentRequest request, AdminSessionStore sessions,
-    IContentRepository repository, AssetStorage assetStorage, ContentDraftWorkflowService drafts,
+    ContentDraftWorkflowService drafts,
     OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
     var modules = NarrationAudioCompatibility.NormalizeModules(request.Modules);
-    if (request.BaseContentVersion.HasValue && request.ExpectedDraftRevision.HasValue)
-    {
-        try
+    if (!request.BaseContentVersion.HasValue || !request.ExpectedDraftRevision.HasValue)
+        return Results.BadRequest(new
         {
-            var result = await drafts.PublishAsync(new SaveContentDraftRequest(request.BaseContentVersion.Value,
-                request.ExpectedDraftRevision.Value, modules), username, httpRequest.Host, ct);
-            await events.AppendAsync("Information", "Content", "Publish", $"{username} published content V{result.Version}.", cancellationToken: ct);
-            return Results.Ok(result);
-        }
-        catch (ContentDraftValidationException exception) { return Results.ValidationProblem(exception.Errors); }
-        catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
+            code = "publish_revision_required",
+            message = "发布必须携带当前正式版本和草稿修订号，请刷新后重试。"
+        });
+    try
+    {
+        var result = await drafts.PublishAsync(new SaveContentDraftRequest(request.BaseContentVersion.Value,
+            request.ExpectedDraftRevision.Value, modules), username, httpRequest.Host, ct);
+        await events.AppendAsync("Information", "Content", "Publish",
+            $"{username} published content V{result.Version}.", cancellationToken: ct);
+        return Results.Ok(result);
     }
-    var current = await repository.GetAsync(ct);
-    var validation = ContentValidator.Validate(modules, assetStorage, httpRequest.Host, current);
-    if (validation.Count > 0) return Results.ValidationProblem(validation);
-    var content = await repository.SaveAsync(modules, username, ct);
-    await drafts.ResetAsync(content, ct);
-    await events.AppendAsync("Information", "Content", "Publish", $"{username} 发布了内容版本 V{content.Version}。", cancellationToken: ct);
-    return Results.Ok(content);
+    catch (ContentDraftValidationException exception) { return Results.ValidationProblem(exception.Errors); }
+    catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
 });
 app.MapGet("/api/content/versions", async (HttpRequest request, AdminSessionStore sessions, IContentRepository repository, CancellationToken ct) =>
     sessions.TryValidate(request, out _) ? Results.Ok(await repository.GetHistoryAsync(ct)) : Results.Unauthorized());
-app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpRequest request, AdminSessionStore sessions,
-    IContentRepository repository, AssetStorage assetStorage, ContentDraftWorkflowService drafts,
+app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpRequest request,
+    RollbackContentRequest rollbackRequest, AdminSessionStore sessions, ContentDraftWorkflowService drafts,
     OperationalEventRepository events, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
     try
     {
-        var target = await repository.GetVersionAsync(version, ct);
-        var validation = ContentValidator.Validate(target.Modules, assetStorage, request.Host, legacyValidation: LegacyNarrationAudioValidation.AllowHistorical);
-        if (validation.Count > 0) return Results.ValidationProblem(validation);
-        var content = await repository.RollbackAsync(version, username, ct);
-        await drafts.ResetAsync(content, ct);
+        var content = await drafts.RollbackAsync(version, rollbackRequest, username, request.Host, ct);
         await events.AppendAsync("Warning", "Content", "Rollback", $"{username} 将内容回滚至 V{version}，生成新版本 V{content.Version}。", cancellationToken: ct);
         return Results.Ok(content);
     }
+    catch (ContentDraftValidationException exception) { return Results.ValidationProblem(exception.Errors); }
+    catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 app.MapPost("/api/assets/upload", async (HttpContext context, AdminSessionStore sessions, AssetStorage storage, CancellationToken ct) =>
@@ -182,10 +178,19 @@ app.MapPost("/api/assets/upload", async (HttpContext context, AdminSessionStore 
         return Results.BadRequest(new { message = exception.Message });
     }
 });
-app.MapDelete("/api/assets/{storedName}", (string storedName, HttpRequest request, AdminSessionStore sessions, AssetStorage storage) =>
+app.MapDelete("/api/assets/{storedName}", async (string storedName, HttpRequest request,
+    AdminSessionStore sessions, AssetReferenceProtectionService protection, CancellationToken ct) =>
 {
     if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
-    return storage.Delete(storedName) ? Results.NoContent() : Results.NotFound();
+    var result = await protection.DeleteIfUnreferencedAsync(storedName, ct);
+    if (result.Protected)
+        return Results.Conflict(new
+        {
+            code = "asset_is_referenced",
+            message = "该素材仍被草稿、正式版本、历史版本或有效候选语音引用，不能删除。",
+            references = result.References
+        });
+    return result.Deleted ? Results.NoContent() : Results.NotFound();
 });
 app.MapPost("/api/narration-audio/bind-upload", (HttpRequest httpRequest,
     CreateManualNarrationAudioBindingRequest request, AdminSessionStore sessions,

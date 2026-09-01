@@ -105,7 +105,12 @@ public sealed record TtsSynthesisRequest(string Text, string Voice, double Rate,
 
 public sealed record TtsSynthesisResult(string AudioUrl, double DurationSeconds, string ProviderRequestId);
 
-public sealed record ContentSyncAsset(string Url, string Sha256, long SizeBytes);
+public sealed record ContentSyncAsset(
+    string Url,
+    string Sha256,
+    long SizeBytes,
+    string? AssetId = null,
+    string? MediaType = null);
 
 public sealed record ContentSyncManifest(long Version, IReadOnlyList<ContentSyncAsset> Assets);
 

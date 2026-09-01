@@ -12,7 +12,10 @@ export interface TtsStatus { provider: string; voice: string; configured: boolea
 export interface TtsResult { audioUrl: string; durationSeconds: number; providerRequestId: string }
 export type NarrationAudioBindingStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6
 export interface NarrationAudioDraftStatus { moduleId: string; nodeId: string; status: NarrationAudioBindingStatus; message: string }
-export interface ContentDraftSnapshot { baseContentVersion: number; revision: number; updatedAtUtc: string; updatedBy: string; modules: ExhibitionModule[]; narrationAudioStatuses: NarrationAudioDraftStatus[] }
+export interface ContentPublishIssue { moduleId: string; nodeId: string; moduleName: string; nodeName: string; code: string; severity: 0 | 1; message: string; narrationAudioStatus: NarrationAudioBindingStatus | null }
+export interface NarrationAudioPublishSummary { fresh: number; missing: number; staleText: number; staleSynthesisConfiguration: number; legacyUnverified: number; invalidAsset: number; invalidBinding: number; blockingIssues: number; warnings: number }
+export interface ContentPublishReadiness { canPublish: boolean; narrationAudio: NarrationAudioPublishSummary; issues: ContentPublishIssue[] }
+export interface ContentDraftSnapshot { baseContentVersion: number; revision: number; updatedAtUtc: string; updatedBy: string; modules: ExhibitionModule[]; narrationAudioStatuses: NarrationAudioDraftStatus[]; publishReadiness: ContentPublishReadiness | null }
 export interface TtsVoiceDescriptor { voiceId: string; displayName: string; language: string }
 export interface TtsProviderCapabilities { maxTextLength: number; minRate: number; maxRate: number; minPitch: number; maxPitch: number; supportedMediaTypes: string[] }
 export interface TtsProviderDescriptor { providerId: string; displayName: string; available: boolean; developmentOnly: boolean; unavailableReason: string | null; voices: TtsVoiceDescriptor[]; capabilities: TtsProviderCapabilities }
@@ -56,6 +59,8 @@ const friendlyApiError = (code: string | null, fallback: string): string => {
     provider_unavailable: '语音合成服务当前不可用。',
     voice_not_found: '所选音色当前不可用，请重新选择。',
     invalid_input: '讲解词或语音参数不受当前服务支持。',
+    publish_revision_required: '发布状态已过期，请刷新内容后重新确认。',
+    asset_is_referenced: '该素材仍被草稿、正式版本、历史版本或候选语音引用，不能删除。',
   }
   return code ? messages[code] ?? fallback : fallback
 }
@@ -111,7 +116,7 @@ export const api = {
   saveRoute: (route: { id: string | null; name: string; moduleIds: string[] }) => request<NarrationRoute>('/api/routes', { method: 'POST', body: JSON.stringify(route) }, true),
   deleteRoute: (id: string) => request<void>(`/api/routes/${encodeURIComponent(id)}`, { method: 'DELETE' }, true),
   contentVersions: () => request<ContentVersionSummary[]>('/api/content/versions', undefined, true),
-  rollbackContent: (version: number) => request<PublishedContent>(`/api/content/rollback/${version}`, { method: 'POST' }, true),
+  rollbackContent: (version: number, expectedContentVersion: number, expectedDraftRevision: number) => request<PublishedContent>(`/api/content/rollback/${version}`, { method: 'POST', body: JSON.stringify({ expectedContentVersion, expectedDraftRevision }) }, true),
   operations: (count = 200) => request<OperationalEvent[]>(`/api/operations?count=${count}`, undefined, true),
   synthesize: (text: string, voice: string) => request<TtsResult>('/api/tts/synthesize', { method: 'POST', body: JSON.stringify({ text, voice, rate: 1, volume: 1, pitch: 0 }) }, true),
   ttsProviders: () => request<TtsProviderDescriptor[]>('/api/tts/providers', undefined, true),
