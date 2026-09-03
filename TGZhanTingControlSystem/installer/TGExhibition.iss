@@ -70,7 +70,6 @@ Name: "{autodesktop}\TG智慧展厅"; Filename: "{app}\Launcher\TG.Control.Launc
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加选项："; Flags: checkedonce
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Tools\Install-TGExhibition.ps1"" -InstallRoot ""{app}"" -DataRoot ""{commonappdata}\TG Exhibition"""; StatusMsg: "正在注册系统服务、现场配置和防火墙规则……"; Flags: runhidden waituntilterminated
 Filename: "{app}\Launcher\TG.Control.Launcher.exe"; Description: "启动TG智慧展厅运行管理"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -92,6 +91,25 @@ begin
       SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Sleep(5000);
   end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+  PowerShellPath: String;
+  Parameters: String;
+begin
+  if CurStep <> ssPostInstall then
+    Exit;
+
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' +
+    ExpandConstant('{app}\Tools\Install-TGExhibition.ps1') + '" -InstallRoot "' +
+    ExpandConstant('{app}') + '" -DataRoot "' +
+    ExpandConstant('{commonappdata}\TG Exhibition') + '"';
+  if (not Exec(PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or
+     (ResultCode <> 0) then
+    RaiseException('系统服务与现场配置注册失败，错误代码：' + IntToStr(ResultCode));
 end;
 
 function InitializeUninstall(): Boolean;

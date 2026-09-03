@@ -37,7 +37,7 @@ $required = @(
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\config.json',
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\pytorch_model.bin',
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\vocab.txt',
-    'Tools\Install-TGExhibition.ps1', 'Tools\Uninstall-TGExhibition.ps1',
+    'Tools\Install-TGExhibition.ps1', 'Tools\Uninstall-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1',
     'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt'
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) })

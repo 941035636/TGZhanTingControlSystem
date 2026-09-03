@@ -103,7 +103,8 @@ $requiredFiles = @(
     'TtsWorker\MeloTtsLocal\runtime\python.exe',
     'TtsWorker\MeloTtsLocal\models\MeloTTS-Chinese\checkpoint.pth',
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\pytorch_model.bin',
-    'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt'
+    'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt',
+    'Tools\Install-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1'
 )
 $missingFiles = @($requiredFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $packageRoot $_) -PathType Leaf) })
 if ($missingFiles.Count -gt 0) { throw "Production package is incomplete:`n$($missingFiles -join "`n")" }

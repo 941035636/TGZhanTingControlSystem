@@ -6,7 +6,7 @@ Frozen input baseline: `510a6070dc25a303aec48d40e36e376692747e35`
 
 Target: Windows 10/11 x64, offline exhibition deployment
 
-Status: implementation and build complete; clean-machine/elevated installation acceptance remains `BLOCKED`
+Status: implementation, build and elevated development-host installation complete; clean-machine acceptance remains `BLOCKED`
 
 ## 1. Scope and outcome
 
@@ -182,7 +182,7 @@ Service name: `TG Exhibition Control Server`
 Installation behavior:
 
 - validates elevation and required binaries;
-- registers the self-contained Server executable directly, without a third-party service wrapper;
+- registers the self-contained Server executable with `New-Service`, without a third-party service wrapper;
 - uses automatic startup;
 - configures recovery delays of 5 seconds, 10 seconds and 30 seconds;
 - enables failure actions for non-crash failures;
@@ -284,8 +284,8 @@ expanded into that stronger claim.
 Server and Launcher PDBs are excluded from the production package. This avoids shipping unnecessary debug symbols and
 source-path metadata.
 
-The final pipeline was run again into an independent empty output. All 19,010 payload entries matched the installer
-source package by path, size and SHA-256.
+The final pipeline was run again into an independent empty output after the installation hardening changes. All
+19,011 payload entries matched the final installer source package by path, size and SHA-256.
 
 ## 10. Installer
 
@@ -309,11 +309,35 @@ Installer actions:
 - creates or preserves site configuration;
 - establishes ACLs;
 - registers service startup/recovery;
+- treats a nonzero service/config registration result as an installer failure instead of reporting false success;
 - creates only the Server private-network firewall rule;
 - registers Launcher at Windows logon;
 - creates Start Menu and optional desktop shortcuts;
 - keeps ProgramData by default on uninstall;
 - offers permanent ProgramData removal only through an explicit confirmation with default `No`.
+
+### Installer registration incident and permanent fix
+
+The first elevated installation candidate copied the application successfully but did not create the Server service.
+The installed registration helper returned exit code `1`; direct diagnostic execution identified `sc.exe create` exit
+code `1639`, caused by command-line parsing of the service registration arguments. Because that helper had originally
+been declared as a normal Inno `[Run]` entry, Setup still reported success even though registration failed. This was
+the direct cause of AdminWeb repeatedly being unavailable at `http://127.0.0.1:5080/` after installation.
+
+The production fix is deliberately layered:
+
+- service creation now uses PowerShell `New-Service` after deterministically stopping and removing any existing
+  registration;
+- SCM recovery policy still uses checked `sc.exe` calls with correctly separated arguments;
+- Inno invokes registration from `CurStepChanged(ssPostInstall)` and raises an installer error for any nonzero result;
+- an installed `Test-AdminLogin.ps1` check verifies the generated site credential through the real login API without
+  printing the username/password;
+- `server.site.json` and `initial-credentials.txt` are restricted to SYSTEM and Administrators, while kiosk users can
+  read only the terminal configuration files.
+
+The final Setup was then used for a real elevated overwrite installation. Setup returned `0`, the installation log
+recorded `Installation process succeeded`, the service was `Automatic`/`Running` as LocalSystem, AdminWeb returned
+HTTP 200, the Server and Worker health checks passed, and the installed random credential passed the login API check.
 
 Inno Setup's license text is included in `ThirdParty/InnoSetup-LICENSE.txt`. The upstream project asks commercial users
 to purchase a commercial license. Commercial procurement/legal review remains a release gate.
@@ -356,8 +380,8 @@ target is exactly `%ProgramData%\TG Exhibition` before recursive removal.
 | LedPlayer Windows | `PASS` | Unity batch build exited 0; `libvlc.dll` present in full build tree |
 | Launcher | `PASS` | self-contained `win-x64` single-file publish |
 | MeloTTS bundle | `PASS` | repeatable bundle created; standalone offline synthesis passed |
-| Production Package | `PASS` | 19,010 entries, complete SHA-256 verification |
-| Package reproducibility | `PASS` | independent clean output matched all 19,010 payload entries |
+| Production Package | `PASS` | 19,011 entries, complete SHA-256 verification |
+| Package reproducibility | `PASS` | independent clean output matched all 19,011 final payload entries |
 | Inno compiler | `PASS` | Setup executable generated without compile error |
 
 ### Automated regression
@@ -384,14 +408,22 @@ target is exactly `%ProgramData%\TG Exhibition` before recursive removal.
 | external daily Server log is created | `PASS` |
 | package contains no Server/Launcher PDB | `PASS` |
 | package text config/scripts contain no tested development absolute paths | `PASS` |
+| elevated Setup overwrite installation on Windows 10 x64 | `PASS` |
+| installed Server service is `Automatic`, `Running`, LocalSystem | `PASS` |
+| installed AdminWeb returns HTTP 200 | `PASS` |
+| AdminWeb login page renders in a real browser with no console warning/error | `PASS` |
+| installed MeloTTS Worker health reports available | `PASS` |
+| installed random Admin credential is accepted by login API | `PASS` |
+| standard kiosk user cannot read `server.site.json` | `PASS` |
+| reinstall created ProgramData configuration backups | `PASS` |
 
 ## 13. Artifact inventory
 
 Final installer source package:
 
-- files: `19,010`;
-- bytes: `2,936,462,676` (approximately 2.74 GiB);
-- manifest SHA-256: `f58df784ab7cf1a9326c405ea39d62cc8e4bd42e1431133c819d318a015b13d3`.
+- files: `19,011`;
+- payload bytes: `2,936,462,715` (approximately 2.74 GiB);
+- manifest SHA-256: `84786d9f0d3f50cb8f64ba099d923232911c7c09486acc7fe7e5bea44a07f3da`.
 
 Component sizes:
 
@@ -402,14 +434,14 @@ Component sizes:
 | TouchClient | 128 | approximately 62 MB |
 | LedPlayer | 410 | approximately 169 MB |
 | TtsWorker | 18,125 | 2,441,179,365 |
-| Tools | 3 | approximately 12 KB |
+| Tools | 4 | 13,782 |
 | ThirdParty | 3 | approximately 5 KB |
 
 Final Setup candidate:
 
 - file: `artifacts/Phase9G/Installer/TG智慧展厅智能中控系统_Setup.exe`;
-- bytes: `1,178,372,199` (approximately 1.10 GiB);
-- SHA-256: `984b52fc09918fc67370a3ae0768a717431db597f0a5dacd24e7aba4a0c74f57`;
+- bytes: `1,178,381,730` (approximately 1.10 GiB);
+- SHA-256: `36e2f0eed8d0574877bc3730c88d7fac748a53e9a9ab2307b1585b33cb42a448`;
 - Authenticode: `NotSigned`.
 
 Artifacts are intentionally ignored by Git. Runtime/model binaries remain release artifacts, not source-controlled
@@ -424,10 +456,11 @@ The classifications below are intentionally conservative.
 | production package generation | `PASS` | complete clean rebuild and manifest verification |
 | installer compilation | `PASS` | final Setup generated by Inno Setup 7.1.0 x64 |
 | installer Authenticode signing | `BLOCKED` | no production code-signing certificate is available |
-| actual elevated install on this development machine | `NOT RUN` | avoiding mutation of the active development host |
+| actual elevated install/reinstall on this development machine | `PASS` | fixed Setup returned 0; installation log reports success |
 | clean Windows 10/11 x64 install | `BLOCKED` | no clean VM/physical acceptance machine is available |
 | no VS/Unity/Python/Node/Git prerequisites | `BLOCKED` for clean-machine claim | package is self-contained by inventory, but clean-host proof is unavailable |
-| Server Service register/start/stop/restart | `BLOCKED` | requires elevated clean-machine installation |
+| Server Service register/start | `PASS` | installed service is Automatic/Running and health check passes |
+| Server Service stop/restart | `NOT RUN` | service was replaced during reinstall; explicit operator cycle not separately executed |
 | service recovery after abnormal exit | `BLOCKED` | SCM policy is configured; destructive runtime test not performed here |
 | Windows reboot/logon autostart | `BLOCKED` | requires a rebootable acceptance machine |
 | upgrade/reinstall data retention | `BLOCKED` | scripts preserve/backup data; real V1-to-update install not executed |
@@ -485,6 +518,7 @@ Deployment and packaging:
 - `scripts/deployment/Install-TGExhibition.ps1`
 - `scripts/deployment/Uninstall-TGExhibition.ps1`
 - `scripts/deployment/Test-DeploymentHealth.ps1`
+- `scripts/deployment/Test-AdminLogin.ps1`
 - `scripts/Build-All.ps1`
 - `scripts/Build-MeloTtsWindowsBundle.ps1`
 - `.gitignore`

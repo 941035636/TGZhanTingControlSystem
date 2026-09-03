@@ -125,10 +125,21 @@ if ($serverCreated) {
     [IO.File]::WriteAllText($credentialsPath, $credentialText, [Text.UTF8Encoding]::new($false))
 }
 
-# Program Files remains read-only at runtime. Only the required ProgramData subtrees are writable by kiosk users.
-& "$env:SystemRoot\System32\icacls.exe" $configDirectory '/inheritance:r' '/grant:r' 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' 'Users:(OI)(CI)RX' | Out-Null
-if ($serverCreated) {
-    & "$env:SystemRoot\System32\icacls.exe" $credentialsPath '/inheritance:r' '/grant:r' 'SYSTEM:F' 'Administrators:F' | Out-Null
+# Program Files remains read-only at runtime. Kiosk users may traverse the config directory, but only the two
+# terminal configs are readable by them. Server credentials and the first-install credential note remain restricted.
+& "$env:SystemRoot\System32\icacls.exe" $configDirectory '/inheritance:r' '/grant:r' `
+    'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' 'Users:(RX)' | Out-Null
+$serverConfigPath = Join-Path $configDirectory 'server.site.json'
+& "$env:SystemRoot\System32\icacls.exe" $serverConfigPath '/inheritance:r' '/grant:r' `
+    'SYSTEM:F' 'Administrators:F' | Out-Null
+foreach ($terminalConfigName in @('touch-client.json','led-player.json','launcher.json')) {
+    & "$env:SystemRoot\System32\icacls.exe" (Join-Path $configDirectory $terminalConfigName) `
+        '/inheritance:r' '/grant:r' 'SYSTEM:F' 'Administrators:F' 'Users:R' | Out-Null
+}
+$credentialsPath = Join-Path $configDirectory 'initial-credentials.txt'
+if (Test-Path -LiteralPath $credentialsPath) {
+    & "$env:SystemRoot\System32\icacls.exe" $credentialsPath '/inheritance:r' '/grant:r' `
+        'SYSTEM:F' 'Administrators:F' | Out-Null
 }
 foreach ($writableName in @('Cache','Logs','Runtime')) {
     & "$env:SystemRoot\System32\icacls.exe" (Join-Path $data $writableName) '/inheritance:r' '/grant:r' 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' 'Users:(OI)(CI)M' | Out-Null
@@ -137,12 +148,18 @@ foreach ($writableName in @('Cache','Logs','Runtime')) {
 $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if ($service) {
     if ($service.Status -ne 'Stopped') { Stop-Service -Name $serviceName -Force; $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) }
-    Invoke-Sc @('config', $serviceName, "binPath= `"$serverExe`"", 'start= auto')
-} else {
-    Invoke-Sc @('create', $serviceName, "binPath= `"$serverExe`"", 'start= auto', 'DisplayName= TG Exhibition Control Server')
+    Invoke-Sc @('delete', $serviceName)
+    for ($attempt = 0; $attempt -lt 30 -and (Get-Service -Name $serviceName -ErrorAction SilentlyContinue); $attempt++) {
+        Start-Sleep -Milliseconds 500
+    }
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        throw 'The previous Server service could not be removed before registration.'
+    }
 }
-Invoke-Sc @('description', $serviceName, 'TG Exhibition content, playback coordination, and local TTS service')
-Invoke-Sc @('failure', $serviceName, 'reset= 86400', 'actions= restart/5000/restart/10000/restart/30000')
+New-Service -Name $serviceName -BinaryPathName ('"' + $serverExe + '"') `
+    -DisplayName 'TG Exhibition Control Server' -Description 'TG Exhibition content, playback coordination, and local TTS service' `
+    -StartupType Automatic | Out-Null
+Invoke-Sc @('failure', $serviceName, 'reset=', '86400', 'actions=', 'restart/5000/restart/10000/restart/30000')
 Invoke-Sc @('failureflag', $serviceName, '1')
 
 & "$env:SystemRoot\System32\netsh.exe" advfirewall firewall delete rule name="$firewallRuleName" | Out-Null
