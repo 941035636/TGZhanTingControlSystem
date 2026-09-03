@@ -14,8 +14,9 @@ namespace TG.Control.LedPlayer
     public sealed class LedPlaybackController : MonoBehaviour
     {
         [SerializeField] private LedApiClient apiClient;
-        [SerializeField] private UniversalMediaPlaybackAdapter playbackAdapter;
+        [SerializeField] private MonoBehaviour playbackAdapterComponent;
         [SerializeField] private AudioSource narrationAudioSource;
+        [SerializeField] private float firstVideoFrameTimeoutSeconds = 8f;
 
         private readonly LedContentCache contentCache = LedContentCache.Shared;
         private int playbackGeneration;
@@ -24,6 +25,7 @@ namespace TG.Control.LedPlayer
         private bool videoPrepared;
         private bool narrationPrepared;
         private bool playbackPaused;
+        private IMediaPlaybackAdapter PlaybackAdapter => playbackAdapterComponent as IMediaPlaybackAdapter;
         public event Action<bool> PlaybackActiveChanged;
 
         private void OnEnable()
@@ -39,7 +41,7 @@ namespace TG.Control.LedPlayer
 
         private void HandleCommand(PlaybackCommand command)
         {
-            if (apiClient == null || playbackAdapter == null || narrationAudioSource == null)
+            if (apiClient == null || PlaybackAdapter == null || narrationAudioSource == null)
             {
                 Debug.LogError("LED声画播放组件未完成初始化，无法执行播放指令。");
                 return;
@@ -67,13 +69,13 @@ namespace TG.Control.LedPlayer
                     break;
                 case PlaybackAction.Pause:
                     playbackPaused = true;
-                    if (videoPrepared) playbackAdapter.Pause();
+                    if (videoPrepared) PlaybackAdapter.Pause();
                     if (narrationPrepared) narrationAudioSource.Pause();
                     apiClient.Report(command, PlaybackState.Paused, CurrentPositionSeconds());
                     break;
                 case PlaybackAction.Resume:
                     playbackPaused = false;
-                    if (videoPrepared) playbackAdapter.Resume();
+                    if (videoPrepared) PlaybackAdapter.Resume();
                     if (narrationPrepared) narrationAudioSource.UnPause();
                     apiClient.Report(command, PlaybackState.Playing, CurrentPositionSeconds());
                     break;
@@ -142,7 +144,7 @@ namespace TG.Control.LedPlayer
             {
                 var prepared = false;
                 string prepareError = null;
-                playbackAdapter.Prepare(localVideoUrl, (ok, error) => { prepared = ok; prepareError = error; });
+                PlaybackAdapter.Prepare(localVideoUrl, (ok, error) => { prepared = ok; prepareError = error; });
                 while (!prepared && prepareError == null)
                 {
                     if (generation != playbackGeneration) yield break;
@@ -203,7 +205,7 @@ namespace TG.Control.LedPlayer
             var lateBySeconds = Math.Max(0, (DateTimeOffset.UtcNow - executeAt).TotalSeconds);
             var startPosition = command.positionSeconds + lateBySeconds;
             ApplyMix(command);
-            if (videoPrepared) playbackAdapter.Play(startPosition);
+            if (videoPrepared) PlaybackAdapter.Play(startPosition);
             if (narrationPrepared)
             {
                 narrationAudioSource.time = ClampAudioPosition(startPosition);
@@ -211,13 +213,42 @@ namespace TG.Control.LedPlayer
             }
             if (playbackPaused)
             {
-                if (videoPrepared) playbackAdapter.Pause();
+                if (videoPrepared) PlaybackAdapter.Pause();
                 if (narrationPrepared) narrationAudioSource.Pause();
             }
             apiClient.Report(command, playbackPaused ? PlaybackState.Paused : PlaybackState.Playing, startPosition);
 
-            // Allow Unity and the native video backend to enter playing state before testing completion.
-            yield return null;
+            // A native decoder can report Playing even when it failed to provide Unity with a
+            // renderable texture. Confirm the first frame so a black screen is never accepted
+            // as a successful LED start.
+            if (videoPrepared && PlaybackAdapter is IVideoPlaybackDiagnostics diagnostics)
+            {
+                var frameDeadline = Time.realtimeSinceStartup + firstVideoFrameTimeoutSeconds;
+                while (generation == playbackGeneration && !diagnostics.HasRenderableVideoFrame &&
+                       Time.realtimeSinceStartup < frameDeadline)
+                {
+                    if (playbackPaused) frameDeadline += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+
+                if (generation != playbackGeneration) yield break;
+                if (!diagnostics.HasRenderableVideoFrame)
+                {
+                    var backend = string.IsNullOrWhiteSpace(diagnostics.PlaybackBackend)
+                        ? "unknown backend"
+                        : diagnostics.PlaybackBackend;
+                    CancelPlayback(true);
+                    Fail(command, "视频已启动但未生成可显示画面，请检查视频编码或播放组件。播放路径：" + backend);
+                    yield break;
+                }
+
+                Debug.Log($"[LED Player] Video output verified via {diagnostics.PlaybackBackend}.");
+            }
+            else
+            {
+                yield return null;
+            }
+
             while (generation == playbackGeneration)
             {
                 if (playbackPaused)
@@ -226,7 +257,7 @@ namespace TG.Control.LedPlayer
                     continue;
                 }
 
-                var videoFinished = !videoPrepared || playbackAdapter.IsFinished;
+                var videoFinished = !videoPrepared || PlaybackAdapter.IsFinished;
                 var narrationFinished = !narrationPrepared || !narrationAudioSource.isPlaying;
                 if (videoFinished && narrationFinished) break;
                 yield return null;
@@ -252,33 +283,33 @@ namespace TG.Control.LedPlayer
             narrationAudioSource.volume = Mathf.Clamp01((float)narrationVolume);
             if (!narrationPrepared)
             {
-                playbackAdapter.SetVolume(1);
+                PlaybackAdapter.SetVolume(1);
                 return;
             }
 
             switch (command.audioMixPolicy)
             {
                 case AudioMixPolicy.KeepOriginal:
-                    playbackAdapter.SetVolume(1);
+                    PlaybackAdapter.SetVolume(1);
                     break;
                 case AudioMixPolicy.MuteVideo:
-                    playbackAdapter.SetVolume(0);
+                    PlaybackAdapter.SetVolume(0);
                     break;
                 default:
-                    playbackAdapter.SetVolume(command.videoVolume > 0 ? command.videoVolume : 0.25);
+                    PlaybackAdapter.SetVolume(command.videoVolume > 0 ? command.videoVolume : 0.25);
                     break;
             }
         }
 
         private void SeekAll(double positionSeconds)
         {
-            if (videoPrepared) playbackAdapter.Seek(positionSeconds);
+            if (videoPrepared) PlaybackAdapter.Seek(positionSeconds);
             if (narrationPrepared) narrationAudioSource.time = ClampAudioPosition(positionSeconds);
         }
 
         private double CurrentPositionSeconds()
         {
-            var videoPosition = videoPrepared ? playbackAdapter.CurrentTimeSeconds : 0;
+            var videoPosition = videoPrepared ? PlaybackAdapter.CurrentTimeSeconds : 0;
             var narrationPosition = narrationPrepared ? narrationAudioSource.time : 0;
             return Math.Max(videoPosition, narrationPosition);
         }
@@ -296,7 +327,7 @@ namespace TG.Control.LedPlayer
             narrationPrepared = false;
             preparedVideoUrl = null;
             preparedNarrationUrl = null;
-            if (playbackAdapter != null) playbackAdapter.Stop();
+            if (PlaybackAdapter != null) PlaybackAdapter.Stop();
             if (narrationAudioSource != null) narrationAudioSource.Stop();
             if (releaseAudio) ReleaseNarrationClip();
         }

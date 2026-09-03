@@ -12,6 +12,10 @@ namespace TG.Control.LedPlayer
         [SerializeField] private string serverBaseUrl = "http://127.0.0.1:5080";
         [SerializeField] private string clientId = "led-main";
         [SerializeField] private string terminalApiKey = "TG-DEVELOPMENT-ONLY";
+        [SerializeField] private float contentCheckIntervalSeconds = 10f;
+        [SerializeField] private float failedSyncRetrySeconds = 2f;
+        [SerializeField] private int assetDownloadAttempts = 3;
+        [SerializeField] private float assetRetryDelaySeconds = 2f;
         public event Action<PlaybackCommand> CommandReceived;
         public event Action<bool> ConnectionChanged;
         public event Action<ContentSyncProgress> ContentSyncChanged;
@@ -19,12 +23,10 @@ namespace TG.Control.LedPlayer
         private bool running;
         private readonly string instanceId = Guid.NewGuid().ToString("N");
         private bool connected;
-        private bool syncStarted;
         private bool syncing;
         private bool contentReady;
         private long syncedContentVersion;
         private long uiExperienceVersion = -1;
-        private float nextContentCheckAt;
         private Coroutine contentSyncCoroutine;
         private bool playbackPriorityActive;
         private string contentStatus = "LED正在检查内容版本";
@@ -38,8 +40,8 @@ namespace TG.Control.LedPlayer
         private void OnEnable()
         {
             running = true;
-            syncStarted = false;
             StartCoroutine(PollLoop());
+            StartCoroutine(ContentSyncLoop());
             StartCoroutine(UiExperienceLoop());
         }
 
@@ -73,7 +75,6 @@ namespace TG.Control.LedPlayer
         public void EndPlaybackPriority()
         {
             playbackPriorityActive = false;
-            nextContentCheckAt = Time.realtimeSinceStartup + 1;
         }
 
         public void Report(PlaybackCommand command, PlaybackState state, double position = 0, string error = null, double progress = 0) =>
@@ -96,13 +97,7 @@ namespace TG.Control.LedPlayer
                     instanceId = instanceId
                 }, () => registered = true);
                 SetConnected(registered);
-                if (!registered) { syncStarted = false; yield return new WaitForSecondsRealtime(2); continue; }
-                if (!syncStarted)
-                {
-                    syncStarted = true;
-                    StartContentSync();
-                    nextContentCheckAt = Time.realtimeSinceStartup + 10;
-                }
+                if (!registered) { yield return new WaitForSecondsRealtime(2); continue; }
 
                 while (running)
                 {
@@ -115,12 +110,17 @@ namespace TG.Control.LedPlayer
                             CommandReceived?.Invoke(JsonUtility.FromJson<PlaybackCommand>(request.downloadHandler.text));
                         else if (request.responseCode != 204) { SetConnected(false); break; }
                     }
-                    if (!syncing && !playbackPriorityActive && Time.realtimeSinceStartup >= nextContentCheckAt)
-                    {
-                        nextContentCheckAt = Time.realtimeSinceStartup + 10;
-                        StartContentSync();
-                    }
                 }
+            }
+        }
+
+        private IEnumerator ContentSyncLoop()
+        {
+            while (running)
+            {
+                if (connected && !syncing && !playbackPriorityActive) StartContentSync();
+                var delay = contentReady ? contentCheckIntervalSeconds : failedSyncRetrySeconds;
+                yield return new WaitForSecondsRealtime(Mathf.Max(1f, delay));
             }
         }
 
@@ -140,10 +140,11 @@ namespace TG.Control.LedPlayer
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    contentReady = false;
-                    contentStatus = "获取内容清单失败：" + request.error;
+                    contentStatus = contentReady
+                        ? "已保留内容 V" + syncedContentVersion + "，获取最新清单失败：" + request.error
+                        : "获取内容清单失败：" + request.error;
                     ContentSyncChanged?.Invoke(new ContentSyncProgress { error = contentStatus, finished = true });
-                    yield return ReportPresence(false, contentStatus);
+                    yield return ReportPresence(contentReady, contentStatus);
                     syncing = false;
                     contentSyncCoroutine = null;
                     yield break;
@@ -167,14 +168,33 @@ namespace TG.Control.LedPlayer
                     var asset = assets[index];
                     LedContentCache.Shared.RegisterValidation(NormalizeUrl(asset.url), asset.sizeBytes, asset.sha256);
                 }
+
+                // A published content version is immutable. Once every asset for this version has passed
+                // size and SHA validation, periodic manifest checks must not make the terminal temporarily unready.
+                if (contentReady && syncedContentVersion == manifest.version)
+                {
+                    var allFilesPresent = true;
+                    for (var index = 0; index < assets.Length; index++)
+                    {
+                        var asset = assets[index];
+                        if (LedContentCache.Shared.HasExpectedFile(NormalizeUrl(asset.url), asset.sizeBytes)) continue;
+                        allFilesPresent = false;
+                        break;
+                    }
+                    if (allFilesPresent)
+                    {
+                        syncing = false;
+                        contentSyncCoroutine = null;
+                        yield break;
+                    }
+                }
+
                 var progress = new ContentSyncProgress { version = manifest.version, total = assets.Length, completed = 0 };
-                // The manifest version means this terminal understands the published route. Large media files may
-                // continue downloading in the background and must not keep the operator terminal globally locked.
-                syncedContentVersion = manifest.version;
                 contentReady = assets.Length == 0;
+                if (contentReady) syncedContentVersion = manifest.version;
                 contentStatus = contentReady
                     ? "LED内容已就绪"
-                    : "内容 V" + manifest.version + " 已识别，正在后台同步 " + assets.Length + " 个素材";
+                    : "正在同步内容 V" + manifest.version + " 的 " + assets.Length + " 个素材";
                 ContentSyncChanged?.Invoke(progress);
                 yield return ReportPresence(contentReady, contentStatus);
                 for (var index = 0; index < assets.Length && running; index++)
@@ -184,8 +204,18 @@ namespace TG.Control.LedPlayer
                     ContentSyncChanged?.Invoke(progress);
                     var completed = false;
                     string error = null;
-                    yield return LedContentCache.Shared.Resolve(NormalizeUrl(asset.url), _ => completed = true,
-                        value => error = value, asset.sizeBytes, expectedSha256: asset.sha256);
+                    var attempts = Math.Max(1, assetDownloadAttempts);
+                    for (var attempt = 1; attempt <= attempts && running && !playbackPriorityActive; attempt++)
+                    {
+                        completed = false;
+                        error = null;
+                        yield return LedContentCache.Shared.Resolve(NormalizeUrl(asset.url), _ => completed = true,
+                            value => error = value, asset.sizeBytes, expectedSha256: asset.sha256);
+                        if (completed) break;
+                        Debug.LogWarning("LED素材同步第 " + attempt + "/" + attempts + " 次失败：" + error + " URL=" + asset.url);
+                        if (attempt < attempts)
+                            yield return new WaitForSecondsRealtime(Mathf.Max(0.5f, assetRetryDelaySeconds));
+                    }
                     if (!string.IsNullOrWhiteSpace(error))
                     {
                         Debug.LogWarning("LED内容同步失败：" + error + " URL=" + asset.url);
@@ -195,7 +225,9 @@ namespace TG.Control.LedPlayer
                     ContentSyncChanged?.Invoke(progress);
                 }
 
-                var succeeded = progress.completed == progress.total && string.IsNullOrWhiteSpace(progress.error);
+                var succeeded = running && !playbackPriorityActive &&
+                                progress.completed == progress.total && string.IsNullOrWhiteSpace(progress.error);
+                if (succeeded) syncedContentVersion = manifest.version;
                 contentReady = succeeded;
                 syncing = false;
                 contentSyncCoroutine = null;
@@ -205,7 +237,9 @@ namespace TG.Control.LedPlayer
                 var failedCount = Math.Max(0, progress.total - progress.completed);
                 contentStatus = succeeded
                     ? "LED内容已就绪"
-                    : "内容 V" + manifest.version + " 已识别，" + failedCount + " 个素材同步失败";
+                    : playbackPriorityActive
+                        ? "内容 V" + manifest.version + " 同步已暂停，讲解结束后自动继续"
+                        : "内容 V" + manifest.version + " 有 " + failedCount + " 个素材同步失败，将自动重试";
                 yield return ReportPresence(succeeded, contentStatus);
                 Debug.Log("LED内容同步完成：版本 V" + manifest.version + "，" + progress.completed + "/" + progress.total + " 个素材已缓存。");
             }

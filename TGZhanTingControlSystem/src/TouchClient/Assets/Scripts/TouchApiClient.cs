@@ -145,6 +145,7 @@ namespace TG.Control.Touch
             using (var request = UnityWebRequest.Get(ServerBaseUrl + path))
             {
                 ApplyTerminalHeader(request);
+                request.timeout = 15;
                 yield return request.SendWebRequest();
                 if (request.result == UnityWebRequest.Result.Success) success?.Invoke(JsonUtility.FromJson<T>(request.downloadHandler.text));
                 else failure?.Invoke(request.error);
@@ -160,6 +161,7 @@ namespace TG.Control.Touch
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
                 ApplyTerminalHeader(request);
+                request.timeout = 15;
                 yield return request.SendWebRequest();
                 if (request.result == UnityWebRequest.Result.Success)
                 {
@@ -179,6 +181,7 @@ namespace TG.Control.Touch
             using (var request = UnityWebRequest.Delete(ServerBaseUrl + path))
             {
                 ApplyTerminalHeader(request);
+                request.timeout = 15;
                 yield return request.SendWebRequest();
                 if (request.result == UnityWebRequest.Result.Success) success?.Invoke();
                 else failure?.Invoke(request.downloadHandler?.text + " " + request.error);

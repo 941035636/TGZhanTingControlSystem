@@ -9,6 +9,7 @@ namespace TG.Control.Touch
     public sealed class TouchControlFacade : MonoBehaviour
     {
         [SerializeField] private TouchApiClient apiClient;
+        [SerializeField] private float catalogRefreshSeconds = 3f;
         public PublishedContent CurrentContent { get; private set; }
         public NarrationRoute[] CurrentRoutes { get; private set; } = Array.Empty<NarrationRoute>();
         public SystemReadiness CurrentReadiness { get; private set; }
@@ -22,27 +23,75 @@ namespace TG.Control.Touch
         public event Action<NarrationRoute> RouteSaved;
         public event Action<SystemReadiness> ReadinessChanged;
         private int sessionMonitorGeneration;
+        private bool contentRefreshPending;
+        private bool routesRefreshPending;
+        private bool contentLoadedOnce;
+        private bool routesLoadedOnce;
 
         private void Start()
         {
             RefreshContent();
             RefreshRoutes();
+            StartCoroutine(CatalogRefreshLoop());
             StartCoroutine(ReadinessLoop());
             StartCoroutine(RestoreActiveSession());
         }
 
-        public void RefreshContent() => apiClient.GetContent(content =>
-        {
-            CurrentContent = content;
-            apiClient.SetContentVersion(content.version);
-            ContentLoaded?.Invoke(content);
-        }, message => Error?.Invoke(message));
+        public void RefreshContent() => RequestContent(true);
 
-        public void RefreshRoutes() => apiClient.GetRoutes(collection =>
+        public void RefreshRoutes() => RequestRoutes(true);
+
+        private void RequestContent(bool reportFailure)
         {
-            CurrentRoutes = collection?.routes ?? Array.Empty<NarrationRoute>();
-            RoutesLoaded?.Invoke(CurrentRoutes);
-        }, message => Error?.Invoke("读取常用路线失败：" + message));
+            if (contentRefreshPending) return;
+            contentRefreshPending = true;
+            apiClient.GetContent(content =>
+            {
+                contentRefreshPending = false;
+                if (content == null)
+                {
+                    if (reportFailure) Error?.Invoke("服务器返回的正式内容为空。");
+                    return;
+                }
+
+                var changed = !contentLoadedOnce || CurrentContent == null || CurrentContent.version != content.version;
+                contentLoadedOnce = true;
+                CurrentContent = content;
+                apiClient.SetContentVersion(content.version);
+                if (changed)
+                {
+                    Debug.Log("中控已刷新正式内容版本 V" + content.version + "。");
+                    ContentLoaded?.Invoke(content);
+                }
+            }, message =>
+            {
+                contentRefreshPending = false;
+                if (reportFailure) Error?.Invoke(message);
+            });
+        }
+
+        private void RequestRoutes(bool reportFailure)
+        {
+            if (routesRefreshPending) return;
+            routesRefreshPending = true;
+            apiClient.GetRoutes(collection =>
+            {
+                routesRefreshPending = false;
+                var latest = collection?.routes ?? Array.Empty<NarrationRoute>();
+                var changed = !routesLoadedOnce || !RoutesEqual(CurrentRoutes, latest);
+                routesLoadedOnce = true;
+                CurrentRoutes = latest;
+                if (changed)
+                {
+                    Debug.Log("中控已刷新常用路线，共 " + CurrentRoutes.Length + " 条。");
+                    RoutesLoaded?.Invoke(CurrentRoutes);
+                }
+            }, message =>
+            {
+                routesRefreshPending = false;
+                if (reportFailure) Error?.Invoke("读取常用路线失败：" + message);
+            });
+        }
 
         public void SaveRoute(string routeId, string routeName, string[] moduleIds)
         {
@@ -184,13 +233,59 @@ namespace TG.Control.Touch
                 var completed = false;
                 apiClient.GetReadiness(value =>
                 {
+                    var changed = !ReadinessEqual(CurrentReadiness, value);
                     CurrentReadiness = value;
-                    ReadinessChanged?.Invoke(value);
+                    if (changed) ReadinessChanged?.Invoke(value);
                     completed = true;
                 }, _ => completed = true);
                 while (!completed && enabled) yield return null;
                 yield return new WaitForSecondsRealtime(2);
             }
+        }
+
+        private IEnumerator CatalogRefreshLoop()
+        {
+            while (enabled)
+            {
+                yield return new WaitForSecondsRealtime(Mathf.Max(1f, catalogRefreshSeconds));
+                if (!apiClient.IsConnected) continue;
+                RequestContent(false);
+                RequestRoutes(false);
+            }
+        }
+
+        private static bool ReadinessEqual(SystemReadiness left, SystemReadiness right)
+        {
+            if (ReferenceEquals(left, right)) return true;
+            if (left == null || right == null) return false;
+            return left.canStart == right.canStart && left.contentVersion == right.contentVersion &&
+                   left.ledOnline == right.ledOnline && left.ledReady == right.ledReady &&
+                   left.ledContentVersion == right.ledContentVersion &&
+                   string.Equals(left.message, right.message, StringComparison.Ordinal);
+        }
+
+        private static bool RoutesEqual(NarrationRoute[] left, NarrationRoute[] right)
+        {
+            left = left ?? Array.Empty<NarrationRoute>();
+            right = right ?? Array.Empty<NarrationRoute>();
+            if (left.Length != right.Length) return false;
+            for (var index = 0; index < left.Length; index++)
+            {
+                var first = left[index];
+                var second = right[index];
+                if (first == null || second == null)
+                {
+                    if (!ReferenceEquals(first, second)) return false;
+                    continue;
+                }
+                if (!string.Equals(first.id, second.id, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(first.name, second.name, StringComparison.Ordinal) ||
+                    !string.Equals(first.updatedAtUtc, second.updatedAtUtc, StringComparison.Ordinal) ||
+                    !(first.moduleIds ?? Array.Empty<string>()).SequenceEqual(
+                        second.moduleIds ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
         }
     }
 }

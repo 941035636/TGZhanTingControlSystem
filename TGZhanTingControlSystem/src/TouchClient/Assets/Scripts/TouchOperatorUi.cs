@@ -35,6 +35,8 @@ namespace TG.Control.Touch
         private Color accent;
         private PageState pageState;
         private bool navigateToPlaybackWhenSessionArrives;
+        private bool startRequestPending;
+        private bool routesInitialized;
 
         private Image background;
         private TouchAppShell appShell;
@@ -76,6 +78,8 @@ namespace TG.Control.Touch
             readiness = presenter.State.Readiness;
             StartCoroutine(UiExperienceLoop());
             if (presenter.State.Content != null) OnContentLoaded(presenter.State.Content);
+            if (presenter.State.Routes != null && presenter.State.Routes.Length > 0)
+                OnRoutesLoaded(presenter.State.Routes);
             Refresh();
         }
 
@@ -223,11 +227,30 @@ namespace TG.Control.Touch
         private void OnRoutesLoaded(NarrationRoute[] value)
         {
             routes = value ?? Array.Empty<NarrationRoute>();
-            if (routeDraft.IsTemporary)
+            var firstLoad = !routesInitialized;
+            routesInitialized = true;
+            if (firstLoad && routeDraft.IsTemporary && !routeDraft.IsDirty)
             {
                 var lastId = PlayerPrefs.GetString("TG.LastRouteId", string.Empty);
                 var remembered = routes.FirstOrDefault(item => item.id == lastId) ?? routes.FirstOrDefault();
-                if (remembered != null) LoadRoute(remembered);
+                if (remembered != null) LoadRoute(remembered, false);
+            }
+            else if (!routeDraft.IsTemporary && !routeDraft.IsDirty)
+            {
+                var updated = routes.FirstOrDefault(item => string.Equals(item.id, routeDraft.RouteId,
+                    StringComparison.OrdinalIgnoreCase));
+                if (updated != null)
+                {
+                    LoadRoute(updated, false);
+                    status = "管理端路线已更新：" + updated.name;
+                }
+                else
+                {
+                    routeDraft.BeginTemporary();
+                    PlayerPrefs.DeleteKey("TG.LastRouteId");
+                    PlayerPrefs.Save();
+                    status = "当前路线已由管理端删除，请选择其他路线。";
+                }
             }
             Refresh();
         }
@@ -241,6 +264,7 @@ namespace TG.Control.Touch
 
         private void OnSessionChanged(PlaybackSessionStatus value)
         {
+            startRequestPending = false;
             var sameSession = value != null && string.Equals(playbackDisplay.SessionId, value.sessionId,
                 StringComparison.Ordinal);
             if (!sameSession) confirmStop = false;
@@ -262,6 +286,7 @@ namespace TG.Control.Touch
             playbackPageView?.ClearError();
             if (facade.HasActiveSession && navigateToPlaybackWhenSessionArrives)
             {
+                startRequestPending = false;
                 navigateToPlaybackWhenSessionArrives = false;
                 ShowPage(PageState.Playback);
             }
@@ -275,16 +300,21 @@ namespace TG.Control.Touch
             receptionHomePage?.ShowError(status);
             playbackPageView?.ShowError(value);
             if (!facade.HasActiveSession) playbackDisplay.ClearPending();
+            if (startRequestPending && !facade.HasActiveSession)
+            {
+                startRequestPending = false;
+                ShowPage(PageState.Home);
+            }
             Refresh();
         }
 
-        private void LoadRoute(NarrationRoute route)
+        private void LoadRoute(NarrationRoute route, bool announce = true)
         {
             var available = content?.modules.Where(module => module.enabled).Select(module => module.id);
             routeDraft.Load(route, available);
             PlayerPrefs.SetString("TG.LastRouteId", route.id);
             PlayerPrefs.Save();
-            status = "已加载常用路线：" + route.name;
+            if (announce) status = "已加载常用路线：" + route.name;
             Refresh();
         }
 
@@ -329,23 +359,16 @@ namespace TG.Control.Touch
         private void StartRoute(NarrationRoute route)
         {
             LoadRoute(route);
-            status = "正在启动路线：“" + route.name + "”…";
-            navigateToPlaybackWhenSessionArrives = true;
             var moduleIds = route.moduleIds ?? Array.Empty<string>();
-            playbackDisplay.Prepare(route.name, moduleIds);
-            facade.StartModules(moduleIds);
-            Refresh();
+            BeginStart(route.name, moduleIds, () => facade.StartModules(moduleIds));
         }
 
         private void StartAllFromHome()
         {
-            status = "正在准备全部主题讲解…";
-            navigateToPlaybackWhenSessionArrives = true;
-            playbackDisplay.Prepare("全部主题讲解", content?.modules?
+            var moduleIds = content?.modules?
                 .Where(module => module.enabled && module.nodes != null && module.nodes.Length > 0)
-                .OrderBy(module => module.order).Select(module => module.id).ToArray() ?? Array.Empty<string>());
-            facade.StartAll();
-            Refresh();
+                .OrderBy(module => module.order).Select(module => module.id).ToArray() ?? Array.Empty<string>();
+            BeginStart("全部主题讲解", moduleIds, facade.StartAll);
         }
 
         private void ContinueCurrentPlayback()
@@ -392,15 +415,28 @@ namespace TG.Control.Touch
         private void StartSelected()
         {
             if (routeDraft.ModuleIds.Count == 0) return;
-            status = "正在准备讲解路线…";
-            navigateToPlaybackWhenSessionArrives = true;
             var moduleIds = routeDraft.SnapshotModuleIds();
             var routeName = routeDraft.IsTemporary
                 ? (string.IsNullOrWhiteSpace(routeDraft.Name) ? "临时组合" : routeDraft.Name)
                 : routeDraft.Name;
+            BeginStart(routeName, moduleIds, () => facade.StartModules(moduleIds));
+        }
+
+        private void BeginStart(string routeName, string[] moduleIds, Action start)
+        {
+            if (moduleIds == null || moduleIds.Length == 0)
+            {
+                OnError("当前路线没有可讲解主题。");
+                return;
+            }
+
+            status = "正在启动路线：“" + routeName + "”…";
+            startRequestPending = true;
+            navigateToPlaybackWhenSessionArrives = true;
             playbackDisplay.Prepare(routeName, moduleIds);
-            facade.StartModules(moduleIds);
+            ShowPage(PageState.Playback);
             Refresh();
+            start?.Invoke();
         }
 
         private void ChangeRouteName(string value)
@@ -502,6 +538,34 @@ namespace TG.Control.Touch
                     return;
                 }
                 NewTemporaryRoute();
+                return;
+            }
+
+            if (section == TouchShellSection.Routes)
+            {
+                if (pageState == PageState.RouteEditor && !routeDraft.IsTemporary)
+                {
+                    appShell.SetActiveSection(TouchShellSection.Routes);
+                    return;
+                }
+                if (pageState == PageState.RouteEditor)
+                {
+                    ReturnHome();
+                    if (pageState != PageState.Home) return;
+                }
+
+                var lastId = PlayerPrefs.GetString("TG.LastRouteId", string.Empty);
+                var selected = routes.FirstOrDefault(item => string.Equals(item.id, lastId,
+                                   StringComparison.OrdinalIgnoreCase)) ?? routes.FirstOrDefault();
+                if (selected != null) LoadRoute(selected);
+                else
+                {
+                    routeDraft.BeginTemporary();
+                    status = "暂无正式讲解路线，请编辑并保存第一条常用路线。";
+                }
+                ShowPage(PageState.RouteEditor);
+                appShell.SetActiveSection(TouchShellSection.Routes);
+                Refresh();
                 return;
             }
 

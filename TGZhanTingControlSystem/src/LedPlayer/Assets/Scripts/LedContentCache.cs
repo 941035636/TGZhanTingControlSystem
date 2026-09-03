@@ -30,6 +30,23 @@ namespace TG.Control.LedPlayer
             validationByUrl[mediaUrl] = new ValidationMetadata(expectedSize, expectedSha256);
         }
 
+        public bool HasExpectedFile(string mediaUrl, long expectedSize)
+        {
+            if (string.IsNullOrWhiteSpace(mediaUrl)) return false;
+            if (mediaUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                return Uri.TryCreate(mediaUrl, UriKind.Absolute, out var fileUri) && File.Exists(fileUri.LocalPath);
+            if (Path.IsPathRooted(mediaUrl)) return File.Exists(mediaUrl);
+            try
+            {
+                var file = new FileInfo(GetCachePath(mediaUrl));
+                return file.Exists && file.Length > 0 && (expectedSize <= 0 || file.Length == expectedSize);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public IEnumerator Resolve(string mediaUrl, Action<string> success, Action<string> failure, long expectedSize = 0,
             Action<float> progress = null, string expectedSha256 = null)
         {
@@ -57,10 +74,7 @@ namespace TG.Control.LedPlayer
                 if (string.IsNullOrWhiteSpace(expectedSha256)) expectedSha256 = metadata.Sha256;
             }
 
-            var directory = GetContentDirectory();
-            var extension = Path.GetExtension(new Uri(mediaUrl).AbsolutePath);
-            if (string.IsNullOrWhiteSpace(extension)) extension = ".mp4";
-            var finalPath = Path.Combine(directory, Hash(mediaUrl) + extension);
+            var finalPath = GetCachePath(mediaUrl);
             if (File.Exists(finalPath))
             {
                 bool valid = false;
@@ -78,6 +92,24 @@ namespace TG.Control.LedPlayer
 
             var partialPath = finalPath + ".partial";
             var existingLength = File.Exists(partialPath) ? new FileInfo(partialPath).Length : 0;
+            if (existingLength > 0 && expectedSize > 0 && existingLength >= expectedSize)
+            {
+                var partialValid = false;
+                string partialError = null;
+                yield return ValidateFile(partialPath, expectedSize, expectedSha256,
+                    (ok, error) => { partialValid = ok; partialError = error; });
+                if (partialValid)
+                {
+                    File.Move(partialPath, finalPath);
+                    success(new Uri(finalPath).AbsoluteUri);
+                    yield break;
+                }
+
+                Debug.LogWarning("LED临时缓存无法继续，将从头下载：" + partialError);
+                File.Delete(partialPath);
+                existingLength = 0;
+            }
+
             using (var request = UnityWebRequest.Get(mediaUrl))
             {
                 request.downloadHandler = new DownloadHandlerFile(partialPath, existingLength > 0);
@@ -91,6 +123,27 @@ namespace TG.Control.LedPlayer
                 progress?.Invoke(1f);
                 if (request.result != UnityWebRequest.Result.Success)
                 {
+                    if (request.responseCode == 416 && File.Exists(partialPath))
+                    {
+                        var rangeFileValid = false;
+                        string rangeFileError = null;
+                        if (expectedSize > 0 && !string.IsNullOrWhiteSpace(expectedSha256))
+                            yield return ValidateFile(partialPath, expectedSize, expectedSha256,
+                                (ok, error) => { rangeFileValid = ok; rangeFileError = error; });
+                        else
+                            rangeFileError = "缺少完整性元数据，不能接受416断点文件。";
+                        if (rangeFileValid)
+                        {
+                            File.Move(partialPath, finalPath);
+                            success(new Uri(finalPath).AbsoluteUri);
+                            yield break;
+                        }
+
+                        Debug.LogWarning("LED断点文件收到416且校验失败，将从头下载：" + rangeFileError);
+                        File.Delete(partialPath);
+                        yield return Resolve(mediaUrl, success, failure, expectedSize, progress, expectedSha256);
+                        yield break;
+                    }
                     failure(request.error);
                     yield break;
                 }
@@ -101,7 +154,7 @@ namespace TG.Control.LedPlayer
                 {
                     request.Dispose();
                     if (File.Exists(partialPath)) File.Delete(partialPath);
-                    yield return Resolve(mediaUrl, success, failure, expectedSize, progress);
+                    yield return Resolve(mediaUrl, success, failure, expectedSize, progress, expectedSha256);
                     yield break;
                 }
             }
@@ -160,6 +213,13 @@ namespace TG.Control.LedPlayer
             contentDirectory = Path.Combine(Application.persistentDataPath, "Content");
             Directory.CreateDirectory(contentDirectory);
             return contentDirectory;
+        }
+
+        private string GetCachePath(string mediaUrl)
+        {
+            var extension = Path.GetExtension(new Uri(mediaUrl).AbsolutePath);
+            if (string.IsNullOrWhiteSpace(extension)) extension = ".mp4";
+            return Path.Combine(GetContentDirectory(), Hash(mediaUrl) + extension);
         }
 
         private static string Hash(string value)

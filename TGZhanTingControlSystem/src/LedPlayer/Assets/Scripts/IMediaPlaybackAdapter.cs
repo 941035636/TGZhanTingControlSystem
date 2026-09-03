@@ -15,4 +15,15 @@ namespace TG.Control.LedPlayer
         void Seek(double positionSeconds);
         void SetVolume(double volume01);
     }
+
+    /// <summary>
+    /// Optional diagnostics implemented by video adapters that can prove a decoded frame is
+    /// available to Unity. Playback state alone is insufficient because some native decoders
+    /// can report Playing while failing to expose a renderable texture.
+    /// </summary>
+    public interface IVideoPlaybackDiagnostics
+    {
+        bool HasRenderableVideoFrame { get; }
+        string PlaybackBackend { get; }
+    }
 }
