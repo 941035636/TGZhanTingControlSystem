@@ -57,12 +57,12 @@ public sealed class AdminOptions
 {
     public const string SectionName = "Admin";
     public string Username { get; init; } = "admin";
-    public string Password { get; init; } = "TG@2026";
+    public string Password { get; init; } = "";
     public int SessionHours { get; init; } = 12;
 }
 
 public sealed class TerminalOptions
 {
     public const string SectionName = "Terminal";
-    public string ApiKey { get; init; } = "TG-TERMINAL-2026";
+    public string ApiKey { get; init; } = "";
 }

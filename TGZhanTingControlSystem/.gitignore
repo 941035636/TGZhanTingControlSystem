@@ -2,6 +2,7 @@
 **/bin/
 **/obj/
 **/publish/
+artifacts/
 
 # Node
 **/node_modules/

@@ -16,6 +16,14 @@ namespace TG.Control.LedPlayer
             new System.Collections.Generic.Dictionary<string, ValidationMetadata>(StringComparer.OrdinalIgnoreCase);
         private string contentDirectory;
 
+        public void ConfigureDirectory(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory)) return;
+            var resolved = Path.GetFullPath(Environment.ExpandEnvironmentVariables(directory));
+            Directory.CreateDirectory(resolved);
+            contentDirectory = resolved;
+        }
+
         public void RegisterValidation(string mediaUrl, long expectedSize, string expectedSha256)
         {
             if (string.IsNullOrWhiteSpace(mediaUrl)) return;

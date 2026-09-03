@@ -17,6 +17,16 @@
 - `config.json` SHA-256: `d58b5acdab89ad2bbd65325affab309ae3cb964834b02f9a60587474e81c8bb9`
 - `checkpoint.pth` SHA-256: `a74e9eadffff065c75eb6dfa040efa72cad23e72cfea70d39190bc174fb97093`
 
+## Inno Setup
+
+- Project: Inno Setup
+- Upstream: https://jrsoftware.org/isinfo.php
+- Production installer compiler: Inno Setup 7.x x64
+- Installer compiler is a build-time dependency only; customer machines receive the generated offline Setup executable.
+- Inno Setup is copyrighted software. Commercial distribution must follow its current license terms; see the
+  upstream text copied as `InnoSetup-LICENSE.txt`. The upstream project requests that commercial users purchase
+  a commercial license; release engineering must complete that procurement decision before commercial delivery.
+
 ## BERT model dependency
 
 - Source: https://huggingface.co/bert-base-multilingual-uncased
@@ -26,5 +36,5 @@
 - `vocab.txt` SHA-256: `87b44292b452f6c05afa49b2e488e7eedf79ea4f4c39db6f2f4b37764228ef3f`
 
 The deployment bundle also contains Python and pinned Python packages. Their license files and package metadata are
-retained inside the generated runtime. Before distributing a final installer, the installer packaging process must
-aggregate those notices; Phase 9E does not create the final MSI.
+retained inside the generated runtime. The Phase 9G packaging process copies this notice and the runtime metadata into
+the offline installer; release engineering must review the aggregate before commercial distribution.

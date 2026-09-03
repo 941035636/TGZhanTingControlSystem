@@ -8,6 +8,10 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     Args = args,
     WebRootPath = Path.Combine(AppContext.BaseDirectory, "AdminWeb")
 });
+AddSiteConfiguration(builder.Configuration, args);
+var fileLogDirectory = builder.Configuration["Logging:FileDirectory"];
+if (!string.IsNullOrWhiteSpace(fileLogDirectory))
+    builder.Logging.AddProvider(new DailyFileLoggerProvider(fileLogDirectory));
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = null);
 builder.Host.UseWindowsService(options => options.ServiceName = "TG Exhibition Control Server");
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
@@ -375,6 +379,25 @@ static bool HasOperatorAccess(HttpRequest request, AdminSessionStore sessions, I
     if (HasTerminalAccess(request, terminal)) { actor = "touch-terminal"; return true; }
     actor = string.Empty;
     return false;
+}
+
+static void AddSiteConfiguration(ConfigurationManager configuration, string[] commandLineArguments)
+{
+    var programDataConfig = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "TG Exhibition",
+        "Config",
+        "server.site.json");
+    configuration.AddJsonFile(programDataConfig, optional: true, reloadOnChange: true);
+
+    var explicitSiteConfig = Environment.GetEnvironmentVariable("TG_SERVER_SITE_CONFIG");
+    if (!string.IsNullOrWhiteSpace(explicitSiteConfig))
+        configuration.AddJsonFile(Path.GetFullPath(explicitSiteConfig), optional: false, reloadOnChange: true);
+
+    // Site configuration is loaded after appsettings.json, while environment variables and command-line values
+    // remain the final override layers for development, automated tests and service recovery tooling.
+    configuration.AddEnvironmentVariables();
+    if (commandLineArguments.Length > 0) configuration.AddCommandLine(commandLineArguments);
 }
 
 static IResult DraftWorkflowError(ContentDraftWorkflowException exception) => exception.Failure switch

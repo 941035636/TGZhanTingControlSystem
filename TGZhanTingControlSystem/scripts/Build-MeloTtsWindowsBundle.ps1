@@ -31,7 +31,13 @@ function Get-VerifiedFile {
     param([string]$Name, [string]$Uri, [string]$Sha256)
     $target = Join-Path $cache $Name
     if (-not (Test-Path -LiteralPath $target)) {
-        Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $target
+        $partial = $target + '.partial'
+        & "$env:SystemRoot\System32\curl.exe" --fail --location --retry 3 --retry-delay 2 --output $partial $Uri
+        if ($LASTEXITCODE -ne 0) {
+            if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+            throw "Download failed for $Name (curl $LASTEXITCODE)."
+        }
+        Move-Item -LiteralPath $partial -Destination $target
     }
     $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $Sha256.ToLowerInvariant()) {
@@ -49,6 +55,10 @@ function Get-HuggingFaceFile {
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('TG-MeloBundle-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporary | Out-Null
 try {
+    # pip still creates very long Torch header paths on Windows. Build at a short temporary root, remove
+    # development-only headers, then copy the finished runtime to the requested deployment destination.
+    $buildRoot = Join-Path $temporary 'bundle'
+    New-Item -ItemType Directory -Path $buildRoot | Out-Null
     $pythonArchive = Get-VerifiedFile "python-$pythonVersion-embed-amd64.zip" `
         "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-embed-amd64.zip" `
         '608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d'
@@ -58,7 +68,7 @@ try {
     $getPip = Get-VerifiedFile 'get-pip.py' 'https://bootstrap.pypa.io/get-pip.py' `
         'fb24e693bab954209a063d90953621412ccad4a500905a726286e038f508ddf6'
 
-    $runtime = Join-Path $destination 'runtime'
+    $runtime = Join-Path $buildRoot 'runtime'
     Expand-Archive -LiteralPath $pythonArchive -DestinationPath $runtime
     $pth = Join-Path $runtime 'python310._pth'
     $pthLines = [Collections.Generic.List[string]](Get-Content -LiteralPath $pth)
@@ -70,6 +80,9 @@ try {
     & (Join-Path $runtime 'python.exe') (Join-Path $runtime 'get-pip.py') --disable-pip-version-check
     if ($LASTEXITCODE -ne 0) { throw 'get-pip failed.' }
     & (Join-Path $runtime 'python.exe') -m pip install --disable-pip-version-check --no-warn-script-location `
+        'pip==24.3.1' 'setuptools==70.3.0' 'wheel==0.45.1'
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned Python packaging bootstrap installation failed.' }
+    & (Join-Path $runtime 'python.exe') -m pip install --disable-pip-version-check --no-warn-script-location `
         -r (Join-Path $workerSource 'requirements-windows-cpu.txt')
     if ($LASTEXITCODE -ne 0) { throw 'Python dependency installation failed.' }
 
@@ -77,7 +90,7 @@ try {
     Expand-Archive -LiteralPath $meloArchive -DestinationPath $meloExtract
     $meloSource = Get-ChildItem -LiteralPath $meloExtract -Directory | Select-Object -First 1
     if ($null -eq $meloSource) { throw 'MeloTTS archive has no source directory.' }
-    $vendorRoot = Join-Path $destination 'vendor'
+    $vendorRoot = Join-Path $buildRoot 'vendor'
     New-Item -ItemType Directory -Path $vendorRoot | Out-Null
     Copy-Item -LiteralPath $meloSource.FullName -Destination (Join-Path $vendorRoot 'MeloTTS') -Recurse
     $patch = Join-Path $workerSource 'melotts-v0.1.2-windows-offline.patch'
@@ -86,8 +99,8 @@ try {
     & git -C (Join-Path $vendorRoot 'MeloTTS') apply $patch
     if ($LASTEXITCODE -ne 0) { throw 'MeloTTS Windows/offline patch failed.' }
 
-    $acoustic = Join-Path $destination 'models\MeloTTS-Chinese'
-    $bert = Join-Path $destination 'models\bert-base-multilingual-uncased'
+    $acoustic = Join-Path $buildRoot 'models\MeloTTS-Chinese'
+    $bert = Join-Path $buildRoot 'models\bert-base-multilingual-uncased'
     New-Item -ItemType Directory -Path $acoustic,$bert | Out-Null
     Copy-Item (Get-HuggingFaceFile 'myshell-ai/MeloTTS-Chinese' $meloRevision 'config.json' `
         'd58b5acdab89ad2bbd65325affab309ae3cb964834b02f9a60587474e81c8bb9') (Join-Path $acoustic 'config.json')
@@ -111,10 +124,10 @@ try {
     Expand-Archive -LiteralPath $cmudict -DestinationPath (Join-Path $nltkRoot 'corpora')
     Expand-Archive -LiteralPath $tagger -DestinationPath (Join-Path $nltkRoot 'taggers')
 
-    Copy-Item -LiteralPath (Join-Path $workerSource 'worker.py') -Destination $destination
-    Copy-Item -LiteralPath (Join-Path $workerSource 'melotts-v0.1.2-windows-offline.patch') -Destination $destination
-    Copy-Item -LiteralPath (Join-Path $workerSource 'requirements-windows-cpu.txt') -Destination $destination
-    Copy-Item -LiteralPath (Join-Path $workerSource 'README.md') -Destination $destination
+    Copy-Item -LiteralPath (Join-Path $workerSource 'worker.py') -Destination $buildRoot
+    Copy-Item -LiteralPath (Join-Path $workerSource 'melotts-v0.1.2-windows-offline.patch') -Destination $buildRoot
+    Copy-Item -LiteralPath (Join-Path $workerSource 'requirements-windows-cpu.txt') -Destination $buildRoot
+    Copy-Item -LiteralPath (Join-Path $workerSource 'README.md') -Destination $buildRoot
 
     $manifest = [ordered]@{
         schemaVersion = 1
@@ -128,8 +141,21 @@ try {
         voiceIds = @('zh-standard')
         offlineReady = $true
     }
-    [IO.File]::WriteAllText((Join-Path $destination 'bundle-manifest.json'),
+    [IO.File]::WriteAllText((Join-Path $buildRoot 'bundle-manifest.json'),
         ($manifest | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))
+
+    $torchInclude = Join-Path $runtime 'Lib\site-packages\torch\include'
+    if (Test-Path -LiteralPath $torchInclude) {
+        $resolvedInclude = [IO.Path]::GetFullPath($torchInclude)
+        $resolvedBuildRoot = [IO.Path]::GetFullPath($buildRoot).TrimEnd('\') + '\'
+        if (-not $resolvedInclude.StartsWith($resolvedBuildRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to prune an unexpected Torch include path: $resolvedInclude"
+        }
+        Remove-Item -LiteralPath $resolvedInclude -Recurse -Force
+    }
+
+    & "$env:SystemRoot\System32\robocopy.exe" $buildRoot $destination /E /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "Could not copy the MeloTTS bundle to its destination (robocopy $LASTEXITCODE)." }
     Write-Host "MeloTTS offline bundle created: $destination"
 } finally {
     if (Test-Path -LiteralPath $temporary) {

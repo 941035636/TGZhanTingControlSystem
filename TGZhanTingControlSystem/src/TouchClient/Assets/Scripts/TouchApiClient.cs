@@ -12,7 +12,7 @@ namespace TG.Control.Touch
         [SerializeField] private string serverBaseUrl = "http://127.0.0.1:5080";
         [SerializeField] private string clientId = "touch-main";
         [SerializeField] private float retryDelaySeconds = 2f;
-        [SerializeField] private string terminalApiKey = "TG-TERMINAL-2026";
+        [SerializeField] private string terminalApiKey = "TG-DEVELOPMENT-ONLY";
 
         public event Action<PlaybackCommand> CommandReceived;
         public event Action<bool> ConnectionChanged;

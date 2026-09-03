@@ -11,7 +11,7 @@ namespace TG.Control.LedPlayer
     {
         [SerializeField] private string serverBaseUrl = "http://127.0.0.1:5080";
         [SerializeField] private string clientId = "led-main";
-        [SerializeField] private string terminalApiKey = "TG-TERMINAL-2026";
+        [SerializeField] private string terminalApiKey = "TG-DEVELOPMENT-ONLY";
         public event Action<PlaybackCommand> CommandReceived;
         public event Action<bool> ConnectionChanged;
         public event Action<ContentSyncProgress> ContentSyncChanged;

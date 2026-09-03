@@ -70,11 +70,12 @@ Server输出目录的`AdminWeb`文件夹。运行时静态文件直接由该目�
 - 管理端：`http://localhost:5080/`
 - 健康检查：`http://localhost:5080/api/health`
 
-本地演示账号：`admin`，初始密码：`TG@2026`。部署到现场前必须在
-`src/Server/TG.Control.Server/appsettings.json`中修改初始密码。
+本地开发账号：`admin`，仅开发使用的密码为`TG-DEVELOPMENT-ONLY`。Phase 9G正式安装器会在首次安装时
+生成随机管理密码，并写入ACL受限的ProgramData初始凭据文件；不得把开发值当作现场凭据。
 
 两个Unity终端默认使用请求头`X-TG-Terminal-Key`访问终端接口。开发环境默认密钥为
-`TG-TERMINAL-2026`，现场部署前必须同时修改服务端配置和两个Unity客户端Inspector中的密钥。
+`TG-DEVELOPMENT-ONLY`。正式部署通过ProgramData中的`server.site.json`、`touch-client.json`和
+`led-player.json`统一设置现场地址、ClientId与随机终端密钥，无需重新构建Unity客户端。
 
 ## Unity
 

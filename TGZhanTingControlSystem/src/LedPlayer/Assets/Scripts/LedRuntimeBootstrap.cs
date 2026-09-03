@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Reflection;
 using UMP;
 using UnityEngine;
@@ -12,11 +14,12 @@ namespace TG.Control.LedPlayer
         {
             Application.targetFrameRate = 60;
             Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
-            if (Object.FindObjectOfType<LedApiClient>() != null) return;
+            if (UnityEngine.Object.FindObjectOfType<LedApiClient>() != null) return;
             var root = new GameObject("TG LED Runtime");
             root.SetActive(false);
-            Object.DontDestroyOnLoad(root);
+            UnityEngine.Object.DontDestroyOnLoad(root);
             var api = root.AddComponent<LedApiClient>();
+            ApplySiteConfiguration(api);
             var mediaPlayer = root.AddComponent<UniversalMediaPlayer>();
             mediaPlayer.AutoPlay = false;
             mediaPlayer.Loop = false;
@@ -35,7 +38,7 @@ namespace TG.Control.LedPlayer
             SetReference(controller, "narrationAudioSource", narrationAudio);
             SetReference(overlay, "apiClient", api);
             SetReference(overlay, "playbackController", controller);
-            foreach (var camera in Object.FindObjectsOfType<Camera>())
+            foreach (var camera in UnityEngine.Object.FindObjectsOfType<Camera>())
             {
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = Color.black;
@@ -65,7 +68,49 @@ namespace TG.Control.LedPlayer
             return displayObject;
         }
 
-        private static void SetReference(Object target, string fieldName, Object value) =>
+        private static void SetReference(UnityEngine.Object target, string fieldName, UnityEngine.Object value) =>
             target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(target, value);
+
+        private static void ApplySiteConfiguration(LedApiClient api)
+        {
+            var path = ResolveConfigurationPath();
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+            try
+            {
+                var config = JsonUtility.FromJson<LedSiteConfiguration>(File.ReadAllText(path));
+                if (config == null) return;
+                if (!string.IsNullOrWhiteSpace(config.serverBaseUrl)) SetValue(api, "serverBaseUrl", config.serverBaseUrl);
+                if (!string.IsNullOrWhiteSpace(config.clientId)) SetValue(api, "clientId", config.clientId);
+                if (!string.IsNullOrWhiteSpace(config.terminalApiKey)) SetValue(api, "terminalApiKey", config.terminalApiKey);
+                if (!string.IsNullOrWhiteSpace(config.cacheDirectory)) LedContentCache.Shared.ConfigureDirectory(config.cacheDirectory);
+                Debug.Log("LedPlayer已加载现场配置：" + path);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError("LedPlayer现场配置加载失败：" + exception.Message);
+            }
+        }
+
+        private static string ResolveConfigurationPath()
+        {
+            var explicitPath = Environment.GetEnvironmentVariable("TG_LED_PLAYER_CONFIG");
+            if (!string.IsNullOrWhiteSpace(explicitPath)) return Path.GetFullPath(explicitPath);
+            var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            var sitePath = Path.Combine(programData, "TG Exhibition", "Config", "led-player.json");
+            if (File.Exists(sitePath)) return sitePath;
+            return Path.Combine(Directory.GetParent(Application.dataPath)?.FullName ?? Application.dataPath, "led-player.json");
+        }
+
+        private static void SetValue(UnityEngine.Object target, string fieldName, string value) =>
+            target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(target, value);
+
+        [Serializable]
+        private sealed class LedSiteConfiguration
+        {
+            public string serverBaseUrl;
+            public string clientId;
+            public string terminalApiKey;
+            public string cacheDirectory;
+        }
     }
 }
