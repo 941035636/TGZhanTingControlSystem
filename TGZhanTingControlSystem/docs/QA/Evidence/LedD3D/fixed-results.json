@@ -1,0 +1,58 @@
+{
+  "playerId": 10636,
+  "status": "PASS",
+  "server": "http://localhost:5082",
+  "tests": [
+    {
+      "test": "No existing active Session is modified",
+      "status": "PASS",
+      "utc": "2026-09-03T16:35:42.1111750+00:00"
+    },
+    {
+      "test": "Route has multiple nodes",
+      "status": "PASS",
+      "utc": "2026-09-03T16:35:46.4911999+00:00"
+    },
+    {
+      "test": "Actual video region is not black",
+      "status": "PASS",
+      "utc": "2026-09-03T16:35:51.9318750+00:00"
+    },
+    {
+      "test": "Pause freezes the actual video pixels",
+      "status": "PASS",
+      "utc": "2026-09-03T16:35:58.2674943+00:00"
+    },
+    {
+      "test": "Resume advances actual video pixels",
+      "status": "PASS",
+      "utc": "2026-09-03T16:36:04.5180073+00:00"
+    },
+    {
+      "test": "Skip renders the next video",
+      "status": "PASS",
+      "utc": "2026-09-03T16:36:15.9621711+00:00"
+    },
+    {
+      "test": "Retry renders video again",
+      "status": "PASS",
+      "utc": "2026-09-03T16:36:22.1622318+00:00"
+    },
+    {
+      "test": "Multi-node playback completes",
+      "status": "PASS",
+      "utc": "2026-09-03T16:36:33.6121727+00:00"
+    },
+    {
+      "test": "No unsupported D3D format or playback exception",
+      "status": "PASS",
+      "utc": "2026-09-03T16:36:33.6516773+00:00"
+    },
+    {
+      "test": "Unity BGRA32 output confirmed by the active backend",
+      "status": "PASS",
+      "utc": "2026-09-03T16:36:33.6560262+00:00"
+    }
+  ],
+  "playerLog": "D:\\TGZhanTingControlSystem\\TGZhanTingControlSystem\\artifacts\\LedD3DRegression\\fixed-restart-player.log"
+}

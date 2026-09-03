@@ -1,0 +1,52 @@
+Mono path[0] = 'D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/Managed'
+Mono config path = 'D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/MonoBleedingEdge/etc'
+AS: AutoStreaming module initializing.Initialize engine version: 2020.3.35f1c2 (6cc21a1fd4c6)
+[Subsystems] Discovering subsystems at path D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/UnitySubsystems
+GfxDevice: creating device client; threaded=1
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: AMD Radeon(TM) 530 (ID=0x6900)
+    Vendor:
+    VRAM:     2039 MB
+    Driver:   26.20.12026.2001
+Begin MonoManager ReloadAssembly
+- Completed reload, in  0.179 seconds
+<RI> Initializing input.
+XInput1_3.dll not found. Trying XInput9_1_0.dll instead...
+<RI> Input initialized.
+D3D11 device created for Microsoft Media Foundation video decoding.
+<RI> Initialized touch support.
+UnloadTime: 1.587200 ms
+LedPlayer已加载现场配置：D:\TGZhanTingControlSystem\TGZhanTingControlSystem\artifacts\LedD3DRegression\led-player.json
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/Mono/libdl
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/Mono/libdl.dll
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/Mono/libdl
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/Mono/libdl
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/Mono/libdl.dll
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Baseline/LedPlayer_Data/Mono/libdl
+[AVProVideo] Initialising AVPro Video (script v1.8.9 plugin v1.8.9) on AMD Radeon(TM) 530/Direct3D 11.0 [level 11.1] (MT False) on WindowsPlayer
+LED内容同步完成：版本 V5，2/2 个素材已缓存。
+[AVProVideo] Opening D:\TGZhanTingControlSystem\TGZhanTingControlSystem\artifacts\LedD3DRegression\Cache\afea004aebeab6812baf76e9800400cd7cad13b97390c5518f8f107bfd80f3ba.mp4 (offset 0)
+[AVProVideo] Using playback path: MF-MediaEngine-Software (1920x1080@30.00)
+Unsupported D3D format 0x58
+Unsupported D3D format 0x58
+[LED Player] AVPro first renderable frame ready via MF-MediaEngine-Software.
+[LED Player] Video output verified via MF-MediaEngine-Software.
+[AVProVideo] Opening D:\TGZhanTingControlSystem\TGZhanTingControlSystem\artifacts\LedD3DRegression\Cache\967c4e4f2531f8b8c297492ce4a2648c7e916f1facd0028f9e2fd1146f9b7add.mp4 (offset 0)
+[AVProVideo] Using playback path: MF-MediaEngine-Software (1920x1080@30.00)
+Unsupported D3D format 0x58
+Unsupported D3D format 0x58
+[LED Player] AVPro first renderable frame ready via MF-MediaEngine-Software.
+[LED Player] Video output verified via MF-MediaEngine-Software.
+[AVProVideo] Opening D:\TGZhanTingControlSystem\TGZhanTingControlSystem\artifacts\LedD3DRegression\Cache\afea004aebeab6812baf76e9800400cd7cad13b97390c5518f8f107bfd80f3ba.mp4 (offset 0)
+[AVProVideo] Using playback path: MF-MediaEngine-Software (1920x1080@30.00)
+Unsupported D3D format 0x58
+Unsupported D3D format 0x58
+[LED Player] AVPro first renderable frame ready via MF-MediaEngine-Software.
+[LED Player] Video output verified via MF-MediaEngine-Software.
+[AVProVideo] Opening D:\TGZhanTingControlSystem\TGZhanTingControlSystem\artifacts\LedD3DRegression\Cache\afea004aebeab6812baf76e9800400cd7cad13b97390c5518f8f107bfd80f3ba.mp4 (offset 0)
+[AVProVideo] Using playback path: MF-MediaEngine-Software (1920x1080@30.00)
+Unsupported D3D format 0x58
+Unsupported D3D format 0x58
+[LED Player] AVPro first renderable frame ready via MF-MediaEngine-Software.
+[LED Player] Video output verified via MF-MediaEngine-Software.

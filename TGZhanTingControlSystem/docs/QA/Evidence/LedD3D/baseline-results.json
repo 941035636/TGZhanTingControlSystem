@@ -1,0 +1,59 @@
+{
+  "playerId": 6856,
+  "server": "http://localhost:5082",
+  "playerLog": "D:\\TGZhanTingControlSystem\\TGZhanTingControlSystem\\artifacts\\LedD3DRegression\\baseline-visible-player.log",
+  "status": "FAIL",
+  "tests": [
+    {
+      "test": "No existing active Session is modified",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:03.7191235+00:00"
+    },
+    {
+      "test": "Route has multiple nodes",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:08.1349158+00:00"
+    },
+    {
+      "test": "Actual video region is not black",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:13.6571909+00:00"
+    },
+    {
+      "test": "Pause freezes the actual video pixels",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:20.5514033+00:00"
+    },
+    {
+      "test": "Resume advances actual video pixels",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:26.8604905+00:00"
+    },
+    {
+      "test": "Skip renders the next video",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:38.2792063+00:00"
+    },
+    {
+      "test": "Retry renders video again",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:44.5689654+00:00"
+    },
+    {
+      "test": "Multi-node playback completes",
+      "status": "PASS",
+      "utc": "2026-09-03T16:32:55.9251387+00:00"
+    },
+    {
+      "test": "No unsupported D3D format or playback exception",
+      "status": "FAIL",
+      "utc": "2026-09-03T16:32:55.9727490+00:00"
+    },
+    {
+      "test": "Regression execution",
+      "status": "FAIL",
+      "detail": "No unsupported D3D format or playback exception",
+      "utc": "2026-09-03T16:32:55.9872929+00:00"
+    }
+  ]
+}

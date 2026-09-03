@@ -25,6 +25,14 @@ Media Foundation和DirectShow路径均能打开、解码视频，但向Unity提�
 - 视频帧使用Unity支持的BGRA32纹理输出，绕开AVPro的D3D `0x58`问题；
 - AVPro资源暂时保留为历史回退参考，但运行时不再实例化AVPro播放器。
 
+### 2026-09-04 回归修复
+
+`dcc40ba` 曾将默认接入改回 AVPro 软件解码，重新引入 `Unsupported D3D format 0x58`。
+本轮恢复上述已有 LibVLC 接入，并为其补齐现有首帧诊断接口；缓存、讲解音频和控制协议不变。
+实际 Windows 构建完成两轮播放控制回归，D3D 错误为零。旧版在本机仍可显示工程测试视频，
+因此没有把报错复现扩大为“现场持续黑屏已在本机完全复现”。详见
+[LED D3D 专项回归记录](QA/LED-D3D-Playback-Regression.md)。
+
 ## 视频规范建议
 
 - MP4容器；

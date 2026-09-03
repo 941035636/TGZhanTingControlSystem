@@ -1,0 +1,38 @@
+Mono path[0] = 'D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/Managed'
+Mono config path = 'D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/MonoBleedingEdge/etc'
+AS: AutoStreaming module initializing.Initialize engine version: 2020.3.35f1c2 (6cc21a1fd4c6)
+[Subsystems] Discovering subsystems at path D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/UnitySubsystems
+GfxDevice: creating device client; threaded=1
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: AMD Radeon(TM) 530 (ID=0x6900)
+    Vendor:
+    VRAM:     2039 MB
+    Driver:   26.20.12026.2001
+Begin MonoManager ReloadAssembly
+- Completed reload, in  0.131 seconds
+<RI> Initializing input.
+XInput1_3.dll not found. Trying XInput9_1_0.dll instead...
+<RI> Input initialized.
+D3D11 device created for Microsoft Media Foundation video decoding.
+<RI> Initialized touch support.
+UnloadTime: 0.790700 ms
+LedPlayer已加载现场配置：D:\TGZhanTingControlSystem\TGZhanTingControlSystem\artifacts\LedD3DRegression\led-player.json
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/Mono/libdl
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/Mono/libdl.dll
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/Mono/libdl
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/Mono/libdl
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/Mono/libdl.dll
+Fallback handler could not load library D:/TGZhanTingControlSystem/TGZhanTingControlSystem/artifacts/LedD3DRegression/Fixed/LedPlayer_Data/Mono/libdl
+LED内容同步完成：版本 V5，2/2 个素材已缓存。
+[LED Player] First video frame ready via LibVLC / UMP (Unity BGRA32): 1920x1090, BGRA32.
+[LED Player] LibVLC media prepared: 1920x1080
+[LED Player] Video output verified via LibVLC / UMP (Unity BGRA32).
+[LED Player] First video frame ready via LibVLC / UMP (Unity BGRA32): 1920x1090, BGRA32.
+[LED Player] LibVLC media prepared: 1920x1080
+[LED Player] First video frame ready via LibVLC / UMP (Unity BGRA32): 1920x1090, BGRA32.
+[LED Player] LibVLC media prepared: 1920x1080
+[LED Player] Video output verified via LibVLC / UMP (Unity BGRA32).
+[LED Player] First video frame ready via LibVLC / UMP (Unity BGRA32): 1920x1090, BGRA32.
+[LED Player] LibVLC media prepared: 1920x1080
+[LED Player] Video output verified via LibVLC / UMP (Unity BGRA32).

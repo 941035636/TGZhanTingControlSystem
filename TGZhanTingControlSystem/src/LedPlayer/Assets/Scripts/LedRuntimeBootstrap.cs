@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
-using RenderHeads.Media.AVProVideo;
+using UMP;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -20,27 +20,20 @@ namespace TG.Control.LedPlayer
             UnityEngine.Object.DontDestroyOnLoad(root);
             var api = root.AddComponent<LedApiClient>();
             ApplySiteConfiguration(api);
-            var mediaPlayer = root.AddComponent<MediaPlayer>();
-            mediaPlayer.m_AutoOpen = false;
-            mediaPlayer.m_AutoStart = false;
-            mediaPlayer.m_Loop = false;
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-            // AVPro 1.8's Media Foundation hardware path can return a DXGI surface that
-            // Unity 2020 cannot import on older professional NVIDIA cards. The native player
-            // then reports Playing while DisplayUGUI remains black (Unsupported D3D format
-            // 0x58). The software path still streams the local cached file and exposes a
-            // normal RGBA texture, which is the reliable 1080p delivery path for this client.
-            mediaPlayer.PlatformOptionsWindows.videoApi = Windows.VideoApi.MediaFoundation;
-            mediaPlayer.PlatformOptionsWindows.useHardwareDecoding = false;
-#endif
-            var adapter = root.AddComponent<AvProMediaPlaybackAdapter>();
+            // AVPro 1.8.9 exposes an unsupported D3D 0x58 texture on Unity 2020,
+            // including with hardware decoding disabled. Use the bundled LibVLC
+            // backend, which uploads frames into a Unity-owned BGRA32 texture.
+            var mediaPlayer = root.AddComponent<UniversalMediaPlayer>();
+            mediaPlayer.AutoPlay = false;
+            mediaPlayer.Loop = false;
+            var adapter = root.AddComponent<UniversalMediaPlaybackAdapter>();
             var narrationAudio = root.AddComponent<AudioSource>();
             narrationAudio.playOnAwake = false;
             narrationAudio.loop = false;
             narrationAudio.spatialBlend = 0f;
             var controller = root.AddComponent<LedPlaybackController>();
             var overlay = root.AddComponent<LedStatusOverlay>();
-            CreateVideoCanvas(root.transform, mediaPlayer);
+            mediaPlayer.RenderingObjects = new[] { CreateVideoCanvas(root.transform) };
             SetReference(adapter, "mediaPlayer", mediaPlayer);
             SetReference(controller, "apiClient", api);
             SetReference(controller, "playbackAdapterComponent", adapter);
@@ -55,7 +48,7 @@ namespace TG.Control.LedPlayer
             root.SetActive(true);
         }
 
-        private static void CreateVideoCanvas(Transform parent, MediaPlayer mediaPlayer)
+        private static GameObject CreateVideoCanvas(Transform parent)
         {
             var canvasObject = new GameObject("LED Video Canvas", typeof(Canvas), typeof(CanvasScaler));
             canvasObject.transform.SetParent(parent, false);
@@ -66,17 +59,17 @@ namespace TG.Control.LedPlayer
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
 
-            var displayObject = new GameObject("AVPro Fullscreen Display", typeof(RectTransform), typeof(DisplayUGUI));
+            var displayObject = new GameObject("LibVLC Fullscreen Display", typeof(RectTransform), typeof(RawImage));
             displayObject.transform.SetParent(canvasObject.transform, false);
             var rect = displayObject.GetComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
-            var display = displayObject.GetComponent<DisplayUGUI>();
-            display._mediaPlayer = mediaPlayer;
+            var display = displayObject.GetComponent<RawImage>();
             display.color = Color.white;
             display.raycastTarget = false;
+            return displayObject;
         }
 
         private static void SetReference(UnityEngine.Object target, string fieldName, UnityEngine.Object value) =>

@@ -9,7 +9,7 @@ namespace TG.Control.LedPlayer
     /// LibVLC/Universal Media Player adapter. Public time values are seconds;
     /// UMP exposes its time values in milliseconds.
     /// </summary>
-    public sealed class UniversalMediaPlaybackAdapter : MonoBehaviour, IMediaPlaybackAdapter
+    public sealed class UniversalMediaPlaybackAdapter : MonoBehaviour, IMediaPlaybackAdapter, IVideoPlaybackDiagnostics
     {
         [SerializeField] private UniversalMediaPlayer mediaPlayer;
         [SerializeField] private float prepareTimeoutSeconds = 30f;
@@ -17,9 +17,15 @@ namespace TG.Control.LedPlayer
         private Action<bool, string> prepareCompleted;
         private Coroutine prepareTimeout;
         private bool isFinished;
+        private Texture2D videoTexture;
 
         public bool IsPlaying => mediaPlayer != null && mediaPlayer.IsPlaying;
         public bool IsFinished => isFinished;
+        // Prepared/Playing alone do not prove that a decoded frame reached Unity.
+        // ImageReady is raised after UMP binds the texture to the rendering objects.
+        public bool HasRenderableVideoFrame => mediaPlayer != null && videoTexture != null &&
+                                               mediaPlayer.FramesCounter > 0;
+        public string PlaybackBackend => "LibVLC / UMP (Unity BGRA32)";
         public double CurrentTimeSeconds => mediaPlayer != null && mediaPlayer.Time > 0
             ? mediaPlayer.Time / 1000.0
             : 0.0;
@@ -30,6 +36,7 @@ namespace TG.Control.LedPlayer
             mediaPlayer.AddPreparedEvent(HandlePrepared);
             mediaPlayer.AddEndReachedEvent(HandleEndReached);
             mediaPlayer.AddEncounteredErrorEvent(HandleError);
+            mediaPlayer.AddImageReadyEvent(HandleImageReady);
         }
 
         private void OnDisable()
@@ -39,9 +46,11 @@ namespace TG.Control.LedPlayer
                 mediaPlayer.RemovePreparedEvent(HandlePrepared);
                 mediaPlayer.RemoveEndReachedEvent(HandleEndReached);
                 mediaPlayer.RemoveEncounteredErrorEvent(HandleError);
+                mediaPlayer.RemoveImageReadyEvent(HandleImageReady);
             }
 
             CancelPrepareTimeout();
+            videoTexture = null;
             CompletePrepare(false, "LibVLC 播放组件已停用。");
         }
 
@@ -59,6 +68,7 @@ namespace TG.Control.LedPlayer
             prepareCompleted = completed;
 
             mediaPlayer.Stop(false);
+            videoTexture = null;
             mediaPlayer.Path = absolutePathOrUrl;
             mediaPlayer.Prepare();
             prepareTimeout = StartCoroutine(PrepareTimeoutRoutine());
@@ -89,6 +99,7 @@ namespace TG.Control.LedPlayer
             CancelPrepareTimeout();
             CompletePrepare(false, "媒体加载已停止。");
             isFinished = false;
+            videoTexture = null;
             if (mediaPlayer != null) mediaPlayer.Stop();
         }
 
@@ -125,8 +136,16 @@ namespace TG.Control.LedPlayer
             isFinished = true;
         }
 
+        private void HandleImageReady(Texture2D texture)
+        {
+            videoTexture = texture;
+            if (texture != null)
+                Debug.Log($"[LED Player] First video frame ready via {PlaybackBackend}: {texture.width}x{texture.height}, {texture.format}.");
+        }
+
         private void HandleError()
         {
+            videoTexture = null;
             CancelPrepareTimeout();
             CompletePrepare(false, "LibVLC 无法打开或解码该媒体文件。");
         }
