@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using UMP;
 using UnityEngine;
 
@@ -69,9 +70,24 @@ namespace TG.Control.LedPlayer
 
             mediaPlayer.Stop(false);
             videoTexture = null;
-            mediaPlayer.Path = absolutePathOrUrl;
+            mediaPlayer.Path = NormalizeMediaPath(absolutePathOrUrl);
             mediaPlayer.Prepare();
             prepareTimeout = StartCoroutine(PrepareTimeoutRoutine());
+        }
+
+        private static string NormalizeMediaPath(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value;
+
+            // LedContentCache returns a file URI. UMP strips the file scheme before
+            // checking File.Exists, but does not unescape URI characters first.
+            // A cache directory containing spaces therefore becomes a non-existent
+            // path such as C:/ProgramData/TG%20Exhibition and LibVLC reports only
+            // an empty EncounteredError. Give UMP a decoded Windows path instead.
+            if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.IsFile)
+                return Path.GetFullPath(uri.LocalPath);
+
+            return value;
         }
 
         public void Play(double positionSeconds)

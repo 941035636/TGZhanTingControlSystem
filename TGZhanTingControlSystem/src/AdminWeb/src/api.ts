@@ -62,19 +62,26 @@ const friendlyApiError = (code: string | null, fallback: string): string => {
     publish_revision_required: '发布状态已过期，请刷新内容后重新确认。',
     asset_is_referenced: '该素材仍被草稿、正式版本、历史版本或候选语音引用，不能删除。',
   }
-  return code ? messages[code] ?? fallback : fallback
+  if (code && messages[code]) return messages[code]
+  if (/[\u3400-\u9fff]/.test(fallback)) return fallback
+  return '操作未完成，请检查管理服务状态后重试。'
 }
 
 async function request<T>(path: string, init?: RequestInit, authenticated = false): Promise<T> {
   const token = sessionStorage.getItem(tokenKey)
-  const response = await fetch(`${apiBase}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authenticated && token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authenticated && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    })
+  } catch {
+    throw new ApiError('无法连接管理服务，请确认服务已启动后重试。', 0)
+  }
   if (!response.ok) {
     if (response.status === 401 && authenticated) sessionStorage.removeItem(tokenKey)
     const text = await response.text()

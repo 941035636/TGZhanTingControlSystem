@@ -292,4 +292,7 @@ const jobFailureMessage = (job: TtsProductionJob): string => {
   return (job.errorCode && messages[job.errorCode]) || (job.status === 4 ? '语音生成已取消。' : '语音生成失败，请重试。')
 }
 
-const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error)
+const errorMessage = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error)
+  return /[\u3400-\u9fff]/.test(message) ? message : '操作未完成，请检查语音合成服务状态后重试。'
+}
