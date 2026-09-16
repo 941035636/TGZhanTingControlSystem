@@ -6,26 +6,45 @@ using UnityEngine;
 namespace TG.Control.LedPlayer
 {
     /// <summary>
-    /// AVPro Video 1.x adapter used by the LED player. All public time values are seconds,
-    /// while AVPro 1.x exposes playback positions in milliseconds.
+    /// AVPro Video 3.x adapter used by the LED player. All public time values are seconds.
     /// </summary>
     public sealed class AvProMediaPlaybackAdapter : MonoBehaviour, IMediaPlaybackAdapter
     {
         [SerializeField] private MediaPlayer mediaPlayer;
         [SerializeField] private float prepareTimeoutSeconds = 30f;
+        private int operationGeneration;
+        private string lastPlaybackError;
 
         public bool IsPlaying => mediaPlayer != null && mediaPlayer.Control != null && mediaPlayer.Control.IsPlaying();
         public bool IsFinished => mediaPlayer != null && mediaPlayer.Control != null && mediaPlayer.Control.IsFinished();
         public double CurrentTimeSeconds => mediaPlayer != null && mediaPlayer.Control != null
-            ? mediaPlayer.Control.GetCurrentTimeMs() / 1000.0
+            ? mediaPlayer.Control.GetCurrentTime()
             : 0.0;
+
+        private void OnEnable()
+        {
+            if (mediaPlayer != null)
+            {
+                mediaPlayer.Events.AddListener(HandleMediaPlayerEvent);
+            }
+        }
+
+        private void OnDisable()
+        {
+            operationGeneration++;
+            if (mediaPlayer != null)
+            {
+                mediaPlayer.Events.RemoveListener(HandleMediaPlayerEvent);
+            }
+        }
 
         public void Prepare(string absolutePathOrUrl, Action<bool, string> completed)
         {
-            StartCoroutine(PrepareRoutine(absolutePathOrUrl, completed));
+            var generation = ++operationGeneration;
+            StartCoroutine(PrepareRoutine(absolutePathOrUrl, generation, completed));
         }
 
-        private IEnumerator PrepareRoutine(string path, Action<bool, string> completed)
+        private IEnumerator PrepareRoutine(string path, int generation, Action<bool, string> completed)
         {
             if (mediaPlayer == null)
             {
@@ -33,16 +52,32 @@ namespace TG.Control.LedPlayer
                 yield break;
             }
 
-            mediaPlayer.CloseVideo();
-            if (!mediaPlayer.OpenVideoFromFile(MediaPlayer.FileLocation.AbsolutePathOrURL, path, false))
+            lastPlaybackError = null;
+            mediaPlayer.AutoStart = false;
+            mediaPlayer.Loop = false;
+            mediaPlayer.CloseMedia();
+            var normalizedPath = NormalizeMediaPath(path);
+            if (!mediaPlayer.OpenMedia(MediaPathType.AbsolutePathOrURL, normalizedPath, false))
             {
-                completed(false, "AVPro 无法打开媒体：" + path);
+                completed(false, "AVPro 无法打开媒体：" + normalizedPath);
                 yield break;
             }
 
             var timeoutAt = Time.realtimeSinceStartup + prepareTimeoutSeconds;
             while (Time.realtimeSinceStartup < timeoutAt)
             {
+                if (generation != operationGeneration)
+                {
+                    yield break;
+                }
+
+                if (!string.IsNullOrWhiteSpace(lastPlaybackError))
+                {
+                    mediaPlayer.CloseMedia();
+                    completed(false, lastPlaybackError);
+                    yield break;
+                }
+
                 if (mediaPlayer.Control != null && mediaPlayer.Control.CanPlay())
                 {
                     completed(true, null);
@@ -52,7 +87,7 @@ namespace TG.Control.LedPlayer
                 yield return null;
             }
 
-            mediaPlayer.CloseVideo();
+            mediaPlayer.CloseMedia();
             completed(false, "AVPro 媒体预加载超时。");
         }
 
@@ -85,9 +120,10 @@ namespace TG.Control.LedPlayer
 
         public void Stop()
         {
+            operationGeneration++;
             if (mediaPlayer != null)
             {
-                mediaPlayer.CloseVideo();
+                mediaPlayer.CloseMedia();
             }
         }
 
@@ -95,8 +131,26 @@ namespace TG.Control.LedPlayer
         {
             if (mediaPlayer != null && mediaPlayer.Control != null)
             {
-                mediaPlayer.Control.Seek((float)Math.Max(0.0, positionSeconds * 1000.0));
+                mediaPlayer.Control.Seek(Math.Max(0.0, positionSeconds));
             }
+        }
+
+        private void HandleMediaPlayerEvent(MediaPlayer player, MediaPlayerEvent.EventType eventType, ErrorCode errorCode)
+        {
+            if (eventType == MediaPlayerEvent.EventType.Error)
+            {
+                lastPlaybackError = "AVPro 播放失败：" + errorCode;
+            }
+        }
+
+        private static string NormalizeMediaPath(string path)
+        {
+            if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && uri.IsFile)
+            {
+                return uri.LocalPath;
+            }
+
+            return path;
         }
     }
 }

@@ -8,11 +8,13 @@ namespace TG.Control.LedPlayer
     public sealed class LedPlaybackController : MonoBehaviour
     {
         [SerializeField] private LedApiClient apiClient;
-        [SerializeField] private UniversalMediaPlaybackAdapter playbackAdapter;
+        [SerializeField] private MonoBehaviour playbackAdapterSource;
         private readonly LedContentCache contentCache = new LedContentCache();
         private int playbackGeneration;
         private string preparedMediaUrl;
         private bool mediaPrepared;
+
+        private IMediaPlaybackAdapter PlaybackAdapter => playbackAdapterSource as IMediaPlaybackAdapter;
 
         private void OnEnable()
         {
@@ -26,6 +28,7 @@ namespace TG.Control.LedPlayer
 
         private void HandleCommand(PlaybackCommand command)
         {
+            var playbackAdapter = PlaybackAdapter;
             if (apiClient == null || playbackAdapter == null)
             {
                 Debug.LogError("LED播放组件未完成初始化，无法执行播放指令。");
@@ -74,6 +77,13 @@ namespace TG.Control.LedPlayer
 
         private IEnumerator PrepareMedia(PlaybackCommand command, int generation, bool playAfterPrepare)
         {
+            var playbackAdapter = PlaybackAdapter;
+            if (playbackAdapter == null)
+            {
+                apiClient.Report(command, PlaybackState.Failed, error: "LED播放组件未完成初始化。");
+                yield break;
+            }
+
             apiClient.Report(command, PlaybackState.Received);
             string localUrl = null;
             string cacheError = null;
@@ -110,6 +120,13 @@ namespace TG.Control.LedPlayer
 
         private IEnumerator PlayPrepared(PlaybackCommand command, int generation)
         {
+            var playbackAdapter = PlaybackAdapter;
+            if (playbackAdapter == null)
+            {
+                apiClient.Report(command, PlaybackState.Failed, error: "LED播放组件未完成初始化。");
+                yield break;
+            }
+
             if (!DateTimeOffset.TryParse(command.executeAtUtc, out var executeAt))
             {
                 apiClient.Report(command, PlaybackState.Failed, error: "播放计划时间无效。");
