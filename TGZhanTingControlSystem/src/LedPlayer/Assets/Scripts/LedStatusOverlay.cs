@@ -110,6 +110,8 @@ namespace TG.Control.LedPlayer
             idleMediaPlayer.Loop = true;
             idleVideo.Player = idleMediaPlayer;
             idleVideo.ScaleMode = ScaleMode.ScaleToFit;
+            idleVideo.NoDefaultDisplay = true;
+            idleVideo.DisplayInEditor = false;
             idleMediaPlayer.Events.AddListener(OnIdleVideoEvent);
         }
 

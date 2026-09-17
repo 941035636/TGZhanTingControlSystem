@@ -76,6 +76,11 @@ namespace TG.Control.LedPlayer
             var display = displayObject.GetComponent<DisplayUGUI>();
             display.Player = mediaPlayer;
             display.ScaleMode = ScaleMode.ScaleToFit;
+            // Keep the LED surface black until AVPro has produced a real frame.
+            // DisplayUGUI otherwise shows AVProVideoIcon in the Unity Editor while
+            // the first frame is being prepared.
+            display.NoDefaultDisplay = true;
+            display.DisplayInEditor = false;
             display.color = Color.white;
         }
 
