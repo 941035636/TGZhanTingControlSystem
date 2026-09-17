@@ -1,5 +1,5 @@
 import './style.css'
-import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentDraftSnapshot, type ContentPublishReadiness, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiExperienceConfig } from './api'
+import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentDraftSnapshot, type ContentPublishReadiness, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiElementOverride, type UiExperienceConfig } from './api'
 import { bindingStatusLabel, jobStatusLabel, TtsWorkflowController, type TtsWorkflowApi } from './tts-workflow'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -497,6 +497,44 @@ function openUiEditor(): void {
     <section class="ui-config-card"><div class="ui-config-title"><div><strong>大屏待机界面</strong><p>支持纯色、图片或循环视频；每段讲解结束后自动返回。</p></div><span>大屏界面 · 1920×1080</span></div><div class="ui-fields"><label>主标题<input id="led-title" value="${escapeHtml(config.ledTitle)}"/></label><label>提示文字<input id="led-subtitle" value="${escapeHtml(config.ledSubtitle)}"/></label><div class="field-row colors"><label>背景颜色<input id="led-bg-color" type="color" value="${escapeHtml(config.ledBackgroundColor)}"/></label><div class="visibility-options"><label class="check-field"><input id="led-show-branding" type="checkbox" ${config.ledShowBranding?'checked':''}/>叠加标题文字</label><label class="check-field"><input id="led-show-status" type="checkbox" ${config.ledShowStatus?'checked':''}/>显示在线状态</label></div></div><div class="media-setting"><div><strong>待机素材</strong><p>${config.ledIdleMediaUrl?`${config.ledIdleMediaKind==='video'?'循环视频':'背景图片'} · ${escapeHtml(config.ledIdleMediaUrl.split('/').pop())}`:'未设置，使用纯色待机页'}</p></div><label class="upload-button">上传图片<input id="led-image-file" type="file" accept="image/*"/></label><label class="upload-button">上传视频<input id="led-video-file" type="file" accept="video/*,.mov,.mkv,.webm"/></label><button id="clear-led-media">移除</button></div></div></section>
     <div id="ui-upload-progress" class="upload-progress"><span></span></div><footer class="editor-footer"><span>界面配置独立发布，不会修改讲解内容版本。</span><button id="cancel-ui">取消</button><button id="save-ui" class="primary">发布界面配置</button></footer></div></section>`
   document.body.appendChild(modal)
+  config.layout ??= { touchTemplate: 'hero-routes', ledTemplate: 'idle-media', touchShowHero: true, touchShowStatusPanel: true, touchShowQuickActions: true, ledShowBranding: config.ledShowBranding, ledShowStatus: config.ledShowStatus }
+  config.touchElements ??= []
+  config.ledElements ??= []
+  const advanced = document.createElement('section'); advanced.className = 'ui-config-card ui-advanced-card'
+  advanced.innerHTML = `<div class="ui-config-title"><div><strong>页面模板与元素</strong><p>使用受控模板编辑页面结构；业务流程和安全操作不会被隐藏。</p></div><span>安全配置</span></div><div class="ui-fields"><div class="field-row"><label>中控首页模板<select id="touch-template"><option value="hero-routes">Hero + 常用路线</option><option value="routes-grid">路线网格</option></select></label><label>LED待机模板<select id="led-template"><option value="idle-media">品牌待机</option><option value="idle-minimal">极简待机</option></select></label></div><div class="visibility-options"><label class="check-field"><input id="touch-show-hero" type="checkbox"/>显示首页主视觉</label><label class="check-field"><input id="touch-show-status" type="checkbox"/>显示系统状态面板</label><label class="check-field"><input id="touch-show-quick" type="checkbox"/>显示快速接待</label></div><div class="field-row"><label>首页主视觉标题<input id="touch-hero-title" maxlength="200"/></label><label>首页主视觉说明<input id="touch-hero-subtitle" maxlength="200"/></label></div><div class="field-row"><label>LED待机标题<input id="led-idle-title" maxlength="200"/></label><label>LED待机提示<input id="led-idle-subtitle" maxlength="200"/></label></div></div>`
+  modal.querySelector('.ui-editor-body')?.insertBefore(advanced, modal.querySelector('.editor-footer'))
+  const findElement = (items: UiElementOverride[], key: string) => items.find(item => item.key === key)
+  const setField = (id: string, value: string | undefined | null) => { const input = modal.querySelector<HTMLInputElement>(id); if (input) input.value = value ?? '' }
+  const setChecked = (id: string, value: boolean) => { const input = modal.querySelector<HTMLInputElement>(id); if (input) input.checked = value }
+  const touchHeroTitle = findElement(config.touchElements, 'home.hero.title')
+  const touchHeroSubtitle = findElement(config.touchElements, 'home.hero.subtitle')
+  const ledIdleTitle = findElement(config.ledElements, 'idle.title')
+  const ledIdleSubtitle = findElement(config.ledElements, 'idle.subtitle')
+  setField('#touch-hero-title', touchHeroTitle?.text ?? config.touchTitle)
+  setField('#touch-hero-subtitle', touchHeroSubtitle?.text ?? config.touchSubtitle)
+  setField('#led-idle-title', ledIdleTitle?.text ?? config.ledTitle)
+  setField('#led-idle-subtitle', ledIdleSubtitle?.text ?? config.ledSubtitle)
+  const layout = config.layout
+  setField('#touch-template', layout.touchTemplate); setField('#led-template', layout.ledTemplate)
+  setChecked('#touch-show-hero', layout.touchShowHero); setChecked('#touch-show-status', layout.touchShowStatusPanel); setChecked('#touch-show-quick', layout.touchShowQuickActions)
+  const upsertElement = (items: UiElementOverride[], key: string, text: string) => { const existing = findElement(items, key); if (existing) existing.text = text || null; else items.push({ key, text: text || null, visible: true }) }
+  const syncAdvanced = () => {
+    layout.touchTemplate = (modal.querySelector<HTMLSelectElement>('#touch-template')?.value as NonNullable<UiExperienceConfig['layout']>['touchTemplate']) ?? 'hero-routes'
+    layout.ledTemplate = (modal.querySelector<HTMLSelectElement>('#led-template')?.value as NonNullable<UiExperienceConfig['layout']>['ledTemplate']) ?? 'idle-media'
+    layout.touchShowHero = !!modal.querySelector<HTMLInputElement>('#touch-show-hero')?.checked
+    layout.touchShowStatusPanel = !!modal.querySelector<HTMLInputElement>('#touch-show-status')?.checked
+    layout.touchShowQuickActions = !!modal.querySelector<HTMLInputElement>('#touch-show-quick')?.checked
+    upsertElement(config.touchElements!, 'home.hero.title', modal.querySelector<HTMLInputElement>('#touch-hero-title')?.value ?? '')
+    upsertElement(config.touchElements!, 'home.hero.subtitle', modal.querySelector<HTMLInputElement>('#touch-hero-subtitle')?.value ?? '')
+    upsertElement(config.ledElements!, 'idle.title', modal.querySelector<HTMLInputElement>('#led-idle-title')?.value ?? '')
+    upsertElement(config.ledElements!, 'idle.subtitle', modal.querySelector<HTMLInputElement>('#led-idle-subtitle')?.value ?? '')
+  }
+  const assetRow = document.createElement('div'); assetRow.className = 'media-setting'
+  assetRow.innerHTML = '<div><strong>品牌Logo</strong><p>上传后可用于中控首页和LED待机页。</p></div><label class="upload-button">上传中控Logo<input id="touch-logo-file" type="file" accept="image/*"/></label><label class="upload-button">上传LED Logo<input id="led-logo-file" type="file" accept="image/*"/></label>'
+  advanced.querySelector('.ui-fields')?.appendChild(assetRow)
+  modal.querySelector<HTMLInputElement>('#touch-logo-file')?.addEventListener('change', event => uploadUiElementAsset(event.target as HTMLInputElement, 'home.hero.logo', true, modal))
+  modal.querySelector<HTMLInputElement>('#led-logo-file')?.addEventListener('change', event => uploadUiElementAsset(event.target as HTMLInputElement, 'idle.logo', false, modal))
+  modal.querySelector('#save-ui')?.addEventListener('click', syncAdvanced, true)
   const read=()=>{config.touchTitle=modal.querySelector<HTMLInputElement>('#touch-title')!.value;config.touchSubtitle=modal.querySelector<HTMLInputElement>('#touch-subtitle')!.value;config.touchBackgroundColor=modal.querySelector<HTMLInputElement>('#touch-bg-color')!.value;config.touchAccentColor=modal.querySelector<HTMLInputElement>('#touch-accent')!.value;config.ledTitle=modal.querySelector<HTMLInputElement>('#led-title')!.value;config.ledSubtitle=modal.querySelector<HTMLInputElement>('#led-subtitle')!.value;config.ledBackgroundColor=modal.querySelector<HTMLInputElement>('#led-bg-color')!.value;config.ledShowBranding=modal.querySelector<HTMLInputElement>('#led-show-branding')!.checked;config.ledShowStatus=modal.querySelector<HTMLInputElement>('#led-show-status')!.checked}
   const close=()=>modal.remove()
   modal.querySelector('#close-ui')?.addEventListener('click',close);modal.querySelector('#cancel-ui')?.addEventListener('click',close)
@@ -508,11 +546,24 @@ function openUiEditor(): void {
   modal.querySelector('#save-ui')?.addEventListener('click',async()=>{read();const button=modal.querySelector<HTMLButtonElement>('#save-ui')!;button.disabled=true;button.textContent='正在发布…';try{uiConfig=await api.publishUi(config);close();showToast(`界面配置${formatVersion(uiConfig.version)}发布成功，终端将在 10 秒内更新。`)}catch(error){button.disabled=false;button.textContent='发布界面配置';showToast(error instanceof Error?error.message:'界面配置发布失败')}})
 }
 
-async function uploadUiAsset(input:HTMLInputElement,kind:AssetKind,target:'touch'|'led-image'|'led-video',modal:HTMLElement):Promise<void>{
+async function uploadUiAsset(input:HTMLInputElement,kind:AssetKind,target:'touch'|'led-image'|'led-video'|'touch-logo'|'led-logo',modal:HTMLElement):Promise<void>{
   const file=input.files?.[0];if(!file||!uiConfig)return
   const progress=modal.querySelector<HTMLElement>('#ui-upload-progress')!;progress.classList.add('visible')
   try{const asset=await api.uploadAsset(file,kind,0,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`});if(target==='touch')uiConfig.touchBackgroundUrl=asset.url;else{uiConfig.ledIdleMediaUrl=asset.url;uiConfig.ledIdleMediaKind=target==='led-video'?'video':'image'};modal.remove();openUiEditor();showToast(`${file.name} 上传成功，请点击“发布界面配置”。`)}catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'界面素材上传失败')}
 }
+async function uploadUiElementAsset(input: HTMLInputElement, key: string, touch: boolean, modal: HTMLElement): Promise<void> {
+  const file = input.files?.[0]; if (!file || !uiConfig) return
+  const progress = modal.querySelector<HTMLElement>('#ui-upload-progress'); progress?.classList.add('visible')
+  try {
+    const asset = await api.uploadAsset(file, 1, 0, percent => { const bar = progress?.querySelector<HTMLElement>('span'); if (bar) bar.style.width = `${percent}%` })
+    const items = touch ? (uiConfig.touchElements ??= []) : (uiConfig.ledElements ??= [])
+    const existing = items.find(item => item.key === key)
+    const value: UiElementOverride = { key, text: existing?.text ?? null, assetUrl: asset.url, color: existing?.color ?? null, visible: true, assetId: asset.id, assetSha256: asset.sha256, assetSizeBytes: asset.sizeBytes, assetMediaType: asset.mediaType ?? null }
+    if (existing) Object.assign(existing, value); else items.push(value)
+    modal.remove(); openUiEditor(); showToast(`${file.name} 上传成功，请点击“发布界面配置”。`)
+  } catch (error) { progress?.classList.remove('visible'); showToast(error instanceof Error ? error.message : '界面素材上传失败') }
+}
+
 function markDirty(rerender=false): void {
   dirty = true
   publishReadiness = null

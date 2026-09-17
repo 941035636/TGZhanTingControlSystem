@@ -238,5 +238,34 @@ namespace TG.Control.UnityContracts
         public bool ledShowStatus;
         public string updatedAtUtc;
         public string updatedBy;
+        public UiExperienceLayout layout;
+        public UiElementOverride[] touchElements;
+        public UiElementOverride[] ledElements;
+    }
+
+    [Serializable]
+    public sealed class UiExperienceLayout
+    {
+        public string touchTemplate;
+        public string ledTemplate;
+        public bool touchShowHero = true;
+        public bool touchShowStatusPanel = true;
+        public bool touchShowQuickActions = true;
+        public bool ledShowBranding = true;
+        public bool ledShowStatus = true;
+    }
+
+    [Serializable]
+    public sealed class UiElementOverride
+    {
+        public string key;
+        public string text;
+        public string assetUrl;
+        public string color;
+        public bool visible = true;
+        public string assetId;
+        public string assetSha256;
+        public long assetSizeBytes;
+        public string assetMediaType;
     }
 }

@@ -25,6 +25,7 @@ namespace TG.Control.LedPlayer
         private Text title;
         private Text subtitle;
         private Text brand;
+        private Image brandLogo;
         private Text statusText;
         private Text connectionText;
         private Image connectionPill;
@@ -90,6 +91,10 @@ namespace TG.Control.LedPlayer
 
             brand = Label("Brand", idleRoot.transform, "TG", 70, FontStyle.Bold, Hex("#D2B46F"), TextAnchor.MiddleCenter);
             Anchor(brand.rectTransform, .35f, .60f, .65f, .72f, 0, 0, 0, 0);
+            brandLogo = Image("Brand Logo", idleRoot.transform, Color.white);
+            Anchor(brandLogo.rectTransform, .35f, .60f, .65f, .72f, 0, 0, 0, 0);
+            brandLogo.preserveAspect = true;
+            brandLogo.gameObject.SetActive(false);
             title = Label("Title", idleRoot.transform, "展厅自动讲解系统", 58, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
             Anchor(title.rectTransform, .12f, .46f, .88f, .60f, 0, 0, 0, 0);
             subtitle = Label("Subtitle", idleRoot.transform, "等待触控终端启动讲解", 28, FontStyle.Normal, Hex("#C3D2CC"), TextAnchor.MiddleCenter);
@@ -150,15 +155,46 @@ namespace TG.Control.LedPlayer
         private void ApplyConfig(UiExperienceConfig config)
         {
             if (config == null) return;
-            if (!string.IsNullOrWhiteSpace(config.ledTitle)) title.text = config.ledTitle;
-            if (!string.IsNullOrWhiteSpace(config.ledSubtitle)) subtitle.text = config.ledSubtitle;
+            var titleOverride = FindOverride(config.ledElements, "idle.title");
+            var subtitleOverride = FindOverride(config.ledElements, "idle.subtitle");
+            if (!string.IsNullOrWhiteSpace(titleOverride?.text)) title.text = titleOverride.text;
+            else if (!string.IsNullOrWhiteSpace(config.ledTitle)) title.text = config.ledTitle;
+            if (!string.IsNullOrWhiteSpace(subtitleOverride?.text)) subtitle.text = subtitleOverride.text;
+            else if (!string.IsNullOrWhiteSpace(config.ledSubtitle)) subtitle.text = config.ledSubtitle;
             if (ColorUtility.TryParseHtmlString(config.ledBackgroundColor, out var color)) solidBackground.color = color;
-            brand.gameObject.SetActive(config.ledShowBranding);
-            title.gameObject.SetActive(config.ledShowBranding);
-            subtitle.gameObject.SetActive(config.ledShowBranding);
-            statusText.gameObject.SetActive(config.ledShowBranding);
-            connectionPill.gameObject.SetActive(config.ledShowStatus);
+            var showBranding = config.layout == null ? config.ledShowBranding : config.layout.ledShowBranding && config.ledShowBranding;
+            var showStatus = config.layout == null ? config.ledShowStatus : config.layout.ledShowStatus && config.ledShowStatus;
+            brand.gameObject.SetActive(showBranding);
+            title.gameObject.SetActive(showBranding);
+            subtitle.gameObject.SetActive(showBranding);
+            statusText.gameObject.SetActive(showBranding);
+            connectionPill.gameObject.SetActive(showStatus);
+            var logo = FindOverride(config.ledElements, "idle.logo");
+            brand.gameObject.SetActive(showBranding && string.IsNullOrWhiteSpace(logo?.assetUrl));
+            brandLogo.gameObject.SetActive(false);
+            if (showBranding && !string.IsNullOrWhiteSpace(logo?.assetUrl)) StartCoroutine(LoadBrandLogo(apiClient.NormalizeUrl(logo.assetUrl)));
             LoadIdleMedia(config.ledIdleMediaKind, config.ledIdleMediaUrl);
+        }
+
+        private IEnumerator LoadBrandLogo(string url)
+        {
+            using (var request = UnityWebRequestTexture.GetTexture(url))
+            {
+                yield return request.SendWebRequest();
+                if (request.result != UnityWebRequest.Result.Success) yield break;
+                var texture = DownloadHandlerTexture.GetContent(request);
+                if (texture == null) yield break;
+                brandLogo.sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f));
+                brandLogo.gameObject.SetActive(true);
+            }
+        }
+
+        private static UiElementOverride FindOverride(UiElementOverride[] items, string key)
+        {
+            if (items == null) return null;
+            for (var i = 0; i < items.Length; i++)
+                if (items[i] != null && string.Equals(items[i].key, key, StringComparison.OrdinalIgnoreCase)) return items[i];
+            return null;
         }
 
         private void LoadIdleMedia(string kind, string url)

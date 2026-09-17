@@ -607,7 +607,10 @@ namespace TG.Control.Touch
         private void ApplyUiExperience(UiExperienceConfig config)
         {
             if (config == null) return;
-            appShell.SetBranding(config.touchTitle, config.touchSubtitle);
+            var shellTitle = config.touchElements?.FirstOrDefault(item => item != null && string.Equals(item.key, "shell.title", StringComparison.OrdinalIgnoreCase));
+            var shellSubtitle = config.touchElements?.FirstOrDefault(item => item != null && string.Equals(item.key, "shell.subtitle", StringComparison.OrdinalIgnoreCase));
+            appShell.SetBranding(string.IsNullOrWhiteSpace(shellTitle?.text) ? config.touchTitle : shellTitle.text,
+                string.IsNullOrWhiteSpace(shellSubtitle?.text) ? config.touchSubtitle : shellSubtitle.text);
             if (ColorUtility.TryParseHtmlString(config.touchAccentColor, out var color))
             {
                 theme.SetConfigurableAccent(color);

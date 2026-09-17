@@ -30,7 +30,8 @@ public sealed class UiExperienceRepository
             }
 
             await using var stream = File.OpenRead(filePath);
-            return await JsonSerializer.DeserializeAsync<UiExperienceConfig>(stream, jsonOptions, cancellationToken) ?? Defaults();
+            var loaded = await JsonSerializer.DeserializeAsync<UiExperienceConfig>(stream, jsonOptions, cancellationToken);
+            return loaded is null ? Defaults() : UiExperiencePolicy.Normalize(loaded);
         }
         finally { gate.Release(); }
     }
@@ -47,7 +48,7 @@ public sealed class UiExperienceRepository
                 currentVersion = (await JsonSerializer.DeserializeAsync<UiExperienceConfig>(stream, jsonOptions, cancellationToken))?.Version ?? 0;
             }
 
-            var saved = request with
+            var saved = UiExperiencePolicy.Normalize(request) with
             {
                 Version = currentVersion + 1,
                 TouchTitle = Clean(request.TouchTitle, "展厅自动讲解系统"),
@@ -75,10 +76,15 @@ public sealed class UiExperienceRepository
         File.Move(tempPath, filePath, true);
     }
 
-    private static UiExperienceConfig Defaults() => new(
+    private static UiExperienceConfig Defaults() => new UiExperienceConfig(
         0, "展厅自动讲解系统", "TG EXHIBITION · 智慧展陈中控终端", null, "#EEF3F0", "#1C5B46",
         "展厅自动讲解系统", "等待触控终端启动讲解", null, "none", "#0A1F1B", true, true,
-        DateTimeOffset.MinValue, "system");
+        DateTimeOffset.MinValue, "system") with
+    {
+        Layout = new UiExperienceLayout(),
+        TouchElements = Array.Empty<UiElementOverride>(),
+        LedElements = Array.Empty<UiElementOverride>()
+    };
 
     private static string Clean(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     private static string NormalizeColor(string? value, string fallback) =>

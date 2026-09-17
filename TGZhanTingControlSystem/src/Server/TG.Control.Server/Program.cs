@@ -98,6 +98,7 @@ app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig co
 {
     if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
     var validation = new Dictionary<string, string[]>();
+    foreach (var pair in UiExperiencePolicy.Validate(config)) validation[pair.Key] = pair.Value;
     var touchError = string.IsNullOrWhiteSpace(config.TouchBackgroundUrl)
         ? null
         : assetStorage.ValidatePublishedReference(config.TouchBackgroundUrl, 0, request.Host);
@@ -106,6 +107,13 @@ app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig co
         ? null
         : assetStorage.ValidatePublishedReference(config.LedIdleMediaUrl, 0, request.Host);
     if (ledError is not null) validation["ledIdleMediaUrl"] = [$"LED待机素材：{ledError}"];
+    foreach (var element in (config.TouchElements ?? []).Concat(config.LedElements ?? []))
+    {
+        if (string.IsNullOrWhiteSpace(element.AssetUrl)) continue;
+        var assetError = assetStorage.ValidatePublishedReference(element.AssetUrl, element.AssetSizeBytes,
+            request.Host, element.AssetSha256);
+        if (assetError is not null) validation[$"uiElement.{element.Key}"] = [$"界面元素素材：{assetError}"];
+    }
     if (validation.Count > 0) return Results.ValidationProblem(validation);
     return Results.Ok(await repository.SaveAsync(config, username, ct));
 });

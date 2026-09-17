@@ -25,6 +25,7 @@ namespace TG.Control.Touch.UI.Pages
         private readonly Image heroFrame;
         private readonly Image heroSurface;
         private readonly Image heroImage;
+        private readonly Image heroLogo;
         private readonly GameObject heroPlaceholder;
         private readonly Image heroAccent;
         private readonly Text heroEyebrow;
@@ -89,6 +90,10 @@ namespace TG.Control.Touch.UI.Pages
             heroImage = factory.Image("Configurable Hero Image", heroSurface.transform, Color.clear);
             TouchUiFactory.Stretch(heroImage.rectTransform);
             heroImage.raycastTarget = false;
+            heroLogo = factory.Image("Configurable Hero Logo", heroSurface.transform, Color.white);
+            TouchUiFactory.Anchor(heroLogo.rectTransform, 1, 1, 1, 1, -220, -92, -28, -28);
+            heroLogo.preserveAspect = true;
+            heroLogo.gameObject.SetActive(false);
             var overlay = factory.Image("Hero Contrast Overlay", heroSurface.transform, theme.HeroOverlay);
             TouchUiFactory.Stretch(overlay.rectTransform);
             overlay.raycastTarget = false;
@@ -193,11 +198,21 @@ namespace TG.Control.Touch.UI.Pages
             if (state == null) return;
             assetUrlResolver = urlResolver;
             var experience = state.UiExperience;
+            var heroTitleOverride = FindOverride(experience?.touchElements, "home.hero.title");
+            var heroSubtitleOverride = FindOverride(experience?.touchElements, "home.hero.subtitle");
             heroTitle.text = string.IsNullOrWhiteSpace(experience?.touchTitle)
                 ? "展厅自动讲解系统" : experience.touchTitle;
             heroSubtitle.text = string.IsNullOrWhiteSpace(experience?.touchSubtitle)
                 ? "选择接待路线，可靠完成语音讲解与LED画面同步" : experience.touchSubtitle;
+            if (!string.IsNullOrWhiteSpace(heroTitleOverride?.text)) heroTitle.text = heroTitleOverride.text;
+            if (!string.IsNullOrWhiteSpace(heroSubtitleOverride?.text)) heroSubtitle.text = heroSubtitleOverride.text;
             SetHeroImage(Resolve(experience?.touchBackgroundUrl));
+            SetHeroLogo(Resolve(FindOverride(experience?.touchElements, "home.hero.logo")?.assetUrl));
+            var layout = experience?.layout;
+            var showHero = layout == null || layout.touchShowHero;
+            if (layout != null && string.Equals(layout.touchTemplate, "routes-grid", StringComparison.OrdinalIgnoreCase)) showHero = false;
+            heroFrame.gameObject.SetActive(showHero);
+            systemStatus.Root.gameObject.SetActive(layout == null || layout.touchShowStatusPanel);
 
             var presentation = ReceptionStatePresentation.From(state, theme);
             receptionState.text = presentation.Title;
@@ -219,6 +234,12 @@ namespace TG.Control.Touch.UI.Pages
             temporaryButton.gameObject.SetActive(!state.HasActiveSession);
             startAllButton.gameObject.SetActive(!state.HasActiveSession);
             activeQuickNotice.SetActive(state.HasActiveSession);
+            if (layout != null && !layout.touchShowQuickActions)
+            {
+                temporaryButton.gameObject.SetActive(false);
+                startAllButton.gameObject.SetActive(false);
+                activeQuickNotice.SetActive(false);
+            }
             temporaryButton.interactable = state.Content != null;
             startAllButton.interactable = CanStart(state) &&
                                           state.Content?.modules?.Any(module => module.enabled && HasContent(module)) == true;
@@ -342,6 +363,17 @@ namespace TG.Control.Touch.UI.Pages
         }
 
         private string Resolve(string url) => string.IsNullOrWhiteSpace(url) ? null : assetUrlResolver?.Invoke(url) ?? url;
+
+        private void SetHeroLogo(string url)
+        {
+            heroLogo.gameObject.SetActive(false);
+            heroLogo.sprite = null;
+            if (string.IsNullOrWhiteSpace(url)) return;
+            imageLoader.Load(heroLogo, url, success => heroLogo.gameObject.SetActive(success));
+        }
+
+        private static UiElementOverride FindOverride(UiElementOverride[] items, string key) =>
+            items?.FirstOrDefault(item => item != null && string.Equals(item.key, key, StringComparison.OrdinalIgnoreCase));
 
         private static string BuildSessionDetail(PlaybackSessionStatus session)
         {

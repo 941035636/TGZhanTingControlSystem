@@ -99,6 +99,30 @@ public sealed record PublishedContent(
     string PublishedBy,
     IReadOnlyList<ExhibitionModule> Modules);
 
+/// <summary>
+/// A bounded, declarative UI override. Runtime clients only apply known keys;
+/// arbitrary code, markup and prefab references are intentionally not supported.
+/// </summary>
+public sealed record UiElementOverride(
+    string Key,
+    string? Text = null,
+    string? AssetUrl = null,
+    string? Color = null,
+    bool Visible = true,
+    string? AssetId = null,
+    string? AssetSha256 = null,
+    long AssetSizeBytes = 0,
+    string? AssetMediaType = null);
+
+public sealed record UiExperienceLayout(
+    string TouchTemplate = "hero-routes",
+    string LedTemplate = "idle-media",
+    bool TouchShowHero = true,
+    bool TouchShowStatusPanel = true,
+    bool TouchShowQuickActions = true,
+    bool LedShowBranding = true,
+    bool LedShowStatus = true);
+
 public sealed record UiExperienceConfig(
     long Version,
     string TouchTitle,
@@ -114,4 +138,10 @@ public sealed record UiExperienceConfig(
     bool LedShowBranding,
     bool LedShowStatus,
     DateTimeOffset UpdatedAtUtc,
-    string UpdatedBy);
+    string UpdatedBy)
+{
+    /// <summary>Schema additions are init-only so legacy flat JSON and constructors remain compatible.</summary>
+    public UiExperienceLayout? Layout { get; init; }
+    public IReadOnlyList<UiElementOverride>? TouchElements { get; init; }
+    public IReadOnlyList<UiElementOverride>? LedElements { get; init; }
+}
