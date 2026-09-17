@@ -388,7 +388,18 @@ static void AddSiteConfiguration(ConfigurationManager configuration, string[] co
         "TG Exhibition",
         "Config",
         "server.site.json");
-    configuration.AddJsonFile(programDataConfig, optional: true, reloadOnChange: true);
+    try
+    {
+        configuration.AddJsonFile(programDataConfig, optional: true, reloadOnChange: true);
+    }
+    catch (UnauthorizedAccessException exception)
+    {
+        // A locked-down machine may expose the ProgramData directory while denying
+        // the service account read access to the site file. Startup must still be
+        // possible with appsettings.json; the warning makes the deployment issue
+        // visible without changing any API or business behavior.
+        Console.Error.WriteLine($"Site configuration is not readable: {programDataConfig}. {exception.Message}");
+    }
 
     var explicitSiteConfig = Environment.GetEnvironmentVariable("TG_SERVER_SITE_CONFIG");
     if (!string.IsNullOrWhiteSpace(explicitSiteConfig))
