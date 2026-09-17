@@ -8,7 +8,7 @@ namespace TG.Control.Editor
 {
     public static class WindowsPlayerBuilder
     {
-        private const string BootstrapScenePath = "Assets/Scenes/RuntimeBootstrap.unity";
+        private const string BootstrapScenePath = "Assets/Scenes/LedRuntime.unity";
 
         public static void Build()
         {
@@ -27,23 +27,6 @@ namespace TG.Control.Editor
             });
             if (report.summary.result != BuildResult.Succeeded)
                 throw new InvalidOperationException($"Windows player build failed: {report.summary.result}");
-            CopyLibVlcToRuntimeLookupPath(outputPath);
-        }
-
-        private static void CopyLibVlcToRuntimeLookupPath(string outputPath)
-        {
-            var buildDirectory = Path.GetDirectoryName(outputPath) ?? ".";
-            var dataDirectory = Path.Combine(buildDirectory,
-                Path.GetFileNameWithoutExtension(outputPath) + "_Data");
-            var pluginsDirectory = Path.Combine(dataDirectory, "Plugins");
-            var architectureDirectory = Path.Combine(pluginsDirectory, "x86_64");
-            foreach (var fileName in new[] { "libvlc.dll", "libvlccore.dll" })
-            {
-                var source = Path.Combine(architectureDirectory, fileName);
-                if (!File.Exists(source))
-                    throw new FileNotFoundException("Bundled LibVLC library is missing from the Windows build.", source);
-                File.Copy(source, Path.Combine(pluginsDirectory, fileName), true);
-            }
         }
 
         private static void EnsureBootstrapScene()

@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
-using UMP;
+using RenderHeads.Media.AVProVideo;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -20,20 +20,18 @@ namespace TG.Control.LedPlayer
             UnityEngine.Object.DontDestroyOnLoad(root);
             var api = root.AddComponent<LedApiClient>();
             ApplySiteConfiguration(api);
-            // AVPro 1.8.9 exposes an unsupported D3D 0x58 texture on Unity 2020,
-            // including with hardware decoding disabled. Use the bundled LibVLC
-            // backend, which uploads frames into a Unity-owned BGRA32 texture.
-            var mediaPlayer = root.AddComponent<UniversalMediaPlayer>();
-            mediaPlayer.AutoPlay = false;
+            Application.runInBackground = true;
+            var mediaPlayer = root.AddComponent<MediaPlayer>();
+            mediaPlayer.AutoStart = false;
             mediaPlayer.Loop = false;
-            var adapter = root.AddComponent<UniversalMediaPlaybackAdapter>();
+            var adapter = root.AddComponent<AvProMediaPlaybackAdapter>();
             var narrationAudio = root.AddComponent<AudioSource>();
             narrationAudio.playOnAwake = false;
             narrationAudio.loop = false;
             narrationAudio.spatialBlend = 0f;
             var controller = root.AddComponent<LedPlaybackController>();
             var overlay = root.AddComponent<LedStatusOverlay>();
-            mediaPlayer.RenderingObjects = new[] { CreateVideoCanvas(root.transform) };
+            CreateVideoCanvas(root.transform, mediaPlayer);
             SetReference(adapter, "mediaPlayer", mediaPlayer);
             SetReference(controller, "apiClient", api);
             SetReference(controller, "playbackAdapterComponent", adapter);
@@ -48,7 +46,7 @@ namespace TG.Control.LedPlayer
             root.SetActive(true);
         }
 
-        private static GameObject CreateVideoCanvas(Transform parent)
+        private static void CreateVideoCanvas(Transform parent, MediaPlayer mediaPlayer)
         {
             var canvasObject = new GameObject("LED Video Canvas", typeof(Canvas), typeof(CanvasScaler));
             canvasObject.transform.SetParent(parent, false);
@@ -59,17 +57,26 @@ namespace TG.Control.LedPlayer
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
 
-            var displayObject = new GameObject("LibVLC Fullscreen Display", typeof(RectTransform), typeof(RawImage));
+            var backgroundObject = new GameObject("Video Background", typeof(RectTransform), typeof(RawImage));
+            backgroundObject.transform.SetParent(canvasObject.transform, false);
+            var backgroundRect = backgroundObject.GetComponent<RectTransform>();
+            backgroundRect.anchorMin = Vector2.zero;
+            backgroundRect.anchorMax = Vector2.one;
+            backgroundRect.offsetMin = Vector2.zero;
+            backgroundRect.offsetMax = Vector2.zero;
+            backgroundObject.GetComponent<RawImage>().color = Color.black;
+
+            var displayObject = new GameObject("AVPro Fullscreen Display", typeof(RectTransform), typeof(DisplayUGUI));
             displayObject.transform.SetParent(canvasObject.transform, false);
             var rect = displayObject.GetComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
-            var display = displayObject.GetComponent<RawImage>();
+            var display = displayObject.GetComponent<DisplayUGUI>();
+            display.Player = mediaPlayer;
+            display.ScaleMode = ScaleMode.ScaleToFit;
             display.color = Color.white;
-            display.raycastTarget = false;
-            return displayObject;
         }
 
         private static void SetReference(UnityEngine.Object target, string fieldName, UnityEngine.Object value) =>

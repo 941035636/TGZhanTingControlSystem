@@ -1,7 +1,7 @@
 using System;
 using System.Collections;
 using TG.Control.UnityContracts;
-using UMP;
+using RenderHeads.Media.AVProVideo;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
@@ -21,14 +21,14 @@ namespace TG.Control.LedPlayer
         private GameObject idleRoot;
         private Image solidBackground;
         private Image idleImage;
-        private RawImage idleVideo;
+        private DisplayUGUI idleVideo;
         private Text title;
         private Text subtitle;
         private Text brand;
         private Text statusText;
         private Text connectionText;
         private Image connectionPill;
-        private UniversalMediaPlayer idleMediaPlayer;
+        private MediaPlayer idleMediaPlayer;
         private int mediaGeneration;
 
         private void Awake()
@@ -58,7 +58,7 @@ namespace TG.Control.LedPlayer
                 apiClient.UiExperienceChanged -= ApplyConfig;
             }
             if (playbackController != null) playbackController.PlaybackActiveChanged -= OnPlaybackActiveChanged;
-            if (idleMediaPlayer != null) idleMediaPlayer.RemovePreparedEvent(OnIdleVideoPrepared);
+            if (idleMediaPlayer != null) idleMediaPlayer.Events.RemoveListener(OnIdleVideoEvent);
         }
 
         private void BuildUi()
@@ -80,7 +80,7 @@ namespace TG.Control.LedPlayer
             idleImage = Image("Idle Image", idleRoot.transform, Color.white);
             Stretch(idleImage.rectTransform);
             idleImage.gameObject.SetActive(false);
-            idleVideo = new GameObject("Idle Video", typeof(RectTransform), typeof(RawImage)).GetComponent<RawImage>();
+            idleVideo = new GameObject("Idle Video", typeof(RectTransform), typeof(DisplayUGUI)).GetComponent<DisplayUGUI>();
             idleVideo.transform.SetParent(idleRoot.transform, false);
             Stretch(idleVideo.rectTransform);
             idleVideo.color = Color.white;
@@ -105,11 +105,12 @@ namespace TG.Control.LedPlayer
 
         private void CreateIdleVideoPlayer()
         {
-            idleMediaPlayer = gameObject.AddComponent<UniversalMediaPlayer>();
-            idleMediaPlayer.AutoPlay = false;
+            idleMediaPlayer = gameObject.AddComponent<MediaPlayer>();
+            idleMediaPlayer.AutoStart = false;
             idleMediaPlayer.Loop = true;
-            idleMediaPlayer.RenderingObjects = new[] { idleVideo.gameObject };
-            idleMediaPlayer.AddPreparedEvent(OnIdleVideoPrepared);
+            idleVideo.Player = idleMediaPlayer;
+            idleVideo.ScaleMode = ScaleMode.ScaleToFit;
+            idleMediaPlayer.Events.AddListener(OnIdleVideoEvent);
         }
 
         private void OnConnectionChanged(bool value)
@@ -130,8 +131,8 @@ namespace TG.Control.LedPlayer
             playbackActive = value;
             idleRoot.SetActive(!value);
             if (idleMediaPlayer == null) return;
-            if (value) idleMediaPlayer.Pause();
-            else if (idleVideo.gameObject.activeSelf) idleMediaPlayer.Play();
+            if (value) idleMediaPlayer.Control?.Pause();
+            else if (idleVideo.gameObject.activeSelf) idleMediaPlayer.Control?.Play();
         }
 
         private void OnContentSyncChanged(ContentSyncProgress progress)
@@ -161,7 +162,7 @@ namespace TG.Control.LedPlayer
         private void LoadIdleMedia(string kind, string url)
         {
             mediaGeneration++;
-            if (idleMediaPlayer != null) idleMediaPlayer.Stop(false);
+            if (idleMediaPlayer != null) idleMediaPlayer.CloseMedia();
             idleImage.gameObject.SetActive(false);
             idleVideo.gameObject.SetActive(false);
             if (string.IsNullOrWhiteSpace(url) || string.Equals(kind, "none", StringComparison.OrdinalIgnoreCase)) return;
@@ -192,13 +193,14 @@ namespace TG.Control.LedPlayer
             yield return LedContentCache.Shared.Resolve(url, value => localUrl = value, value => error = value);
             if (generation != mediaGeneration || !string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(localUrl)) yield break;
             idleVideo.gameObject.SetActive(true);
-            idleMediaPlayer.Path = localUrl;
-            idleMediaPlayer.Prepare();
+            idleMediaPlayer.OpenMedia(MediaPathType.AbsolutePathOrURL, localUrl, false);
         }
 
-        private void OnIdleVideoPrepared(int width, int height)
+        private void OnIdleVideoEvent(MediaPlayer source, MediaPlayerEvent.EventType eventType, ErrorCode errorCode)
         {
-            if (!playbackActive && idleVideo.gameObject.activeSelf) idleMediaPlayer.Play();
+            if (source != idleMediaPlayer || playbackActive || !idleVideo.gameObject.activeSelf) return;
+            if (eventType == MediaPlayerEvent.EventType.ReadyToPlay || eventType == MediaPlayerEvent.EventType.FirstFrameReady)
+                idleMediaPlayer.Control?.Play();
         }
 
         private void RefreshStatus()
