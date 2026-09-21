@@ -20,6 +20,10 @@ src/TouchClient/*.sln
 src/LedPlayer/*.csproj
 src/LedPlayer/*.sln
 
+# Legacy UMP/LibVLC plugin is not part of the current AVPro playback project.
+# Keep accidental local copies out of the source tree and release commits.
+src/LedPlayer/Assets/UniversalMediaPlayer/
+
 # Local runtime data and logs
 **/Data/
 .codex-test-data/
