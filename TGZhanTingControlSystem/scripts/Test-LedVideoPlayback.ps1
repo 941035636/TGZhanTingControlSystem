@@ -26,15 +26,24 @@ $completed = $false
 function Request([string]$Path, $Body = $null) {
     $options = @{ Uri = "$($ServerUrl.TrimEnd('/'))$Path"; Headers = $headers; TimeoutSec = 10 }
     if ($null -ne $Body) { $options.Method = 'Post'; $options.ContentType = 'application/json'; $options.Body = $Body | ConvertTo-Json -Depth 10 }
-    Invoke-RestMethod @options
+    try { Invoke-RestMethod @options }
+    catch {
+        $method = if ($options.Method) { $options.Method } else { 'Get' }
+        $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+        throw "$method $Path failed with HTTP $status. $($_.Exception.Message)"
+    }
 }
 function Check([string]$Name, [bool]$Condition) {
     $results.Add([pscustomobject]@{ test = $Name; status = $(if ($Condition) { 'PASS' } else { 'FAIL' }); utc = [DateTimeOffset]::UtcNow.ToString('O') })
     if (-not $Condition) { throw $Name }
     Write-Host "PASS: $Name"
 }
-function Control([int]$Action) {
-    $response = Request '/api/playback/control' @{ sessionId = $sessionId; action = $Action }
+function Control([int]$Action, [Nullable[double]]$Volume = $null) {
+    if ([string]::IsNullOrWhiteSpace($script:sessionId)) { throw "Control $Action has no owned Session id." }
+    $body = @{ sessionId = $script:sessionId; action = $Action }
+    if ($null -ne $Volume) { $body.volume = [double]$Volume }
+    try { $response = Request '/api/playback/control' $body }
+    catch { throw "Control $Action for Session $($script:sessionId) failed. $($_.Exception.Message)" }
     if (-not $response.accepted) { throw "Control $Action was rejected." }
 }
 function Wait-Until([scriptblock]$Condition, [int]$Seconds = 20) {
@@ -107,12 +116,16 @@ try {
     [TgLedVideoCapture]::SetForegroundWindow($handle) | Out-Null
     Wait-Until { (Request '/api/readiness').ledReady } 40
     $started = Request '/api/playback/start' @{ moduleIds = @($ModuleId); requestedBy = 'LED D3D regression' }
-    $sessionId = $started.sessionId
+    $script:sessionId = $started.sessionId
     Check 'Route has multiple nodes' ($started.nodeCount -ge 2)
     Wait-Until { (Request '/api/playback/active').session.playPublished }
     Start-Sleep -Seconds 3
     $playing = Capture '01-playing'
     Check 'Actual video region is not black' ($playing.brightRatio -gt 0.1)
+    Control 9 0.4
+    Wait-Until { [Math]::Abs((Request '/api/playback/active').session.videoVolume - 0.4) -lt 0.001 }
+    Wait-Until { (Get-Content -LiteralPath $PlayerLogPath -Raw) -match 'LED视频音量已实时调整为 40%' }
+    Check 'Live LED video volume command reaches the Player' $true
 
     Control 3
     Wait-Until { (Request '/api/playback/active').session.paused }
@@ -143,7 +156,8 @@ try {
 
     $log = Get-Content -LiteralPath $PlayerLogPath -Raw
     Check 'No unsupported D3D format or playback exception' ($log -notmatch 'Unsupported D3D|DllNotFoundException|EntryPointNotFoundException|NullReferenceException')
-    Check 'Unity BGRA32 output confirmed by the active backend' ($log -match 'Video output verified via LibVLC / UMP \(Unity BGRA32\)')
+    $verifiedBackend = [regex]::Match($log, 'Video output verified via (?<backend>[^\r\n]+)')
+    Check 'Active video backend produced verified frames' ($verifiedBackend.Success -and $verifiedBackend.Groups['backend'].Value -notmatch 'unknown')
     $completed = $true
 } catch {
     $results.Add([pscustomobject]@{ test = 'Regression execution'; status = 'FAIL'; detail = $_.Exception.Message; utc = [DateTimeOffset]::UtcNow.ToString('O') })

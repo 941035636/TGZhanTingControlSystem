@@ -46,16 +46,22 @@ internal sealed class RuntimeLauncherForm : Form
         };
         panel.Controls.Add(title);
         panel.Controls.Add(serverStatus);
-        panel.Controls.Add(touchStatus);
-        panel.Controls.Add(ledStatus);
+        if (configuration.EnableTouchClient) panel.Controls.Add(touchStatus);
+        if (configuration.EnableLedPlayer) panel.Controls.Add(ledStatus);
         panel.Controls.Add(eventStatus);
 
         var actions = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 24, 0, 0) };
-        actions.Controls.Add(ActionButton("打开管理端", (_, _) => OpenAdmin()));
-        actions.Controls.Add(ActionButton("启动触控端", (_, _) => supervisor.StartTouchNow()));
-        actions.Controls.Add(ActionButton("启动LED端", (_, _) => supervisor.StartLedNow()));
-        actions.Controls.Add(ActionButton("停止触控端", (_, _) => supervisor.StopTouch()));
-        actions.Controls.Add(ActionButton("停止LED端", (_, _) => supervisor.StopLed()));
+        if (configuration.ShowAdminButton) actions.Controls.Add(ActionButton("打开管理端", (_, _) => OpenAdmin()));
+        if (configuration.EnableTouchClient)
+        {
+            actions.Controls.Add(ActionButton("启动触控端", (_, _) => supervisor.StartTouchNow()));
+            actions.Controls.Add(ActionButton("停止触控端", (_, _) => supervisor.StopTouch()));
+        }
+        if (configuration.EnableLedPlayer)
+        {
+            actions.Controls.Add(ActionButton("启动播放端", (_, _) => supervisor.StartLedNow()));
+            actions.Controls.Add(ActionButton("停止播放端", (_, _) => supervisor.StopLed()));
+        }
         panel.Controls.Add(actions);
         Controls.Add(panel);
 
@@ -79,8 +85,10 @@ internal sealed class RuntimeLauncherForm : Form
         if (InvokeRequired) { BeginInvoke(() => ApplySnapshot(snapshot)); return; }
         serverStatus.Text = "系统服务：" + (snapshot.ServerOnline ? "在线" : "离线/启动中");
         serverStatus.ForeColor = snapshot.ServerOnline ? Color.FromArgb(89, 214, 166) : Color.FromArgb(255, 190, 92);
-        touchStatus.Text = "触控终端：" + (snapshot.TouchClientRunning ? "运行中" : "未运行");
-        ledStatus.Text = "LED播放端：" + (snapshot.LedPlayerRunning ? "运行中" : "未运行");
+        if (configuration.EnableTouchClient)
+            touchStatus.Text = "触控终端：" + (snapshot.TouchClientRunning ? "运行中" : "未运行");
+        if (configuration.EnableLedPlayer)
+            ledStatus.Text = "大屏播放端：" + (snapshot.LedPlayerRunning ? "运行中" : "未运行");
         eventStatus.Text = snapshot.Message;
     }
 

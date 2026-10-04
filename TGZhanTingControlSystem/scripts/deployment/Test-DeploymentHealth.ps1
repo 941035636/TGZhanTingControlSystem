@@ -2,7 +2,7 @@
 param(
     [string]$InstallRoot = (Join-Path $env:ProgramFiles 'TG Exhibition'),
     [string]$DataRoot = (Join-Path $env:ProgramData 'TG Exhibition'),
-    [string]$ServerHealthUrl = 'http://127.0.0.1:5080/api/health'
+    [string]$ServerHealthUrl = 'https://localhost:5443/api/health'
 )
 
 $ErrorActionPreference = 'Stop'

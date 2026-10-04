@@ -115,13 +115,15 @@ public sealed record UiElementOverride(
     string? AssetMediaType = null);
 
 public sealed record UiExperienceLayout(
-    string TouchTemplate = "hero-routes",
+    string TouchTemplate = "module-kiosk",
     string LedTemplate = "idle-media",
     bool TouchShowHero = true,
     bool TouchShowStatusPanel = true,
     bool TouchShowQuickActions = true,
     bool LedShowBranding = true,
-    bool LedShowStatus = true);
+    bool LedShowStatus = true,
+    bool TouchWelcomeEnabled = true,
+    int TouchIdleTimeoutSeconds = 180);
 
 public sealed record UiExperienceConfig(
     long Version,

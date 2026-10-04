@@ -1,0 +1,131 @@
+# 中控端第二版改造与续开发交接
+
+更新时间：2026-10-05
+目标分支：`codex/product-upgrade`
+
+## 1. 本轮产品目标
+
+面向展厅接待和年龄偏大的操作人员，将中控端默认体验调整为“欢迎页 + 大卡片点播”，降低操作复杂度，同时保留原有讲解路线、主题组合、播放控制和系统状态能力。
+
+视觉方向采用深蓝、钴蓝和电光青的科技展厅风格。界面使用半透明深色面板、发光边缘和大面积留白，避免游戏化、信息过密或小字号操作。
+
+## 2. 已完成实现
+
+### 2.1 欢迎与引导
+
+- 启动后显示全屏欢迎页，默认标题为“欢迎开启自动讲解之旅”。
+- 使用触摸光环和“触碰开启”按钮模拟手掌按下交互。
+- 支持管理端上传预录制欢迎词音频。
+- 播放欢迎词时允许跳过；未配置音频时直接进入讲解首页。
+- 无活动讲解且长时间无人操作时自动返回欢迎页，默认180秒。
+- 活动讲解或暂停状态下不会自动返回欢迎页。
+- 欢迎页开关、欢迎文字和自动返回时间均由界面配置控制。
+
+### 2.2 简化讲解首页
+
+- 默认首页模板为`module-kiosk`。
+- 启用的展陈模块按后台顺序显示为大图卡片。
+- 卡片仅显示模块名称，不显示编号、技术状态或内容配置提示。
+- 选中模块后，通过右侧固定区域执行“开始讲解”。
+- “全部讲解”按模块顺序和节点顺序连续播放全部可用内容。
+- 模块封面使用现有`ExhibitionModule.coverUrl`，管理端已增加底图上传入口。
+- 原有首页模板仍保留，可在管理端受控切换。
+
+### 2.3 导航和高级能力
+
+侧栏顺序调整为：
+
+1. 讲解首页
+2. 当前讲解
+3. 系统状态
+4. 讲解路线
+5. 主题组合
+
+路线和主题组合没有删除，仅降低默认入口优先级。当前没有增加新的登录模式或权限切换页；如果甲方最终确认需要“简单版 / 高级版”，应继续基于现有受控模板或管理员权限实现，不应复制两套业务逻辑。
+
+### 2.4 语音与视频编排
+
+- 新发布内容不允许同一个节点同时包含视频和讲解语音。
+- 管理端明确提示按独立节点编排，例如：`语音介绍 → 视频 → 语音补充 → 视频 → 语音总结`。
+- 服务端发布检查会以`narration_video_overlap`阻止不符合要求的内容。
+- 纯视频节点可以发布；只有讲解文案但没有可播放音频的节点仍按现有规则检查。
+- 旧正式版本保持可读取和回滚，不在运行时偷偷改变已有产品语义。
+
+### 2.5 同步纳入的既有产品化改动
+
+- LED播放端D3D/黑屏处理和状态显示整改。
+- 中控端实时调节LED视频音量。
+- 中控端退出按钮及二次确认；主动退出不会被启动器立即拉起。
+- 服务端、TouchClient、LedPlayer三机部署脚本和独立安装程序定义。
+- HTTPS证书、终端注册密钥、站点配置和部署安全加固。
+- 管理账号哈希存储、角色权限和开发环境兼容账号。
+- 管理端中文化、LED待机图片/循环视频配置及素材尺寸检查。
+
+## 3. 关键文件
+
+- `src/TouchClient/Assets/Scripts/UI/Pages/WelcomeExperiencePage.cs`
+- `src/TouchClient/Assets/Scripts/UI/Pages/ModuleKioskHomePage.cs`
+- `src/TouchClient/Assets/Scripts/TouchOperatorUi.cs`
+- `src/TouchClient/Assets/Resources/Touch/touch-technology-background.png`
+- `src/AdminWeb/src/main.ts`
+- `src/Server/TG.Control.Server/UiExperiencePolicy.cs`
+- `src/Server/TG.Control.Server/ContentPublishPolicy.cs`
+- `src/Server/TG.Control.Server/ContentValidator.cs`
+- `scripts/Build-SplitProductionPackages.ps1`
+- `docs/Architecture/Three-Machine-Deployment.md`
+
+## 4. 配置兼容策略
+
+`UiExperienceLayout`新增：
+
+- `TouchTemplate = "module-kiosk"`
+- `TouchWelcomeEnabled = true`
+- `TouchIdleTimeoutSeconds = 180`
+
+服务端根据旧配置缺失超时时得到的零值识别旧版布局，并自动迁移到上述默认值。明确保存过的新配置不会被重复迁移。
+
+## 5. 已完成验证
+
+- AdminWeb TypeScript/Vite正式构建通过。
+- AdminWeb自动测试：12/12通过。
+- Server Release独立输出构建：0错误、0警告。
+- Phase 9D内容、TTS、发布和播放回归：27/27通过。
+- Unity 2020.3.35f1c2隔离工程脚本编译成功。
+- `git diff --check`通过。
+
+## 6. 公司电脑续开发步骤
+
+```powershell
+git fetch origin
+git switch codex/product-upgrade
+git pull --ff-only origin codex/product-upgrade
+```
+
+然后使用Unity 2020.3.35f1c2打开：
+
+- `src/TouchClient`
+- `src/LedPlayer`
+
+首次验证顺序：
+
+1. 编译并启动最新Server。
+2. 在管理端上传若干模块封面和一段欢迎词音频并发布界面配置。
+3. 发布至少包含“语音节点、视频节点、语音节点”的测试内容。
+4. 运行TouchClient与LedPlayer，验证欢迎页、跳过、单模块、全部讲解、暂停/继续/跳过和空闲返回。
+5. 在1920×1080触摸屏上检查文字大小、触摸热区、卡片裁切和右侧操作区。
+
+## 7. 下一阶段待办
+
+- 使用真实甲方图片替换临时模块封面。
+- 确认并录制最终欢迎词；当前欢迎音频由管理端上传，不在客户端内置固定语音。
+- 根据甲方决定确定是否增加“简单版 / 高级版”权限入口。
+- 对触摸按压效果进行现场手感调整，包括按压时长、光圈反馈和提示文字。
+- 进行三端实际Windows构建联调，不能仅以Unity脚本编译代替实机验收。
+- 重新生成三端正式安装包，并在干净Windows环境执行安装、重启、自启动和卸载回归。
+
+## 8. 注意事项
+
+- 不要删除或重做Phase 1至Phase 7已有架构。
+- 不要重新允许同节点讲解语音与视频声音叠加。
+- 不要把隔离编译目录、Unity Library、成品Exe目录、压缩包、证书私钥或现场真实密钥提交到Git。
+- 开发环境账号仅用于本地调试；正式部署继续通过安装脚本生成管理员密码哈希和终端注册密钥。

@@ -25,6 +25,7 @@ namespace TG.Control.Touch.UI.Pages
         public event Action ResumeRequested;
         public event Action RetryRequested;
         public event Action SkipRequested;
+        public event Action<double> VideoVolumeRequested;
         public event Action StopRequested;
         public event Action StopCancelled;
 
@@ -61,6 +62,7 @@ namespace TG.Control.Touch.UI.Pages
             controlBar.ResumeRequested += () => ResumeRequested?.Invoke();
             controlBar.RetryRequested += () => RetryRequested?.Invoke();
             controlBar.SkipRequested += () => SkipRequested?.Invoke();
+            controlBar.VideoVolumeRequested += value => VideoVolumeRequested?.Invoke(value);
             controlBar.StopRequested += () => StopRequested?.Invoke();
             controlBar.StopCancelled += () => StopCancelled?.Invoke();
 

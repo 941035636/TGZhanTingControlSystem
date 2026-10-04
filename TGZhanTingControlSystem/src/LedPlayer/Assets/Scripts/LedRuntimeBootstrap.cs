@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using RenderHeads.Media.AVProVideo;
+using TG.Control.Contracts;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -97,7 +98,8 @@ namespace TG.Control.LedPlayer
                 if (config == null) return;
                 if (!string.IsNullOrWhiteSpace(config.serverBaseUrl)) SetValue(api, "serverBaseUrl", config.serverBaseUrl);
                 if (!string.IsNullOrWhiteSpace(config.clientId)) SetValue(api, "clientId", config.clientId);
-                if (!string.IsNullOrWhiteSpace(config.terminalApiKey)) SetValue(api, "terminalApiKey", config.terminalApiKey);
+                if (!string.IsNullOrWhiteSpace(config.terminalApiKey))
+                    SetValue(api, "terminalApiKey", DeploymentSecretProtector.Unprotect(config.terminalApiKey));
                 if (!string.IsNullOrWhiteSpace(config.cacheDirectory)) LedContentCache.Shared.ConfigureDirectory(config.cacheDirectory);
                 Debug.Log("LedPlayer已加载现场配置：" + path);
             }

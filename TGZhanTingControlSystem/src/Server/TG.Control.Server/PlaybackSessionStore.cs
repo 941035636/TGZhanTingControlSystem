@@ -12,7 +12,8 @@ public sealed record PlaybackSessionSnapshot(
     int Index,
     bool Paused,
     bool PlayPublished,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    double? VideoVolumeOverride = null);
 
 public sealed class PlaybackSessionStore
 {

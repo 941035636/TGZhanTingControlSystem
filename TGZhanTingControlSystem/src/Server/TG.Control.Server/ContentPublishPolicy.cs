@@ -39,6 +39,11 @@ public static class ContentPublishPolicy
                 var hasNarrationText = !string.IsNullOrWhiteSpace(node.NarrationText);
                 var hasPlayableVisual = (node.Assets ?? []).Any(asset =>
                     asset.Kind is AssetKind.Video or AssetKind.Animation && !string.IsNullOrWhiteSpace(asset.Url));
+                var hasNarrationAudio = node.NarrationAudio is not null || !string.IsNullOrWhiteSpace(node.TtsAudioUrl);
+                if (hasPlayableVisual && hasNarrationAudio)
+                    AddIssue(issues, module, node, "narration_video_overlap", ContentPublishIssueSeverity.Error,
+                        "同一节点不能同时播放讲解语音和视频声音。请按播放顺序拆分为“语音介绍”“视频”“语音补充”等独立节点。",
+                        node.NarrationAudio is null ? NarrationAudioBindingStatus.LegacyUnverified : evaluation.Status);
 
                 if (node.NarrationAudio is not null)
                 {

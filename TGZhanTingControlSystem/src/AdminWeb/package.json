@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
-    "test": "node --test tests/tts-workflow.test.ts",
+    "test": "node --test tests/tts-workflow.test.ts tests/ui-media-validation.test.ts",
     "preview": "vite preview --host 0.0.0.0"
   },
   "devDependencies": {

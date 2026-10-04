@@ -28,7 +28,9 @@ $required = @(
     'Server\TG.Control.Server.exe', 'Server\AdminWeb\index.html',
     'TouchClient\TouchClient.exe', 'TouchClient\TouchClient_Data\globalgamemanagers',
     'LedPlayer\LedPlayer.exe', 'LedPlayer\LedPlayer_Data\globalgamemanagers',
-    'LedPlayer\LedPlayer_Data\Plugins\libvlc.dll',
+    'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideo.dll',
+    'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideoWinRT.dll',
+    'LedPlayer\LedPlayer_Data\Plugins\x86_64\Audio360.dll',
     'Launcher\TG.Control.Launcher.exe',
     'TtsWorker\MeloTtsLocal\runtime\python.exe',
     'TtsWorker\MeloTtsLocal\worker.py',
@@ -37,11 +39,14 @@ $required = @(
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\config.json',
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\pytorch_model.bin',
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\vocab.txt',
-    'Tools\Install-TGExhibition.ps1', 'Tools\Uninstall-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1',
+    'Tools\Install-TGExhibition.ps1', 'Tools\Uninstall-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1', 'Tools\New-AdminAccount.ps1',
     'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt'
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) })
 if ($missing.Count -gt 0) { throw "Package required files are missing:`n$($missing -join "`n")" }
+if (Test-Path -LiteralPath (Join-Path $root 'Server\appsettings.Development.json') -PathType Leaf) {
+    throw 'Development settings must not be included in a production package.'
+}
 
 $mismatches = [Collections.Generic.List[string]]::new()
 foreach ($entry in $manifest.files) {
@@ -56,7 +61,7 @@ foreach ($entry in $manifest.files) {
 }
 if ($mismatches.Count -gt 0) { throw "Package integrity validation failed:`n$($mismatches -join "`n")" }
 
-$forbiddenPatterns = @('F:\WorkSpace', 'C:\Users\A', 'AppData\Local\Temp\TG-Phase9E')
+$forbiddenPatterns = @('F:\WorkSpace', 'C:\Users\A', 'AppData\Local\Temp\TG-Phase9E', 'TG-DEVELOPMENT-ONLY')
 $textFiles = Get-ChildItem -LiteralPath $root -File -Recurse | Where-Object { $_.Extension -in @('.json','.config','.xml','.txt','.md','.ps1','.py') }
 foreach ($file in $textFiles) {
     $content = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue

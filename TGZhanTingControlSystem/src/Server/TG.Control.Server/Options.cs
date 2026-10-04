@@ -58,7 +58,16 @@ public sealed class AdminOptions
     public const string SectionName = "Admin";
     public string Username { get; init; } = "admin";
     public string Password { get; init; } = "";
+    public bool AllowLegacyPlaintextPassword { get; init; }
+    public IReadOnlyList<AdminAccountOptions> Accounts { get; init; } = [];
     public int SessionHours { get; init; } = 12;
+}
+
+public sealed class AdminAccountOptions
+{
+    public string Username { get; init; } = "";
+    public string PasswordHash { get; init; } = "";
+    public IReadOnlyList<string> Roles { get; init; } = [];
 }
 
 public sealed class TerminalOptions

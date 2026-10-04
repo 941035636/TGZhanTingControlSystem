@@ -17,16 +17,23 @@ namespace TG.Control.Touch.UI.Components
         private readonly Button primaryButton;
         private readonly Button retryButton;
         private readonly Button skipButton;
+        private readonly Button volumeDownButton;
+        private readonly Button volumeUpButton;
+        private readonly Text volumeValueLabel;
         private readonly Button stopButton;
         private readonly Button cancelStopButton;
         private readonly Button confirmStopButton;
         private bool paused;
+        private double videoVolume = 0.25;
+        private double? pendingVideoVolume;
+        private float pendingVolumeRequestedAt;
 
         public RectTransform Root => frame.rectTransform;
         public event Action PauseRequested;
         public event Action ResumeRequested;
         public event Action RetryRequested;
         public event Action SkipRequested;
+        public event Action<double> VideoVolumeRequested;
         public event Action StopRequested;
         public event Action StopCancelled;
 
@@ -63,6 +70,22 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(skipButton.GetComponent<RectTransform>(), 0, 0, 0, 0,
                 592, 22, 802, 86);
             skipButton.GetComponent<Image>().color = Color.Lerp(theme.SecondaryButton, theme.Warning, .14f);
+
+            var volumeHeading = factory.Label("Playback Volume Heading", normalControls.transform, "大屏原声音量",
+                theme.Caption, FontStyle.Bold, theme.TextSecondary, TextAnchor.MiddleCenter);
+            TouchUiFactory.Anchor(volumeHeading.rectTransform, 0, 1, 0, 1, 826, -52, 1194, -16);
+            volumeDownButton = factory.TouchButton(normalControls.transform, "−", false,
+                () => AdjustVideoVolume(-0.1));
+            TouchUiFactory.Anchor(volumeDownButton.GetComponent<RectTransform>(), 0, 0, 0, 0,
+                826, 22, 910, 86);
+            volumeValueLabel = factory.Label("Playback Volume Value", normalControls.transform, "25%",
+                theme.CardTitle, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleCenter);
+            TouchUiFactory.Anchor(volumeValueLabel.rectTransform, 0, 0, 0, 0,
+                924, 22, 1096, 86);
+            volumeUpButton = factory.TouchButton(normalControls.transform, "+", false,
+                () => AdjustVideoVolume(0.1));
+            TouchUiFactory.Anchor(volumeUpButton.GetComponent<RectTransform>(), 0, 0, 0, 0,
+                1110, 22, 1194, 86);
 
             var dangerDivider = factory.Image("Playback Danger Divider", normalControls.transform, theme.Border);
             TouchUiFactory.Anchor(dangerDivider.rectTransform, 1, 0, 1, 1, -392, 18, -390, -18);
@@ -103,11 +126,23 @@ namespace TG.Control.Touch.UI.Components
             paused = session?.paused == true;
             var canControl = connected && hasActiveSession;
             var hasSnapshot = session != null;
+            if (hasSnapshot)
+            {
+                var serverVolume = Math.Max(0, Math.Min(1, session.videoVolume));
+                if (pendingVideoVolume.HasValue &&
+                    (Math.Abs(pendingVideoVolume.Value - serverVolume) < 0.005 ||
+                     Time.realtimeSinceStartup - pendingVolumeRequestedAt > 2f))
+                    pendingVideoVolume = null;
+                videoVolume = pendingVideoVolume ?? serverVolume;
+            }
+            volumeValueLabel.text = $"{Math.Round(videoVolume * 100):0}%";
             primaryButton.GetComponentInChildren<Text>().text = !hasSnapshot
                 ? "正在恢复状态" : paused ? "继续讲解" : "暂停讲解";
             primaryButton.interactable = canControl && hasSnapshot;
             retryButton.interactable = canControl;
             skipButton.interactable = canControl;
+            volumeDownButton.interactable = canControl && hasSnapshot && videoVolume > 0.005;
+            volumeUpButton.interactable = canControl && hasSnapshot && videoVolume < 0.995;
             stopButton.interactable = canControl;
             cancelStopButton.interactable = true;
             confirmStopButton.interactable = canControl;
@@ -128,6 +163,17 @@ namespace TG.Control.Touch.UI.Components
         {
             if (paused) ResumeRequested?.Invoke();
             else PauseRequested?.Invoke();
+        }
+
+        private void AdjustVideoVolume(double delta)
+        {
+            var next = Math.Max(0, Math.Min(1, Math.Round((videoVolume + delta) * 10) / 10));
+            if (Math.Abs(next - videoVolume) < 0.005) return;
+            videoVolume = next;
+            pendingVideoVolume = next;
+            pendingVolumeRequestedAt = Time.realtimeSinceStartup;
+            volumeValueLabel.text = $"{Math.Round(videoVolume * 100):0}%";
+            VideoVolumeRequested?.Invoke(next);
         }
 
         private void StyleDangerButton(Button button, bool solid)

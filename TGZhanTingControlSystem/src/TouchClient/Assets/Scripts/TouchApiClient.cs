@@ -80,9 +80,10 @@ namespace TG.Control.Touch
             StartCoroutine(PostJson("/api/playback/start", request, success, failure));
         }
 
-        public void ControlNarration(string sessionId, PlaybackAction action, Action<ControlNarrationResponse> success, Action<string> failure)
+        public void ControlNarration(string sessionId, PlaybackAction action, Action<ControlNarrationResponse> success,
+            Action<string> failure, double volume = -1)
         {
-            var request = new ControlNarrationRequest { sessionId = sessionId, action = action };
+            var request = new ControlNarrationRequest { sessionId = sessionId, action = action, volume = volume };
             StartCoroutine(PostJson("/api/playback/control", request, success, failure));
         }
 

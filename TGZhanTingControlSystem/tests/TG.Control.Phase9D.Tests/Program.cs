@@ -41,7 +41,9 @@ internal static class Program
             ("Concurrent publish permits exactly one winner", ConcurrentPublishHasOneWinner),
             ("Adopt and Publish cannot silently cross", AdoptPublishConcurrencyIsSafe),
             ("Legacy content reads, publishes, rolls back and plays", LegacyCompatibility),
+            ("Live LED video volume is validated, dispatched and restored", LiveVideoVolumeControl),
             ("Video plus narration text without audio is an explicit warning", VideoWithoutAudioWarns),
+            ("Video and narration audio must be split into ordered nodes", VideoAndNarrationAudioCannotOverlap),
             ("Pure narration text without audio blocks publish", PureNarrationWithoutAudioBlocks),
             ("Referenced assets are protected from deletion", ReferencedAssetsAreProtected),
             ("Rollback requires current revision", RollbackRevisionConflictRejected)
@@ -361,6 +363,45 @@ internal static class Program
         Equal(legacyUrl, command!.NarrationAudioUrl);
     }
 
+    private static async Task LiveVideoVolumeControl()
+    {
+        await using var context = await TestContext.CreateAsync(legacy: true);
+        var broker = new CommandBroker();
+        var store = new PlaybackSessionStore(context.StorageOptions, context.Environment);
+        var coordinator = new PlaybackCoordinator(context.Published, broker,
+            Options.Create(new PlaybackOptions { RequireLedReadyBeforeStart = false, LedClientId = "led-main" }),
+            store, context.Events, NullLogger<PlaybackCoordinator>.Instance);
+        var started = await coordinator.StartAsync(new StartNarrationRequest(["module"], "volume-test"),
+            CancellationToken.None);
+        _ = await broker.WaitAsync("led-main", TimeSpan.FromSeconds(1), CancellationToken.None);
+
+        var changed = await coordinator.ControlAsync(
+            new ControlNarrationRequest(started.SessionId, PlaybackAction.SetVideoVolume, 0.65),
+            CancellationToken.None);
+        True(changed.Accepted, changed.Message);
+        Equal(0.65, changed.Volume);
+        var command = await broker.WaitAsync("led-main", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Equal(PlaybackAction.SetVideoVolume, command!.Action);
+        Equal(0.65, command.VideoVolume);
+        Equal(0.65, (await coordinator.GetSessionAsync(started.SessionId, CancellationToken.None))!.VideoVolume);
+
+        var rejected = await coordinator.ControlAsync(
+            new ControlNarrationRequest(started.SessionId, PlaybackAction.SetVideoVolume, 1.01),
+            CancellationToken.None);
+        True(!rejected.Accepted, "Out-of-range volume was accepted.");
+        Equal(0.65, (await coordinator.GetSessionAsync(started.SessionId, CancellationToken.None))!.VideoVolume);
+
+        var recoveredBroker = new CommandBroker();
+        var recovered = new PlaybackCoordinator(context.Published, recoveredBroker,
+            Options.Create(new PlaybackOptions { RequireLedReadyBeforeStart = false, LedClientId = "led-main" }),
+            new PlaybackSessionStore(context.StorageOptions, context.Environment), context.Events,
+            NullLogger<PlaybackCoordinator>.Instance);
+        Equal(0.65, (await recovered.GetSessionAsync(started.SessionId, CancellationToken.None))!.VideoVolume);
+        var recoveredPrepare = await recoveredBroker.WaitAsync("led-main", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Equal(0.65, recoveredPrepare!.VideoVolume);
+        Equal(AudioMixPolicy.Duck, recoveredPrepare.AudioMixPolicy);
+    }
+
     private static async Task VideoWithoutAudioWarns()
     {
         await using var context = await TestContext.CreateAsync();
@@ -386,6 +427,20 @@ internal static class Program
         True(draft.PublishReadiness.Issues.Any(issue => issue.Code == "narration_audio_missing"),
             "Missing narration audio was not reported.");
         await ExpectValidationAsync(() => context.PublishAsync(draft), "没有视频或可播放讲解音频");
+    }
+
+    private static async Task VideoAndNarrationAudioCannotOverlap()
+    {
+        await using var context = await TestContext.CreateAsync();
+        var adopted = await context.PrepareAdoptedDraftAsync("Narration before video");
+        var video = context.CreateVisualAsset("overlap-video.mp4");
+        var modules = ReplaceNode(adopted.Draft.Modules, node => node with { Assets = [video] });
+        var saved = await context.SaveDraftAsync(adopted.Draft, modules);
+        True(!saved.PublishReadiness!.CanPublish, "Overlapping video and narration audio was marked publishable.");
+        True(saved.PublishReadiness.Issues.Any(issue => issue.Code == "narration_video_overlap" &&
+                                                       issue.Severity == ContentPublishIssueSeverity.Error),
+            "The overlap-specific publish issue was not reported.");
+        await ExpectValidationAsync(() => context.PublishAsync(saved), "不能同时播放讲解语音和视频声音");
     }
 
     private static async Task ReferencedAssetsAreProtected()

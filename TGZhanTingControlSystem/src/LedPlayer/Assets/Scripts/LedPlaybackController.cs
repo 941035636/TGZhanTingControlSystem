@@ -88,6 +88,11 @@ namespace TG.Control.LedPlayer
                 case PlaybackAction.Seek:
                     SeekAll(command.positionSeconds);
                     break;
+                case PlaybackAction.SetVideoVolume:
+                    var videoVolume = Mathf.Clamp01((float)command.videoVolume);
+                    PlaybackAdapter.SetVolume(videoVolume);
+                    Debug.Log($"LED视频音量已实时调整为 {videoVolume * 100:0}% 。");
+                    break;
                 case PlaybackAction.Skip:
                     var skippedAt = CurrentPositionSeconds();
                     playbackGeneration++;
@@ -296,7 +301,7 @@ namespace TG.Control.LedPlayer
                     PlaybackAdapter.SetVolume(0);
                     break;
                 default:
-                    PlaybackAdapter.SetVolume(command.videoVolume > 0 ? command.videoVolume : 0.25);
+                    PlaybackAdapter.SetVolume(Math.Max(0, Math.Min(1, command.videoVolume)));
                     break;
             }
         }

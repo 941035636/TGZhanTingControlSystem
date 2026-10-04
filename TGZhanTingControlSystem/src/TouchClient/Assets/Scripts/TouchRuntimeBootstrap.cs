@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using TG.Control.Contracts;
 using UnityEngine;
 
 namespace TG.Control.Touch
@@ -44,7 +45,8 @@ namespace TG.Control.Touch
                 if (config == null) return;
                 if (!string.IsNullOrWhiteSpace(config.serverBaseUrl)) SetValue(api, "serverBaseUrl", config.serverBaseUrl);
                 if (!string.IsNullOrWhiteSpace(config.clientId)) SetValue(api, "clientId", config.clientId);
-                if (!string.IsNullOrWhiteSpace(config.terminalApiKey)) SetValue(api, "terminalApiKey", config.terminalApiKey);
+                if (!string.IsNullOrWhiteSpace(config.terminalApiKey))
+                    SetValue(api, "terminalApiKey", DeploymentSecretProtector.Unprotect(config.terminalApiKey));
                 Debug.Log("TouchClient已加载现场配置：" + path);
             }
             catch (Exception exception)

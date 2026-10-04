@@ -18,9 +18,11 @@ namespace TG.Control.Touch.UI.Components
         private readonly Image timeSurface;
         private readonly StatusBadge connectionBadge;
         private readonly StatusBadge readinessBadge;
+        private readonly Button exitButton;
         private int renderedSecond = -1;
 
         public RectTransform Root => root.rectTransform;
+        public event Action ExitRequested;
 
         public TopBar(TouchUiFactory factory, TouchTheme theme, Transform parent)
         {
@@ -46,7 +48,7 @@ namespace TG.Control.Touch.UI.Components
                 theme.PagePadding + 72, theme.CardSpacing / 2, 0, 0);
 
             timeSurface = factory.RoundedImage("Local Time Panel", root.transform, theme.SurfaceSoft);
-            TouchUiFactory.Anchor(timeSurface.rectTransform, 1, .5f, 1, .5f, -704, -24, -454, 24);
+            TouchUiFactory.Anchor(timeSurface.rectTransform, 1, .5f, 1, .5f, -820, -24, -570, 24);
             dateLabel = factory.Label("Current Date", timeSurface.transform, string.Empty, theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(dateLabel.rectTransform, 0, 0, .48f, 1, theme.Space12, 0, 0, 0);
@@ -55,9 +57,14 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(timeLabel.rectTransform, .50f, 0, 1, 1, 0, 0, -theme.Space12, 0);
 
             connectionBadge = new StatusBadge(factory, theme, root.transform, "Server Status");
-            TouchUiFactory.Anchor(connectionBadge.Root, 1, .5f, 1, .5f, -438, -22, -246, 22);
+            TouchUiFactory.Anchor(connectionBadge.Root, 1, .5f, 1, .5f, -554, -22, -362, 22);
             readinessBadge = new StatusBadge(factory, theme, root.transform, "Reception Status");
-            TouchUiFactory.Anchor(readinessBadge.Root, 1, .5f, 1, .5f, -226, -22, -theme.PagePadding, 22);
+            TouchUiFactory.Anchor(readinessBadge.Root, 1, .5f, 1, .5f, -346, -22, -154, 22);
+            exitButton = factory.TouchButton(root.transform, "退出", false,
+                () => ExitRequested?.Invoke());
+            TouchUiFactory.Anchor(exitButton.GetComponent<RectTransform>(), 1, .5f, 1, .5f,
+                -138, -22, -theme.PagePadding, 22);
+            exitButton.GetComponent<Image>().color = Color.Lerp(theme.SecondaryButton, theme.Error, .12f);
             connectionBadge.Set("服务连接中", StatusTone.Warning);
             readinessBadge.Set("状态检查中", StatusTone.Neutral);
             Tick(DateTime.Now, true);

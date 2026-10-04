@@ -7,7 +7,7 @@ export interface NarrationAudioBinding { asset: ContentAsset; narrationTextFinge
 export interface NarrationNode { id: string; name: string; order: number; narrationText: string; ttsAudioUrl: string | null; assets: ContentAsset[]; failurePolicy: 0 | 1; audioMixPolicy: AudioMixPolicy; videoVolume: number; narrationVolume: number; ttsConfiguration?: TtsSynthesisConfiguration | null; narrationAudio?: NarrationAudioBinding | null }
 export interface ExhibitionModule { id: string; name: string; order: number; description: string; coverUrl: string | null; enabled: boolean; nodes: NarrationNode[] }
 export interface PublishedContent { version: number; publishedAtUtc: string; publishedBy: string; modules: ExhibitionModule[] }
-export interface LoginResult { token: string; username: string; expiresAtUtc: string }
+export interface LoginResult { token: string; username: string; roles: string[]; expiresAtUtc: string }
 export interface TtsStatus { provider: string; voice: string; configured: boolean }
 export interface TtsResult { audioUrl: string; durationSeconds: number; providerRequestId: string }
 export type NarrationAudioBindingStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6
@@ -28,14 +28,14 @@ export interface NarrationAudioCandidate { candidateId: string; jobId: string; a
 export interface NarrationAudioCandidateEvaluation { candidateId: string; baseContentVersion: number; draftRevision: number; candidateExists: boolean; locationMatches: boolean; narrationTextMatches: boolean; synthesisConfigurationMatches: boolean; assetValid: boolean; adoptable: boolean; message: string }
 export interface AdoptNarrationAudioCandidateResponse { draft: ContentDraftSnapshot; binding: NarrationAudioBinding }
 export interface ClientRuntimeStatus { clientId: string; kind: number; appVersion: string; registeredAtUtc: string; lastSeenUtc: string; online: boolean; contentVersion: number; ready: boolean; status: string | null }
-export interface PlaybackSessionStatus { sessionId: string; contentVersion: number; moduleName: string; nodeName: string; currentNodeNumber: number; totalNodes: number; paused: boolean; playPublished: boolean; preparationProgress: number }
+export interface PlaybackSessionStatus { sessionId: string; contentVersion: number; moduleName: string; nodeName: string; currentNodeNumber: number; totalNodes: number; paused: boolean; playPublished: boolean; preparationProgress: number; videoVolume: number }
 export interface NarrationRoute { id: string; name: string; moduleIds: string[]; updatedAtUtc: string }
 export interface NarrationRouteCollection { routes: NarrationRoute[] }
 export interface SystemReadiness { canStart: boolean; contentVersion: number; ledOnline: boolean; ledReady: boolean; ledContentVersion: number; message: string; checkedAtUtc: string }
 export interface ContentVersionSummary { version: number; publishedAtUtc: string; publishedBy: string; moduleCount: number; nodeCount: number; current: boolean }
 export interface OperationalEvent { id: string; occurredAtUtc: string; level: string; category: string; action: string; message: string; sessionId: string | null; detail: string | null }
 export interface UiElementOverride { key: string; text?: string | null; assetUrl?: string | null; color?: string | null; visible: boolean; assetId?: string | null; assetSha256?: string | null; assetSizeBytes?: number; assetMediaType?: string | null }
-export interface UiExperienceLayout { touchTemplate: 'hero-routes'|'routes-grid'; ledTemplate: 'idle-media'|'idle-minimal'; touchShowHero: boolean; touchShowStatusPanel: boolean; touchShowQuickActions: boolean; ledShowBranding: boolean; ledShowStatus: boolean }
+export interface UiExperienceLayout { touchTemplate: 'module-kiosk'|'hero-routes'|'routes-grid'; ledTemplate: 'idle-media'|'idle-minimal'; touchShowHero: boolean; touchShowStatusPanel: boolean; touchShowQuickActions: boolean; ledShowBranding: boolean; ledShowStatus: boolean; touchWelcomeEnabled: boolean; touchIdleTimeoutSeconds: number }
 export interface UiExperienceConfig { version: number; touchTitle: string; touchSubtitle: string; touchBackgroundUrl: string | null; touchBackgroundColor: string; touchAccentColor: string; ledTitle: string; ledSubtitle: string; ledIdleMediaUrl: string | null; ledIdleMediaKind: 'none'|'image'|'video'; ledBackgroundColor: string; ledShowBranding: boolean; ledShowStatus: boolean; updatedAtUtc: string; updatedBy: string; layout?: UiExperienceLayout | null; touchElements?: UiElementOverride[] | null; ledElements?: UiElementOverride[] | null }
 
 const configuredBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '')
@@ -65,7 +65,7 @@ const friendlyApiError = (code: string | null, fallback: string): string => {
     asset_is_referenced: '该素材仍被草稿、正式版本、历史版本或候选语音引用，不能删除。',
   }
   if (code && messages[code]) return messages[code]
-  if (/[\u3400-\u9fff]/.test(fallback)) return fallback
+  if (/[\u3400-\u9fff]/.test(fallback) && !/[A-Za-z]/.test(fallback)) return fallback
   return '操作未完成，请检查管理服务状态后重试。'
 }
 
@@ -109,7 +109,7 @@ export const api = {
     sessionStorage.setItem(tokenKey, result.token)
     return result
   },
-  me: () => request<{ username: string }>('/api/auth/me', undefined, true),
+  me: () => request<{ username: string; roles: string[] }>('/api/auth/me', undefined, true),
   logout: async () => { try { await request<void>('/api/auth/logout', { method: 'POST' }, true) } finally { sessionStorage.removeItem(tokenKey) } },
   getContent: () => request<PublishedContent>('/api/content/current'),
   getDraft: () => request<ContentDraftSnapshot>('/api/content/draft', undefined, true),
@@ -153,8 +153,13 @@ export const api = {
       if (request.status >= 200 && request.status < 300) resolve(JSON.parse(request.responseText) as ContentAsset)
       else {
         let message = request.responseText || `上传失败：${request.status}`
-        try { message = JSON.parse(request.responseText).message ?? message } catch { /* keep response */ }
-        reject(new Error(message))
+        let code: string | null = null
+        try {
+          const problem = JSON.parse(request.responseText)
+          message = problem.message ?? problem.detail ?? message
+          code = problem.code ?? null
+        } catch { /* keep response */ }
+        reject(new Error(friendlyApiError(code, message)))
       }
     }
     request.send(file)

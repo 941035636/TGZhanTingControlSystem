@@ -211,6 +211,20 @@ public sealed class PlaybackCoordinator(
                     await PersistAsync(session, cancellationToken);
                     await eventLog.AppendAsync("Warning", "Playback", "Retry", "操作员重新准备当前讲解节点。", request.SessionId, cancellationToken: cancellationToken);
                     return Accepted(request, "正在重新准备当前讲解节点。");
+                case PlaybackAction.SetVideoVolume:
+                    if (!request.Volume.HasValue || !double.IsFinite(request.Volume.Value) ||
+                        request.Volume.Value is < 0 or > 1)
+                        return new ControlNarrationResponse(request.SessionId, request.Action, false,
+                            "大屏视频音量必须在0到1之间。", request.Volume);
+                    session.VideoVolumeOverride = request.Volume.Value;
+                    await PublishControlAsync(session, PlaybackAction.SetVideoVolume, cancellationToken);
+                    await PersistAsync(session, cancellationToken);
+                    var percentage = Math.Round(request.Volume.Value * 100);
+                    await eventLog.AppendAsync("Information", "Playback", "SetVideoVolume",
+                        $"操作员将LED视频音量调整为{percentage:0}%。", request.SessionId,
+                        detail: request.Volume.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        cancellationToken: cancellationToken);
+                    return Accepted(request, $"大屏视频音量已调整为{percentage:0}%。");
                 case PlaybackAction.Stop:
                     await PublishControlAsync(session, PlaybackAction.Stop, cancellationToken);
                     sessions.TryRemove(session.SessionId, out _);
@@ -264,7 +278,8 @@ public sealed class PlaybackCoordinator(
             session.ExpectedClients.Add(settings.LedClientId);
             await broker.PublishAsync(settings.LedClientId,
                 NewCommand(session.SessionId, module.Id, node.Id, PlaybackAction.Prepare, video?.Url,
-                    narrationUrl, DateTimeOffset.UtcNow, session.ContentVersion, node), cancellationToken);
+                    narrationUrl, DateTimeOffset.UtcNow, session.ContentVersion, node,
+                    session.VideoVolumeOverride), cancellationToken);
         }
 
         if (session.ExpectedClients.Count == 0)
@@ -285,7 +300,8 @@ public sealed class PlaybackCoordinator(
             var action = video is null ? PlaybackAction.PlayNarration : PlaybackAction.PlayVideo;
             await broker.PublishAsync(settings.LedClientId,
                 NewCommand(session.SessionId, module.Id, node.Id, action, video?.Url,
-                    narrationUrl, executeAt, session.ContentVersion, node), cancellationToken);
+                    narrationUrl, executeAt, session.ContentVersion, node,
+                    session.VideoVolumeOverride), cancellationToken);
         }
         logger.LogInformation("Narration session {SessionId} node {NodeId} ready; scheduled for {ExecuteAtUtc}", session.SessionId, node.Id, executeAt);
     }
@@ -312,16 +328,22 @@ public sealed class PlaybackCoordinator(
     }
 
     private PlaybackCommand NewCommand(string sessionId, string moduleId, string nodeId, PlaybackAction action,
-        string? mediaUrl, string? narrationAudioUrl, DateTimeOffset executeAt, long version, NarrationNode? node = null) =>
-        new(broker.NextSequence(), Guid.NewGuid().ToString("N"), sessionId, moduleId, nodeId, action, mediaUrl,
-            executeAt, 0, version, narrationAudioUrl, node?.AudioMixPolicy ?? AudioMixPolicy.Duck,
-            NormalizeVideoVolume(node), NormalizeNarrationVolume(node));
+        string? mediaUrl, string? narrationAudioUrl, DateTimeOffset executeAt, long version,
+        NarrationNode? node = null, double? videoVolumeOverride = null)
+    {
+        var hasOverride = videoVolumeOverride.HasValue;
+        return new PlaybackCommand(broker.NextSequence(), Guid.NewGuid().ToString("N"), sessionId, moduleId,
+            nodeId, action, mediaUrl, executeAt, 0, version, narrationAudioUrl,
+            hasOverride ? AudioMixPolicy.Duck : node?.AudioMixPolicy ?? AudioMixPolicy.Duck,
+            hasOverride ? Math.Clamp(videoVolumeOverride!.Value, 0, 1) : NormalizeVideoVolume(node),
+            NormalizeNarrationVolume(node));
+    }
 
     private static double NormalizeVideoVolume(NarrationNode? node) =>
-        node is null ? 0.25 : Math.Clamp(node.VideoVolume > 0 ? node.VideoVolume : 0.25, 0, 1);
+        node is null ? 0.25 : Math.Clamp(node.VideoVolume, 0, 1);
 
     private static double NormalizeNarrationVolume(NarrationNode? node) =>
-        node is null ? 1 : Math.Clamp(node.NarrationVolume > 0 ? node.NarrationVolume : 1, 0, 1);
+        node is null ? 1 : Math.Clamp(node.NarrationVolume, 0, 1);
 
     private async Task PublishControlAsync(SessionState session, PlaybackAction action, CancellationToken cancellationToken)
     {
@@ -330,7 +352,7 @@ public sealed class PlaybackCoordinator(
         {
             await broker.PublishAsync(clientId,
                 NewCommand(session.SessionId, module.Id, node.Id, action, null, null,
-                    DateTimeOffset.UtcNow, session.ContentVersion, node),
+                    DateTimeOffset.UtcNow, session.ContentVersion, node, session.VideoVolumeOverride),
                 cancellationToken);
         }
     }
@@ -361,7 +383,8 @@ public sealed class PlaybackCoordinator(
                     {
                         Index = snapshot.Index,
                         Paused = snapshot.Paused,
-                        PlayPublished = snapshot.PlayPublished
+                        PlayPublished = snapshot.PlayPublished,
+                        VideoVolumeOverride = snapshot.VideoVolumeOverride
                     };
                     if (CurrentNeedsLed(session)) session.ExpectedClients.Add(settings.LedClientId);
                     sessions[session.SessionId] = session;
@@ -386,7 +409,8 @@ public sealed class PlaybackCoordinator(
         if (!sessions.ContainsKey(session.SessionId)) return sessionStore.ClearAsync(cancellationToken);
         var snapshot = new PlaybackSessionSnapshot(session.SessionId, session.ContentVersion,
             session.Nodes.Select(item => new PlaybackNodeSnapshot(item.module.Id, item.node.Id)).ToArray(),
-            session.Index, session.Paused, session.PlayPublished, DateTimeOffset.UtcNow);
+            session.Index, session.Paused, session.PlayPublished, DateTimeOffset.UtcNow,
+            session.VideoVolumeOverride);
         return sessionStore.SaveAsync(snapshot, cancellationToken);
     }
 
@@ -398,7 +422,8 @@ public sealed class PlaybackCoordinator(
     }
 
     private static ControlNarrationResponse Accepted(ControlNarrationRequest request, string message) =>
-        new(request.SessionId, request.Action, true, message);
+        new(request.SessionId, request.Action, true, message,
+            request.Action == PlaybackAction.SetVideoVolume ? request.Volume : null);
 
     private static PlaybackSessionStatus CreateStatus(SessionState session)
     {
@@ -407,7 +432,21 @@ public sealed class PlaybackCoordinator(
             node.Id, node.Name, session.Index + 1, session.Nodes.Length, session.Paused, session.PlayPublished,
             session.ExpectedClients.OrderBy(value => value).ToArray(),
             session.ReadyClients.OrderBy(value => value).ToArray(),
-            session.CompletedClients.OrderBy(value => value).ToArray(), session.PreparationProgress);
+            session.CompletedClients.OrderBy(value => value).ToArray(), session.PreparationProgress,
+            EffectiveVideoVolume(session));
+    }
+
+    private static double EffectiveVideoVolume(SessionState session)
+    {
+        if (session.VideoVolumeOverride.HasValue) return Math.Clamp(session.VideoVolumeOverride.Value, 0, 1);
+        var node = session.Current.node;
+        if (string.IsNullOrWhiteSpace(node.TtsAudioUrl)) return 1;
+        return node.AudioMixPolicy switch
+        {
+            AudioMixPolicy.KeepOriginal => 1,
+            AudioMixPolicy.MuteVideo => 0,
+            _ => NormalizeVideoVolume(node)
+        };
     }
 
     private sealed class SessionState(string sessionId, long contentVersion, (ExhibitionModule module, NarrationNode node)[] nodes)
@@ -424,6 +463,7 @@ public sealed class PlaybackCoordinator(
         public Dictionary<string, DateTimeOffset> PlayingAtUtc { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool PlayPublished { get; set; }
         public double PreparationProgress { get; set; }
+        public double? VideoVolumeOverride { get; set; }
         public SemaphoreSlim Gate { get; } = new(1, 1);
     }
 }

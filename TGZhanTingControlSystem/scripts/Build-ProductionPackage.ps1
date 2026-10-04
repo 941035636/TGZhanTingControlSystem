@@ -11,7 +11,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$artifactRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutputRoot))
+$artifactRoot = if ([IO.Path]::IsPathFullyQualified($OutputRoot)) {
+    [IO.Path]::GetFullPath($OutputRoot)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $repoRoot $OutputRoot))
+}
 $packageRoot = Join-Path $artifactRoot 'Package'
 $installerOutput = Join-Path $artifactRoot 'Installer'
 
@@ -99,12 +103,15 @@ Copy-Directory (Join-Path $repoRoot 'ThirdParty') (Join-Path $packageRoot 'Third
 $requiredFiles = @(
     'Server\TG.Control.Server.exe', 'Server\AdminWeb\index.html',
     'TouchClient\TouchClient.exe', 'LedPlayer\LedPlayer.exe',
+    'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideo.dll',
+    'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideoWinRT.dll',
+    'LedPlayer\LedPlayer_Data\Plugins\x86_64\Audio360.dll',
     'Launcher\TG.Control.Launcher.exe', 'TtsWorker\MeloTtsLocal\worker.py',
     'TtsWorker\MeloTtsLocal\runtime\python.exe',
     'TtsWorker\MeloTtsLocal\models\MeloTTS-Chinese\checkpoint.pth',
     'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\pytorch_model.bin',
     'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt',
-    'Tools\Install-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1'
+    'Tools\Install-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1', 'Tools\New-AdminAccount.ps1'
 )
 $missingFiles = @($requiredFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $packageRoot $_) -PathType Leaf) })
 if ($missingFiles.Count -gt 0) { throw "Production package is incomplete:`n$($missingFiles -join "`n")" }

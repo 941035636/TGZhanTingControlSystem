@@ -8,6 +8,11 @@ Target: Windows 10/11 x64, offline exhibition deployment
 
 Status: implementation, build and elevated development-host installation complete; clean-machine acceptance remains `BLOCKED`
 
+> 2026-09-27 hardening update: current production defaults are HTTPS `https://localhost:5443`, PBKDF2-SHA256
+> multi-account credentials with five roles, DPAPI LocalMachine-protected terminal keys and same-origin AdminWeb.
+> The current LedPlayer dependency is AVPro Video 3.2 (`AVProVideo.dll`, `AVProVideoWinRT.dll`, `Audio360.dll`),
+> not LibVLC. Port 5080 and LibVLC references below describe the original Phase 9G historical baseline only.
+
 ## 1. Scope and outcome
 
 Phase 9G turns the Phase 9E application set into a repeatable Windows production package without changing the

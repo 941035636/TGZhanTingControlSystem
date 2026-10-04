@@ -2,10 +2,13 @@
 param(
     [Parameter(Mandatory = $true)][string]$InstallRoot,
     [string]$DataRoot = (Join-Path $env:ProgramData 'TG Exhibition'),
-    [ValidateRange(1, 65535)][int]$ServerPort = 5080
+    [ValidateRange(1, 65535)][int]$ServerPort = 5443,
+    [string]$ServerHostName = 'localhost',
+    [string]$CertificateSubject = 'CN=TG Exhibition Local Server'
 )
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Security
 $serviceName = 'TG Exhibition Control Server'
 $firewallRuleName = 'TG Exhibition Server API'
 $runValueName = 'TG Exhibition Launcher'
@@ -27,11 +30,69 @@ function New-RandomSecret([int]$byteCount) {
     return ([Convert]::ToBase64String($bytes).TrimEnd('=') -replace '\+', '-' -replace '/', '_')
 }
 
+function New-PasswordHash([string]$password) {
+    $salt = New-Object byte[] 16
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($salt) } finally { $rng.Dispose() }
+    $derive = [Security.Cryptography.Rfc2898DeriveBytes]::new($password, $salt, 210000, [Security.Cryptography.HashAlgorithmName]::SHA256)
+    try { $hash = $derive.GetBytes(32) } finally { $derive.Dispose() }
+    return '$pbkdf2-sha256$210000${0}${1}' -f [Convert]::ToBase64String($salt),[Convert]::ToBase64String($hash)
+}
+
+function Protect-MachineSecret([string]$value) {
+    $clear = [Text.Encoding]::UTF8.GetBytes($value)
+    $encrypted = [System.Security.Cryptography.ProtectedData]::Protect(
+        $clear, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
+    return 'dpapi-local-machine:' + [Convert]::ToBase64String($encrypted)
+}
+
+function Ensure-HttpsCertificate {
+    $certificate = Get-ChildItem Cert:\LocalMachine\My | Where-Object {
+        $_.Subject -eq $CertificateSubject -and $_.NotAfter -gt [DateTime]::UtcNow.AddDays(30)
+    } | Sort-Object NotAfter -Descending | Select-Object -First 1
+    if ($null -eq $certificate) {
+        $dnsNames = @($ServerHostName, 'localhost', $env:COMPUTERNAME) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+        $certificate = New-SelfSignedCertificate -Subject $CertificateSubject `
+            -DnsName $dnsNames `
+            -CertStoreLocation 'Cert:\LocalMachine\My' -KeyAlgorithm RSA -KeyLength 3072 `
+            -HashAlgorithm SHA256 -KeyExportPolicy NonExportable -NotAfter ([DateTime]::UtcNow.AddYears(5))
+    }
+    $trusted = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq $certificate.Thumbprint
+    if ($null -eq $trusted) {
+        $temporaryCertificate = Join-Path $env:TEMP ('tg-exhibition-' + [Guid]::NewGuid().ToString('N') + '.cer')
+        try {
+            Export-Certificate -Cert $certificate -FilePath $temporaryCertificate -Force | Out-Null
+            Import-Certificate -FilePath $temporaryCertificate -CertStoreLocation 'Cert:\LocalMachine\Root' | Out-Null
+        } finally { Remove-Item -LiteralPath $temporaryCertificate -Force -ErrorAction SilentlyContinue }
+    }
+    return $certificate
+}
+
 function Write-JsonIfMissing([string]$path, [object]$value) {
     if (Test-Path -LiteralPath $path) { return $false }
     $json = $value | ConvertTo-Json -Depth 12
     [IO.File]::WriteAllText($path, $json, [Text.UTF8Encoding]::new($false))
     return $true
+}
+
+function Write-Json([string]$path, [object]$value) {
+    $json = $value | ConvertTo-Json -Depth 12
+    $temporary = $path + '.tmp'
+    [IO.File]::WriteAllText($temporary, $json, [Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporary -Destination $path -Force
+}
+
+function Set-ConfigProperty([object]$target, [string]$name, [object]$value) {
+    if ($null -ne $target.PSObject.Properties[$name]) { $target.$name = $value }
+    else { $target | Add-Member -NotePropertyName $name -NotePropertyValue $value }
+}
+
+function Get-CertificateFindSubject([string]$subject) {
+    $trimmed = $subject.Trim()
+    $commonNameMatch = [Text.RegularExpressions.Regex]::Match(
+        $trimmed, '^CN\s*=\s*([^,]+)', [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($commonNameMatch.Success) { return $commonNameMatch.Groups[1].Value.Trim() }
+    return $trimmed
 }
 
 function Invoke-Sc([string[]]$arguments, [switch]$AllowFailure) {
@@ -65,17 +126,25 @@ if ($existingConfigFiles) {
 
 $terminalKey = New-RandomSecret 32
 $adminPassword = New-RandomSecret 18
-$serverBaseUrl = "http://127.0.0.1:$ServerPort"
+$certificate = Ensure-HttpsCertificate
+$certificateFindSubject = Get-CertificateFindSubject $CertificateSubject
+$serverBaseUrl = "https://${ServerHostName}:$ServerPort"
+$protectedTerminalKey = Protect-MachineSecret $terminalKey
 $serverConfig = [ordered]@{
-    Urls = "http://0.0.0.0:$ServerPort"
+    Urls = "https://0.0.0.0:$ServerPort"
+    Kestrel = @{ Certificates = @{ Default = @{
+        Subject = $certificateFindSubject; Store = 'My'; Location = 'LocalMachine'; AllowInvalid = $true
+    } } }
     Storage = @{ DataDirectory = (Join-Path $data 'Data') }
     Playback = @{
         TouchClientId = 'touch-main'; LedClientId = 'led-main'; PrepareLeadMilliseconds = 1500
         SyncToleranceMilliseconds = 500; LongPollSeconds = 20; RequireLedReadyBeforeStart = $true
         AllowDegradedPlayback = $true
     }
-    Terminal = @{ ApiKey = $terminalKey }
-    Admin = @{ Username = 'admin'; Password = $adminPassword; SessionHours = 12 }
+    Terminal = @{ ApiKey = $protectedTerminalKey }
+    Admin = @{ AllowLegacyPlaintextPassword = $false; SessionHours = 12; Accounts = @(
+        @{ Username = 'admin'; PasswordHash = (New-PasswordHash $adminPassword); Roles = @('Administrator') }
+    ) }
     TtsProduction = @{
         EnableDeterministicTestProvider = $false; MaxTextLength = 5000; MaxAttempts = 3
         AttemptTimeoutMilliseconds = 300000; RetryDelayMilliseconds = 250
@@ -95,18 +164,44 @@ $serverConfig = [ordered]@{
 }
 $serverCreated = Write-JsonIfMissing (Join-Path $configDirectory 'server.site.json') $serverConfig
 
-$effectiveServerConfig = Get-Content -LiteralPath (Join-Path $configDirectory 'server.site.json') -Raw | ConvertFrom-Json
+$serverConfigPath = Join-Path $configDirectory 'server.site.json'
+$effectiveServerConfig = Get-Content -LiteralPath $serverConfigPath -Raw | ConvertFrom-Json
+if (-not $serverCreated) {
+    Set-ConfigProperty $effectiveServerConfig 'Urls' "https://0.0.0.0:$ServerPort"
+    Set-ConfigProperty $effectiveServerConfig 'Kestrel' ([pscustomobject]@{ Certificates = [pscustomobject]@{ Default = [pscustomobject]@{
+        Subject = $certificateFindSubject; Store = 'My'; Location = 'LocalMachine'; AllowInvalid = $true
+    } } })
+    $existingTerminalKey = [string]$effectiveServerConfig.Terminal.ApiKey
+    if (-not $existingTerminalKey.StartsWith('dpapi-local-machine:', [StringComparison]::Ordinal)) {
+        Set-ConfigProperty $effectiveServerConfig.Terminal 'ApiKey' (Protect-MachineSecret $existingTerminalKey)
+    }
+    if ($null -eq $effectiveServerConfig.Admin.Accounts -or $effectiveServerConfig.Admin.Accounts.Count -eq 0) {
+        $legacyUsername = [string]$effectiveServerConfig.Admin.Username
+        $legacyPassword = [string]$effectiveServerConfig.Admin.Password
+        if ([string]::IsNullOrWhiteSpace($legacyUsername) -or [string]::IsNullOrWhiteSpace($legacyPassword)) {
+            throw 'Existing server.site.json has no usable administrator credential to migrate.'
+        }
+        Set-ConfigProperty $effectiveServerConfig.Admin 'Accounts' @([pscustomobject]@{
+            Username = $legacyUsername; PasswordHash = (New-PasswordHash $legacyPassword); Roles = @('Administrator')
+        })
+        Set-ConfigProperty $effectiveServerConfig.Admin 'Username' ''
+        Set-ConfigProperty $effectiveServerConfig.Admin 'Password' ''
+        Set-ConfigProperty $effectiveServerConfig.Admin 'AllowLegacyPlaintextPassword' $false
+    }
+    Write-Json $serverConfigPath $effectiveServerConfig
+    $effectiveServerConfig = Get-Content -LiteralPath $serverConfigPath -Raw | ConvertFrom-Json
+}
 $effectiveTerminalKey = [string]$effectiveServerConfig.Terminal.ApiKey
 if ([string]::IsNullOrWhiteSpace($effectiveTerminalKey)) { throw 'The existing server.site.json has no Terminal.ApiKey.' }
 
-Write-JsonIfMissing (Join-Path $configDirectory 'touch-client.json') ([ordered]@{
+Write-Json (Join-Path $configDirectory 'touch-client.json') ([ordered]@{
     serverBaseUrl = $serverBaseUrl; clientId = 'touch-main'; terminalApiKey = $effectiveTerminalKey
-}) | Out-Null
-Write-JsonIfMissing (Join-Path $configDirectory 'led-player.json') ([ordered]@{
+})
+Write-Json (Join-Path $configDirectory 'led-player.json') ([ordered]@{
     serverBaseUrl = $serverBaseUrl; clientId = 'led-main'; terminalApiKey = $effectiveTerminalKey
     cacheDirectory = (Join-Path $data 'Cache\LedPlayer\Content')
-}) | Out-Null
-Write-JsonIfMissing (Join-Path $configDirectory 'launcher.json') ([ordered]@{
+})
+Write-Json (Join-Path $configDirectory 'launcher.json') ([ordered]@{
     serverHealthUrl = "$serverBaseUrl/api/health"; adminUrl = "$serverBaseUrl/"
     touchClientExecutable = (Join-Path $install 'TouchClient\TouchClient.exe')
     ledPlayerExecutable = (Join-Path $install 'LedPlayer\LedPlayer.exe')
@@ -117,7 +212,7 @@ Write-JsonIfMissing (Join-Path $configDirectory 'launcher.json') ([ordered]@{
     logDirectory = (Join-Path $data 'Logs\Launcher'); healthPollSeconds = 3
     clientRestartDelaySeconds = 5; autoStartTouchClient = $true; autoStartLedPlayer = $true
     autoRestartClients = $true
-}) | Out-Null
+})
 
 if ($serverCreated) {
     $credentialsPath = Join-Path $configDirectory 'initial-credentials.txt'

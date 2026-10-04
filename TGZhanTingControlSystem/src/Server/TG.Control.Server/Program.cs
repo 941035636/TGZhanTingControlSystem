@@ -1,13 +1,18 @@
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.FileProviders;
 using TG.Control.Contracts;
 using TG.Control.Server;
 
+var adminWebRoot = Path.Combine(AppContext.BaseDirectory, "AdminWeb");
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-    WebRootPath = Path.Combine(AppContext.BaseDirectory, "AdminWeb")
+    WebRootPath = adminWebRoot
 });
+// Development static-web-assets manifests can point at an old source wwwroot.
+// Always serve the AdminWeb bundle copied beside the current Server build.
+builder.Environment.WebRootFileProvider = new PhysicalFileProvider(adminWebRoot);
 AddSiteConfiguration(builder.Configuration, args);
 var fileLogDirectory = builder.Configuration["Logging:FileDirectory"];
 if (!string.IsNullOrWhiteSpace(fileLogDirectory))
@@ -52,12 +57,13 @@ builder.Services.AddSingleton<NarrationRouteRepository>();
 builder.Services.AddSingleton<UiExperienceRepository>();
 builder.Services.AddSingleton<PlaybackSessionStore>();
 builder.Services.AddSingleton<OperationalEventRepository>();
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin()));
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin()));
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseCors();
+if (app.Environment.IsDevelopment()) app.UseCors();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 var assetStorage = app.Services.GetRequiredService<AssetStorage>();
@@ -70,8 +76,8 @@ app.MapPost("/api/auth/login", (LoginRequest request, AdminSessionStore sessions
     return result is null ? Results.Json(new { message = "用户名或密码错误。" }, statusCode: StatusCodes.Status401Unauthorized) : Results.Ok(result);
 });
 app.MapGet("/api/auth/me", (HttpRequest request, AdminSessionStore sessions) =>
-    sessions.TryValidate(request, out var username)
-        ? Results.Ok(new { username })
+    sessions.TryGetPrincipal(request, out var principal)
+        ? Results.Ok(new { username = principal.Username, roles = principal.Roles })
         : Results.Unauthorized());
 app.MapPost("/api/auth/logout", (HttpRequest request, AdminSessionStore sessions) =>
 {
@@ -88,15 +94,16 @@ app.MapGet("/api/content/draft", async (HttpRequest request, AdminSessionStore s
 app.MapPut("/api/content/draft", async (HttpRequest httpRequest, SaveContentDraftRequest request,
     AdminSessionStore sessions, ContentDraftWorkflowService drafts, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
-    try { return Results.Ok(await drafts.SaveAsync(request, username, httpRequest.Host, ct)); }
+    if (!sessions.TryAuthorize(httpRequest, AdminRoles.Editor, out var principal, out var authenticated)) return AuthenticationFailure(authenticated);
+    try { return Results.Ok(await drafts.SaveAsync(request, principal.Username, httpRequest.Host, ct)); }
     catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
 });
 app.MapGet("/api/ui/current", (UiExperienceRepository repository, CancellationToken ct) => repository.GetAsync(ct));
 app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig config, AdminSessionStore sessions,
     UiExperienceRepository repository, AssetStorage assetStorage, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(request, AdminRoles.Publisher, out var principal, out var authenticated)) return AuthenticationFailure(authenticated);
+    var username = principal.Username;
     var validation = new Dictionary<string, string[]>();
     foreach (var pair in UiExperiencePolicy.Validate(config)) validation[pair.Key] = pair.Value;
     var touchError = string.IsNullOrWhiteSpace(config.TouchBackgroundUrl)
@@ -127,7 +134,7 @@ app.MapGet("/api/routes", async (NarrationRouteRepository repository, Cancellati
 app.MapPost("/api/routes", async (HttpRequest httpRequest, SaveNarrationRouteRequest request, NarrationRouteRepository repository,
     AdminSessionStore sessions, IOptions<TerminalOptions> terminal, OperationalEventRepository events, CancellationToken ct) =>
 {
-    if (!HasOperatorAccess(httpRequest, sessions, terminal, out var actor)) return Results.Unauthorized();
+    if (!HasRoleOrTerminalAccess(httpRequest, sessions, terminal, AdminRoles.Editor, out var actor, out var authenticated)) return AuthenticationFailure(authenticated);
     try
     {
         var route = await repository.SaveAsync(request, ct);
@@ -139,7 +146,7 @@ app.MapPost("/api/routes", async (HttpRequest httpRequest, SaveNarrationRouteReq
 app.MapDelete("/api/routes/{id}", async (string id, HttpRequest httpRequest, NarrationRouteRepository repository,
     AdminSessionStore sessions, IOptions<TerminalOptions> terminal, OperationalEventRepository events, CancellationToken ct) =>
 {
-    if (!HasOperatorAccess(httpRequest, sessions, terminal, out var actor)) return Results.Unauthorized();
+    if (!HasRoleOrTerminalAccess(httpRequest, sessions, terminal, AdminRoles.Editor, out var actor, out var authenticated)) return AuthenticationFailure(authenticated);
     if (!await repository.DeleteAsync(id, ct)) return Results.NotFound();
     await events.AppendAsync("Warning", "Route", "Delete", $"{actor} 删除了讲解路线。", detail: id, cancellationToken: ct);
     return Results.NoContent();
@@ -148,7 +155,8 @@ app.MapPost("/api/content/publish", async (HttpRequest httpRequest, PublishConte
     ContentDraftWorkflowService drafts,
     OperationalEventRepository events, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(httpRequest, AdminRoles.Publisher, out var principal, out var authenticated)) return AuthenticationFailure(authenticated);
+    var username = principal.Username;
     var modules = NarrationAudioCompatibility.NormalizeModules(request.Modules);
     if (!request.BaseContentVersion.HasValue || !request.ExpectedDraftRevision.HasValue)
         return Results.BadRequest(new
@@ -173,7 +181,8 @@ app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpReq
     RollbackContentRequest rollbackRequest, AdminSessionStore sessions, ContentDraftWorkflowService drafts,
     OperationalEventRepository events, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(request, out var username)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(request, AdminRoles.Publisher, out var principal, out var authenticated)) return AuthenticationFailure(authenticated);
+    var username = principal.Username;
     try
     {
         var content = await drafts.RollbackAsync(version, rollbackRequest, username, request.Host, ct);
@@ -186,7 +195,7 @@ app.MapPost("/api/content/rollback/{version:long}", async (long version, HttpReq
 });
 app.MapPost("/api/assets/upload", async (HttpContext context, AdminSessionStore sessions, AssetStorage storage, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(context.Request, out _)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(context.Request, AdminRoles.Editor, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } sizeFeature)
         sizeFeature.MaxRequestBodySize = null;
     try
@@ -203,7 +212,7 @@ app.MapPost("/api/assets/upload", async (HttpContext context, AdminSessionStore 
 app.MapDelete("/api/assets/{storedName}", async (string storedName, HttpRequest request,
     AdminSessionStore sessions, AssetReferenceProtectionService protection, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(request, AdminRoles.Editor, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     var result = await protection.DeleteIfUnreferencedAsync(storedName, ct);
     if (result.Protected)
         return Results.Conflict(new
@@ -218,7 +227,7 @@ app.MapPost("/api/narration-audio/bind-upload", (HttpRequest httpRequest,
     CreateManualNarrationAudioBindingRequest request, AdminSessionStore sessions,
     NarrationAudioBindingService bindingService) =>
 {
-    if (!sessions.TryValidate(httpRequest, out _)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(httpRequest, AdminRoles.Editor, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     try { return Results.Ok(bindingService.CreateManualBinding(request, httpRequest.Host)); }
     catch (InvalidDataException exception) { return Results.BadRequest(new { message = exception.Message }); }
 });
@@ -234,7 +243,8 @@ app.MapGet("/api/tts/providers", async (HttpRequest request, AdminSessionStore s
 app.MapPost("/api/tts/jobs", async (HttpRequest httpRequest, CreateTtsProductionJobRequest request,
     AdminSessionStore sessions, TtsProductionService production, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(httpRequest, AdminRoles.Editor, out var principal, out var authenticated)) return AuthenticationFailure(authenticated);
+    var username = principal.Username;
     try
     {
         var result = await production.CreateAsync(request, username, ct);
@@ -248,14 +258,14 @@ app.MapPost("/api/tts/jobs", async (HttpRequest httpRequest, CreateTtsProduction
 app.MapGet("/api/tts/jobs/{jobId}", async (string jobId, HttpRequest request, AdminSessionStore sessions,
     TtsProductionService production, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(request, AdminRoles.Editor, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     var job = await production.GetJobAsync(jobId, ct);
     return job is null ? Results.NotFound() : Results.Ok(job);
 });
 app.MapPost("/api/tts/jobs/{jobId}/cancel", async (string jobId, HttpRequest request,
     AdminSessionStore sessions, TtsProductionService production, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(request, out _)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(request, AdminRoles.Editor, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     var job = await production.CancelAsync(jobId, ct);
     return job is null ? Results.NotFound() : Results.Ok(job);
 });
@@ -276,7 +286,8 @@ app.MapPost("/api/tts/candidates/{candidateId}/adopt", async (string candidateId
     AdoptNarrationAudioCandidateRequest request, AdminSessionStore sessions,
     ContentDraftWorkflowService drafts, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(httpRequest, out var username)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(httpRequest, AdminRoles.Editor, out var principal, out var authenticated)) return AuthenticationFailure(authenticated);
+    var username = principal.Username;
     try { return Results.Ok(await drafts.AdoptAsync(candidateId, request, username, httpRequest.Host, ct)); }
     catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
 });
@@ -302,7 +313,7 @@ app.MapGet("/api/clients/status", (HttpRequest request, AdminSessionStore sessio
 app.MapGet("/api/readiness", async (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
     ICommandBroker broker, IOptions<PlaybackOptions> playback, IContentRepository repository, CancellationToken ct) =>
 {
-    if (!HasOperatorAccess(request, sessions, terminal, out _)) return Results.Unauthorized();
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     var content = await repository.GetAsync(ct);
     var threshold = TimeSpan.FromSeconds(Math.Max(10, playback.Value.LongPollSeconds * 2 + 5));
     var led = broker.GetClientStatuses(threshold)
@@ -325,7 +336,7 @@ app.MapGet("/api/readiness", async (HttpRequest request, AdminSessionStore sessi
 app.MapPost("/api/playback/start", async (HttpRequest httpRequest, StartNarrationRequest request,
     AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>
 {
-    if (!HasOperatorAccess(httpRequest, sessions, terminal, out _)) return Results.Unauthorized();
+    if (!HasOperatorAccess(httpRequest, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     try { return Results.Ok(await coordinator.StartAsync(request, ct)); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
     catch (KeyNotFoundException exception) { return Results.BadRequest(new { message = exception.Message }); }
@@ -333,7 +344,7 @@ app.MapPost("/api/playback/start", async (HttpRequest httpRequest, StartNarratio
 app.MapPost("/api/playback/control", async (HttpRequest httpRequest, ControlNarrationRequest request,
     AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>
 {
-    if (!HasOperatorAccess(httpRequest, sessions, terminal, out _)) return Results.Unauthorized();
+    if (!HasOperatorAccess(httpRequest, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     var result = await coordinator.ControlAsync(request, ct);
     return result.Accepted ? Results.Ok(result) : Results.NotFound(result);
 });
@@ -344,14 +355,14 @@ app.MapGet("/api/playback/sessions", async (HttpRequest request, AdminSessionSto
 app.MapGet("/api/playback/active", async (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
     PlaybackCoordinator coordinator, CancellationToken ct) =>
 {
-    if (!HasOperatorAccess(request, sessions, terminal, out _)) return Results.Unauthorized();
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     var active = (await coordinator.GetSessionsAsync(ct)).FirstOrDefault();
     return Results.Ok(new { active = active is not null, session = active });
 });
 app.MapGet("/api/playback/sessions/{sessionId}", async (string sessionId, HttpRequest request,
     AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>
 {
-    if (!HasOperatorAccess(request, sessions, terminal, out _)) return Results.Unauthorized();
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     var session = await coordinator.GetSessionAsync(sessionId, ct);
     return Results.Ok(new { active = session is not null, session });
 });
@@ -370,24 +381,42 @@ app.MapGet("/api/operations", async (HttpRequest request, int? count, AdminSessi
     sessions.TryValidate(request, out _) ? Results.Ok(await events.GetRecentAsync(count ?? 200, ct)) : Results.Unauthorized());
 app.MapPost("/api/tts/synthesize", async (HttpRequest httpRequest, TtsSynthesisRequest request, AdminSessionStore sessions, ITtsService tts, CancellationToken ct) =>
 {
-    if (!sessions.TryValidate(httpRequest, out _)) return Results.Unauthorized();
+    if (!sessions.TryAuthorize(httpRequest, AdminRoles.Editor, out _, out var authenticated)) return AuthenticationFailure(authenticated);
     return Results.Ok(await tts.SynthesizeAsync(request, ct));
 });
 app.MapFallbackToFile("index.html");
 
 app.Run();
 
-static bool HasTerminalAccess(HttpRequest request, IOptions<TerminalOptions> options) =>
-    !string.IsNullOrWhiteSpace(options.Value.ApiKey) &&
-    string.Equals(request.Headers["X-TG-Terminal-Key"].ToString(), options.Value.ApiKey, StringComparison.Ordinal);
-
-static bool HasOperatorAccess(HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal, out string actor)
+static bool HasTerminalAccess(HttpRequest request, IOptions<TerminalOptions> options)
 {
-    if (sessions.TryValidate(request, out actor)) return true;
-    if (HasTerminalAccess(request, terminal)) { actor = "touch-terminal"; return true; }
+    var configured = DeploymentSecretProtector.Unprotect(options.Value.ApiKey);
+    var supplied = request.Headers["X-TG-Terminal-Key"].ToString();
+    if (string.IsNullOrWhiteSpace(configured) || configured.Length != supplied.Length) return false;
+    return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+        System.Text.Encoding.UTF8.GetBytes(configured), System.Text.Encoding.UTF8.GetBytes(supplied));
+}
+
+static bool HasOperatorAccess(HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
+    out string actor, out bool authenticated) =>
+    HasRoleOrTerminalAccess(request, sessions, terminal, AdminRoles.Operator, out actor, out authenticated);
+
+static bool HasRoleOrTerminalAccess(HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
+    string role, out string actor, out bool authenticated)
+{
+    if (sessions.TryAuthorize(request, role, out var principal, out authenticated))
+    {
+        actor = principal.Username;
+        return true;
+    }
+    if (authenticated) { actor = string.Empty; return false; }
+    if (HasTerminalAccess(request, terminal)) { actor = "touch-terminal"; authenticated = true; return true; }
     actor = string.Empty;
     return false;
 }
+
+static IResult AuthenticationFailure(bool authenticated) =>
+    authenticated ? Results.StatusCode(StatusCodes.Status403Forbidden) : Results.Unauthorized();
 
 static void AddSiteConfiguration(ConfigurationManager configuration, string[] commandLineArguments)
 {
