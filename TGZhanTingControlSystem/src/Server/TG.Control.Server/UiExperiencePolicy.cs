@@ -22,9 +22,12 @@ public static class UiExperiencePolicy
     public static UiExperienceConfig Normalize(UiExperienceConfig request)
     {
         var layout = request.Layout ?? new UiExperienceLayout();
-        // Layouts saved before the welcome/kiosk schema deserialize the new timeout as zero.
-        // Treat that as a one-time migration so existing installations receive the new safe defaults.
-        var legacyTouchLayout = layout.TouchIdleTimeoutSeconds <= 0;
+        // Depending on the serializer, layouts saved before the welcome/kiosk schema can receive
+        // either zero values or the new constructor defaults. The bounded welcome element keys are
+        // therefore the durable schema marker used to migrate existing installations once.
+        var hasWelcomeSchema = request.TouchElements?.Any(item => item is not null &&
+            item.Key.StartsWith("welcome.", StringComparison.OrdinalIgnoreCase)) == true;
+        var legacyTouchLayout = layout.TouchIdleTimeoutSeconds <= 0 || !hasWelcomeSchema;
         return request with
         {
             Layout = new UiExperienceLayout(

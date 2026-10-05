@@ -46,7 +46,9 @@ internal static class Program
             ("Video and narration audio must be split into ordered nodes", VideoAndNarrationAudioCannotOverlap),
             ("Pure narration text without audio blocks publish", PureNarrationWithoutAudioBlocks),
             ("Referenced assets are protected from deletion", ReferencedAssetsAreProtected),
-            ("Rollback requires current revision", RollbackRevisionConflictRejected)
+            ("Rollback requires current revision", RollbackRevisionConflictRejected),
+            ("Legacy UI layout migrates to welcome kiosk", LegacyUiLayoutMigratesToWelcomeKiosk),
+            ("Explicit new UI layout preserves operator choice", ExplicitUiLayoutPreservesChoice)
         };
 
         var failed = 0;
@@ -442,6 +444,38 @@ internal static class Program
             "The overlap-specific publish issue was not reported.");
         await ExpectValidationAsync(() => context.PublishAsync(saved), "不能同时播放讲解语音和视频声音");
     }
+
+    private static Task LegacyUiLayoutMigratesToWelcomeKiosk()
+    {
+        var config = UiConfig(new UiExperienceLayout("hero-routes"),
+            [new UiElementOverride("home.hero.title", "旧版首页")]);
+        var normalized = UiExperiencePolicy.Normalize(config);
+        Equal("module-kiosk", normalized.Layout!.TouchTemplate);
+        True(normalized.Layout.TouchWelcomeEnabled, "Legacy layout did not enable the welcome page.");
+        Equal(180, normalized.Layout.TouchIdleTimeoutSeconds);
+        return Task.CompletedTask;
+    }
+
+    private static Task ExplicitUiLayoutPreservesChoice()
+    {
+        var layout = new UiExperienceLayout("hero-routes", TouchWelcomeEnabled: false,
+            TouchIdleTimeoutSeconds: 300);
+        var config = UiConfig(layout, [new UiElementOverride("welcome.title", "自定义欢迎页")]);
+        var normalized = UiExperiencePolicy.Normalize(config);
+        Equal("hero-routes", normalized.Layout!.TouchTemplate);
+        True(!normalized.Layout.TouchWelcomeEnabled, "Explicit welcome-page choice was overwritten.");
+        Equal(300, normalized.Layout.TouchIdleTimeoutSeconds);
+        return Task.CompletedTask;
+    }
+
+    private static UiExperienceConfig UiConfig(UiExperienceLayout layout, UiElementOverride[] elements) =>
+        new(1, "中控", "副标题", null, "#061427", "#1677FF", "大屏", "等待讲解", null,
+            "none", "#061427", true, true, DateTimeOffset.UtcNow, "test")
+        {
+            Layout = layout,
+            TouchElements = elements,
+            LedElements = []
+        };
 
     private static async Task ReferencedAssetsAreProtected()
     {
