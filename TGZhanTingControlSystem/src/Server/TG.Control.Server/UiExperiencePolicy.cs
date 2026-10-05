@@ -11,8 +11,9 @@ public static class UiExperiencePolicy
     {
         "shell.title", "shell.subtitle", "home.hero.title", "home.hero.subtitle",
         "home.hero.logo", "home.hero.background", "home.quick.temporary", "home.quick.all",
-        "home.quick.continue", "welcome.title", "welcome.subtitle", "welcome.audio",
-        "welcome.background", "home.kiosk.title", "home.kiosk.subtitle"
+        "home.quick.continue", "welcome.eyebrow", "welcome.title", "welcome.subtitle",
+        "welcome.action", "welcome.hint", "welcome.logo", "welcome.audio", "welcome.background",
+        "home.kiosk.title", "home.kiosk.subtitle"
     };
     private static readonly HashSet<string> LedKeys = new(StringComparer.OrdinalIgnoreCase)
     {

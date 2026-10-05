@@ -20,6 +20,8 @@ namespace TG.Control.Touch.UI
         private ContentHost contentHost;
         private Image background;
         private Image ambientAccent;
+        private Image chromeHeader;
+        private Image chromeNavigation;
         private GameObject exitConfirmation;
 
         public Image Background => background;
@@ -42,9 +44,21 @@ namespace TG.Control.Touch.UI
             var veil = factory.Image("App Background Veil", canvas, theme.BackdropVeil);
             TouchUiFactory.Stretch(veil.rectTransform);
             veil.raycastTarget = false;
-            ambientAccent = factory.Image("Ambient Accent", canvas, Color.Lerp(theme.AppBackground, theme.Primary, .24f));
+            ambientAccent = factory.Image("Ambient Accent", canvas,
+                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .03f));
             TouchUiFactory.Anchor(ambientAccent.rectTransform, 1, 1, 1, 1, -520, -4, 0, 0);
             ambientAccent.raycastTarget = false;
+
+            // A single structural shell color sits behind both chrome regions. TopBar and
+            // SideNavigation only render their content above it, preventing alpha blending
+            // from making the two adjacent areas look like unrelated color blocks.
+            chromeHeader = factory.Image("Shell Chrome Header", canvas, theme.HeaderBackground);
+            TouchUiFactory.Anchor(chromeHeader.rectTransform, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
+            chromeHeader.raycastTarget = false;
+            chromeNavigation = factory.Image("Shell Chrome Navigation", canvas, theme.NavigationBackground);
+            TouchUiFactory.Anchor(chromeNavigation.rectTransform, 0, 0, 0, 1, 0, 0,
+                theme.SideNavigationWidth, -theme.TopBarHeight);
+            chromeNavigation.raycastTarget = false;
 
             topBar = new TopBar(factory, theme, canvas);
             TouchUiFactory.Anchor(topBar.Root, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
@@ -101,7 +115,9 @@ namespace TG.Control.Touch.UI
 
         public void RefreshTheme()
         {
-            ambientAccent.color = Color.Lerp(theme.AppBackground, theme.Primary, .24f);
+            ambientAccent.color = new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .03f);
+            chromeHeader.color = theme.HeaderBackground;
+            chromeNavigation.color = theme.NavigationBackground;
             topBar.RefreshTheme();
             navigation.RefreshTheme();
             contentHost.RefreshTheme(theme);

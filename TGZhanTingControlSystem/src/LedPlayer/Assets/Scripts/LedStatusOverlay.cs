@@ -83,7 +83,7 @@ namespace TG.Control.LedPlayer
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = .5f;
 
-            solidBackground = Image("Idle Screen", canvas.transform, Hex("#0A1F1B"));
+            solidBackground = Image("Idle Screen", canvas.transform, Hex("#061427"));
             Stretch(solidBackground.rectTransform);
             idleRoot = solidBackground.gameObject;
             idleImage = Image("Idle Image", idleRoot.transform, Color.white);
@@ -101,10 +101,15 @@ namespace TG.Control.LedPlayer
                 display.gameObject.SetActive(false);
                 idleVideos[i] = display;
             }
-            var veil = Image("Readability Veil", idleRoot.transform, new Color(.02f, .10f, .08f, .52f));
+            var veil = Image("Readability Veil", idleRoot.transform, new Color(.01f, .035f, .10f, .42f));
             Stretch(veil.rectTransform);
 
-            brand = Label("Brand", idleRoot.transform, "TG", 70, FontStyle.Bold, Hex("#D2B46F"), TextAnchor.MiddleCenter);
+            var horizon = Image("Technology Horizon", idleRoot.transform, new Color(.18f, .66f, 1f, .16f));
+            Anchor(horizon.rectTransform, .16f, .31f, .84f, .31f, 0, 0, 0, 2);
+            var topLine = Image("Technology Top Line", idleRoot.transform, new Color(.18f, .66f, 1f, .28f));
+            Anchor(topLine.rectTransform, .32f, .73f, .68f, .73f, 0, 0, 0, 2);
+
+            brand = Label("Brand", idleRoot.transform, "TG", 70, FontStyle.Bold, Hex("#43B8FF"), TextAnchor.MiddleCenter);
             Anchor(brand.rectTransform, .35f, .60f, .65f, .72f, 0, 0, 0, 0);
             brandLogo = Image("Brand Logo", idleRoot.transform, Color.white);
             Anchor(brandLogo.rectTransform, .35f, .60f, .65f, .72f, 0, 0, 0, 0);
@@ -112,9 +117,9 @@ namespace TG.Control.LedPlayer
             brandLogo.gameObject.SetActive(false);
             title = Label("Title", idleRoot.transform, "展厅自动讲解系统", 58, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
             Anchor(title.rectTransform, .12f, .46f, .88f, .60f, 0, 0, 0, 0);
-            subtitle = Label("Subtitle", idleRoot.transform, "等待触控终端启动讲解", 28, FontStyle.Normal, Hex("#C3D2CC"), TextAnchor.MiddleCenter);
+            subtitle = Label("Subtitle", idleRoot.transform, "等待触控终端启动讲解", 28, FontStyle.Normal, Hex("#B7D7F2"), TextAnchor.MiddleCenter);
             Anchor(subtitle.rectTransform, .18f, .38f, .82f, .47f, 0, 0, 0, 0);
-            statusText = Label("Status", idleRoot.transform, status, 21, FontStyle.Normal, Hex("#AABFB7"), TextAnchor.MiddleCenter);
+            statusText = Label("Status", idleRoot.transform, status, 21, FontStyle.Normal, Hex("#83A9CF"), TextAnchor.MiddleCenter);
             Anchor(statusText.rectTransform, .18f, .28f, .82f, .37f, 0, 0, 0, 0);
 
             connectionPill = Image("Connection", canvas.transform, Hex("#804C25"));
@@ -381,7 +386,7 @@ namespace TG.Control.LedPlayer
         {
             if (statusText != null) statusText.text = status;
             if (connectionText != null) connectionText.text = connected ? "● LED 播放端在线" : "● LED 播放端连接中";
-            if (connectionPill != null) connectionPill.color = connected ? Hex("#1C654D") : Hex("#804C25");
+            if (connectionPill != null) connectionPill.color = connected ? Hex("#145B4C") : Hex("#244669");
         }
 
         private Image Image(string name, Transform parent, Color color)

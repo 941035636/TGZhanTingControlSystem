@@ -702,7 +702,11 @@ namespace TG.Control.Touch
         {
             var fallbackColor = ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out var configured)
                 ? configured : theme.Background;
-            var embedded = Resources.Load<Texture2D>("Touch/touch-technology-background");
+            // The kiosk home uses its own 16:9 technology backdrop. Keep the previous
+            // image as a resilient fallback for installations that have not imported the
+            // new bundled asset yet.
+            var embedded = Resources.Load<Texture2D>("Touch/touch-home-background") ??
+                           Resources.Load<Texture2D>("Touch/touch-technology-background");
             if (embedded != null)
             {
                 if (embeddedBackgroundSprite == null)

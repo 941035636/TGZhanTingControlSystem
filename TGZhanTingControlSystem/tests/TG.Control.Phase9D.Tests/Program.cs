@@ -48,7 +48,8 @@ internal static class Program
             ("Referenced assets are protected from deletion", ReferencedAssetsAreProtected),
             ("Rollback requires current revision", RollbackRevisionConflictRejected),
             ("Legacy UI layout migrates to welcome kiosk", LegacyUiLayoutMigratesToWelcomeKiosk),
-            ("Explicit new UI layout preserves operator choice", ExplicitUiLayoutPreservesChoice)
+            ("Explicit new UI layout preserves operator choice", ExplicitUiLayoutPreservesChoice),
+            ("Welcome experience elements are accepted", WelcomeExperienceElementsAreAccepted)
         };
 
         var failed = 0;
@@ -465,6 +466,26 @@ internal static class Program
         Equal("hero-routes", normalized.Layout!.TouchTemplate);
         True(!normalized.Layout.TouchWelcomeEnabled, "Explicit welcome-page choice was overwritten.");
         Equal(300, normalized.Layout.TouchIdleTimeoutSeconds);
+        return Task.CompletedTask;
+    }
+
+    private static Task WelcomeExperienceElementsAreAccepted()
+    {
+        var config = UiConfig(new UiExperienceLayout(),
+        [
+            new UiElementOverride("welcome.eyebrow", "智慧展厅"),
+            new UiElementOverride("welcome.action", "触碰开启"),
+            new UiElementOverride("welcome.hint", "轻触屏幕任意位置进入"),
+            new UiElementOverride("welcome.logo", AssetUrl: "/media/welcome-logo.png", AssetId: "logo-1",
+                AssetSha256: new string('a', 64), AssetSizeBytes: 1024, AssetMediaType: "image/png"),
+            new UiElementOverride("welcome.background", AssetUrl: "/media/welcome-background.png",
+                AssetId: "background-1", AssetSha256: new string('b', 64), AssetSizeBytes: 2048,
+                AssetMediaType: "image/png")
+        ]);
+        var errors = UiExperiencePolicy.Validate(config);
+        Equal(0, errors.Count);
+        var normalized = UiExperiencePolicy.Normalize(config);
+        Equal(5, normalized.TouchElements!.Count);
         return Task.CompletedTask;
     }
 

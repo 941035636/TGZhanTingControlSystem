@@ -17,7 +17,8 @@ namespace TG.Control.Touch.UI.Components
         public ContentHost(TouchUiFactory factory, TouchTheme theme, Transform parent)
         {
             frame = factory.RoundedImage("Content Host Frame", parent, theme.Border);
-            surface = factory.RoundedImage("Content Host Surface", frame.transform, theme.Surface);
+            surface = factory.RoundedImage("Content Host Surface", frame.transform,
+                new Color(theme.SurfaceGlass.r, theme.SurfaceGlass.g, theme.SurfaceGlass.b, .04f));
             TouchUiFactory.Stretch(surface.rectTransform, 1, 1, -1, -1);
             contentRoot = factory.Rect("Page Host", surface.transform);
             TouchUiFactory.Stretch(contentRoot, theme.CardSpacing, theme.CardSpacing,
@@ -27,7 +28,7 @@ namespace TG.Control.Touch.UI.Components
         public void RefreshTheme(TouchTheme theme)
         {
             frame.color = theme.Border;
-            surface.color = theme.Surface;
+            surface.color = new Color(theme.SurfaceGlass.r, theme.SurfaceGlass.g, theme.SurfaceGlass.b, .04f);
         }
     }
 }

@@ -34,9 +34,15 @@ namespace TG.Control.Touch.UI.Components
         public SideNavigation(TouchUiFactory factory, TouchTheme theme, Transform parent)
         {
             this.theme = theme;
-            root = factory.Image("Side Navigation", parent, theme.NavigationBackground);
+            root = factory.Image("Side Navigation", parent, Color.clear);
+            root.raycastTarget = false;
             var border = factory.Image("Navigation Border", root.transform, theme.Border);
             TouchUiFactory.Anchor(border.rectTransform, 1, 0, 1, 1, -1, 0, 0, 0);
+            var signal = factory.Image("Navigation Signal", root.transform,
+                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .72f));
+            TouchUiFactory.Anchor(signal.rectTransform, 0, 1, 0, 1, theme.PagePadding, -12,
+                theme.PagePadding + 52, -9);
+            signal.raycastTarget = false;
 
             var heading = factory.Label("Navigation Heading", root.transform, "讲解控制", theme.SectionTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
@@ -47,11 +53,11 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1,
                 theme.PagePadding, -88, -theme.PagePadding, -62);
 
-            CreateItem(factory, TouchShellSection.ReceptionHome, "", "讲解首页", 0);
-            CreateItem(factory, TouchShellSection.Playback, "", "当前讲解", 1);
-            CreateItem(factory, TouchShellSection.SystemStatus, "", "系统状态", 2);
-            CreateItem(factory, TouchShellSection.Routes, "", "讲解路线", 3);
-            CreateItem(factory, TouchShellSection.Combination, "", "主题组合", 4);
+            CreateItem(factory, TouchShellSection.ReceptionHome, "01", "讲解首页", 0);
+            CreateItem(factory, TouchShellSection.Playback, "02", "当前讲解", 1);
+            CreateItem(factory, TouchShellSection.SystemStatus, "03", "系统状态", 2);
+            CreateItem(factory, TouchShellSection.Routes, "04", "讲解路线", 3);
+            CreateItem(factory, TouchShellSection.Combination, "05", "主题组合", 4);
 
             var footer = factory.Label("Navigation Footer", root.transform,
                 "55英寸触控终端\n仅展示当前可用功能", theme.Caption, FontStyle.Normal,
@@ -79,13 +85,14 @@ namespace TG.Control.Touch.UI.Components
 
         public void RefreshTheme()
         {
-            root.color = theme.NavigationBackground;
+            root.color = Color.clear;
             foreach (var item in items) Apply(item);
         }
 
         private void CreateItem(TouchUiFactory factory, TouchShellSection section, string number, string text, int index)
         {
-            var image = factory.RoundedImage("Navigation - " + text, root.transform, theme.NavigationBackground);
+            var image = factory.RoundedImage("Navigation - " + text, root.transform,
+                new Color(theme.NavigationBackground.r, theme.NavigationBackground.g, theme.NavigationBackground.b, .18f));
             var top = -(112 + index * (theme.NavigationItemHeight + theme.Space12));
             TouchUiFactory.Anchor(image.rectTransform, 0, 1, 1, 1,
                 theme.Space12, top - theme.NavigationItemHeight, -theme.Space12, top);
@@ -112,7 +119,7 @@ namespace TG.Control.Touch.UI.Components
                 theme.Space16, 0, theme.Space16 + 34, 0);
             var textLabel = factory.Label("Label", image.transform, text, theme.Body, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, theme.Space24, 0, -theme.Space32, 0);
+            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, theme.Space16 + 38, 0, -theme.Space32, 0);
             var activity = factory.RoundedImage("Activity", image.transform, theme.Success);
             TouchUiFactory.Anchor(activity.rectTransform, 1, .5f, 1, .5f,
                 -theme.Space24, -5, -theme.Space16, 5);
@@ -132,7 +139,9 @@ namespace TG.Control.Touch.UI.Components
         private void Apply(Item item)
         {
             var selected = item.Section == active;
-            item.Background.color = selected ? theme.PrimaryMuted : theme.NavigationBackground;
+            item.Background.color = selected
+                ? new Color(theme.PrimaryMuted.r, theme.PrimaryMuted.g, theme.PrimaryMuted.b, .92f)
+                : new Color(theme.NavigationBackground.r, theme.NavigationBackground.g, theme.NavigationBackground.b, .18f);
             item.Accent.gameObject.SetActive(selected);
             item.Accent.color = theme.Primary;
             item.Number.color = !item.Available ? theme.Disabled : selected ? theme.Primary : theme.TextSecondary;

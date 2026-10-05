@@ -27,9 +27,15 @@ namespace TG.Control.Touch.UI.Components
         public TopBar(TouchUiFactory factory, TouchTheme theme, Transform parent)
         {
             this.theme = theme;
-            root = factory.Image("Top Bar", parent, theme.HeaderBackground);
+            root = factory.Image("Top Bar", parent, Color.clear);
+            root.raycastTarget = false;
             var divider = factory.Image("Top Bar Border", root.transform, theme.Border);
             TouchUiFactory.Anchor(divider.rectTransform, 0, 0, 1, 0, 0, 0, 0, 2);
+            var brandBeam = factory.Image("Top Bar Brand Beam", root.transform,
+                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .82f));
+            TouchUiFactory.Anchor(brandBeam.rectTransform, 0, 0, 0, 0, theme.PagePadding, 0,
+                theme.PagePadding + 246, 3);
+            brandBeam.raycastTarget = false;
 
             brandMark = factory.RoundedImage("Brand Mark", root.transform, theme.PrimaryMuted);
             TouchUiFactory.Anchor(brandMark.rectTransform, 0, .5f, 0, .5f,
@@ -92,6 +98,7 @@ namespace TG.Control.Touch.UI.Components
 
         public void RefreshTheme()
         {
+            root.color = Color.clear;
             brandMark.color = theme.PrimaryMuted;
             timeSurface.color = theme.SurfaceSoft;
             connectionBadge.RefreshTheme();

@@ -9,10 +9,12 @@ namespace TG.Control.Touch.UI.Theme
 
         // Core product surfaces. Configurable server colors never replace these structural colors.
         public Color AppBackground { get; } = ParseColor("#061427");
-        public Color Surface { get; } = ParseColor("#0A1F38");
-        public Color SurfaceElevated { get; } = ParseColor("#102E50");
-        public Color HeaderBackground { get; } = ParseColor("#081B32");
-        public Color NavigationBackground { get; } = ParseColor("#071A30");
+        public Color Surface { get; } = ParseColor("#0C2948");
+        public Color SurfaceElevated { get; } = ParseColor("#12385B");
+        // Top bar and navigation form one continuous product shell, so they intentionally
+        // share the same opaque structural blue instead of appearing as separate panels.
+        public Color HeaderBackground { get; } = ParseColor("#0B2948");
+        public Color NavigationBackground { get; } = ParseColor("#0B2948");
         // Product structure always uses the fixed brand blue. Server configuration must not recolor
         // navigation, semantic states or every primary action.
         public Color Primary { get; } = ParseColor("#1677FF");
@@ -20,16 +22,16 @@ namespace TG.Control.Touch.UI.Theme
         public Color PrimaryPressed { get; } = ParseColor("#0E60D0");
         public Color PrimaryMuted { get; } = ParseColor("#123F70");
         public Color PrimarySoft { get; } = ParseColor("#0D3159");
-        public Color SurfaceSoft { get; } = ParseColor("#0A1A2F");
-        public Color SurfaceGlass { get; } = ParseColor("#0D2948");
+        public Color SurfaceSoft { get; } = ParseColor("#0C2542");
+        public Color SurfaceGlass { get; } = ParseColor("#123B62");
         public Color TextPrimary { get; } = ParseColor("#F4F8FF");
         public Color TextSecondary { get; } = ParseColor("#AFC1D6");
         public Color TextMuted { get; } = ParseColor("#758AA3");
         public Color Success { get; } = ParseColor("#2ED7A2");
         public Color Warning { get; } = ParseColor("#F0B45A");
         public Color Error { get; } = ParseColor("#F05D6C");
-        public Color Border { get; } = ParseColor("#1A4267");
-        public Color BorderStrong { get; } = ParseColor("#286594");
+        public Color Border { get; } = ParseColor("#205B87");
+        public Color BorderStrong { get; } = ParseColor("#2D83B5");
         public Color ConfigurableAccent { get; private set; } = ParseColor("#36A4FF");
         public Color SecondaryButton { get; } = ParseColor("#143453");
         public Color PrimaryHighlight => PrimaryHover;
@@ -41,7 +43,9 @@ namespace TG.Control.Touch.UI.Theme
         public Color NeutralTint { get; } = Color.white;
         public Color InputBackground { get; } = ParseColor("#0D2744");
         public Color Divider => Border;
-        public Color BackdropVeil { get; } = new Color(.015f, .055f, .105f, .68f);
+        // The app backdrop is a supplied exhibition visual, not decorative wallpaper.
+        // Keep only a trace veil so it remains clear behind the transparent home layout.
+        public Color BackdropVeil { get; } = new Color(.015f, .055f, .105f, .04f);
         public Color HeroOverlay => new Color(AppBackground.r, AppBackground.g, AppBackground.b, .76f);
 
         // Typography scale for a fixed 55-inch, 1920x1080 touch terminal.
