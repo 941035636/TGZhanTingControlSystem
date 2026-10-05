@@ -1,0 +1,5 @@
+{
+  "serverBaseUrl": "https://192.168.1.100:5443",
+  "terminalApiKey": "REPLACE_WITH_SERVER_ENROLLMENT_KEY",
+  "trustedCertificatePath": "server-public.cer"
+}

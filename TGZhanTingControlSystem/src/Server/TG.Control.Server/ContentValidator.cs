@@ -46,6 +46,8 @@ public static class ContentValidator
                 if (string.IsNullOrWhiteSpace(node.Name)) Add(nodeKey, "节点名称不能为空。");
                 var hasPlayableVisual = (node.Assets ?? []).Any(asset =>
                     asset.Kind is AssetKind.Video or AssetKind.Animation && !string.IsNullOrWhiteSpace(asset.Url));
+                if (hasPlayableVisual && (node.NarrationAudio is not null || !string.IsNullOrWhiteSpace(node.TtsAudioUrl)))
+                    Add(nodeKey, "同一节点不能同时包含视频和讲解语音，请拆分为按顺序播放的独立节点。");
                 if (string.IsNullOrWhiteSpace(node.NarrationText) && string.IsNullOrWhiteSpace(node.TtsAudioUrl) &&
                     node.NarrationAudio is null && !hasPlayableVisual)
                     Add(nodeKey, "讲解文案和讲解音频至少填写一项。");

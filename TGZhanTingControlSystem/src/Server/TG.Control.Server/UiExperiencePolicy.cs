@@ -11,7 +11,8 @@ public static class UiExperiencePolicy
     {
         "shell.title", "shell.subtitle", "home.hero.title", "home.hero.subtitle",
         "home.hero.logo", "home.hero.background", "home.quick.temporary", "home.quick.all",
-        "home.quick.continue"
+        "home.quick.continue", "welcome.title", "welcome.subtitle", "welcome.audio",
+        "welcome.background", "home.kiosk.title", "home.kiosk.subtitle"
     };
     private static readonly HashSet<string> LedKeys = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -21,16 +22,22 @@ public static class UiExperiencePolicy
     public static UiExperienceConfig Normalize(UiExperienceConfig request)
     {
         var layout = request.Layout ?? new UiExperienceLayout();
+        // Layouts saved before the welcome/kiosk schema deserialize the new timeout as zero.
+        // Treat that as a one-time migration so existing installations receive the new safe defaults.
+        var legacyTouchLayout = layout.TouchIdleTimeoutSeconds <= 0;
         return request with
         {
             Layout = new UiExperienceLayout(
-                NormalizeTemplate(layout.TouchTemplate, "hero-routes", "hero-routes", "routes-grid"),
+                NormalizeTemplate(legacyTouchLayout ? "module-kiosk" : layout.TouchTemplate,
+                    "module-kiosk", "module-kiosk", "hero-routes", "routes-grid"),
                 NormalizeTemplate(layout.LedTemplate, "idle-media", "idle-media", "idle-minimal"),
                 layout.TouchShowHero,
                 layout.TouchShowStatusPanel,
                 layout.TouchShowQuickActions,
                 layout.LedShowBranding,
-                layout.LedShowStatus),
+                layout.LedShowStatus,
+                legacyTouchLayout || layout.TouchWelcomeEnabled,
+                legacyTouchLayout ? 180 : Math.Clamp(layout.TouchIdleTimeoutSeconds, 30, 3600)),
             TouchElements = NormalizeElements(request.TouchElements, TouchKeys),
             LedElements = NormalizeElements(request.LedElements, LedKeys)
         };

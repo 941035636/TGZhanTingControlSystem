@@ -1,9 +1,10 @@
 import './style.css'
 import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentDraftSnapshot, type ContentPublishReadiness, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiElementOverride, type UiExperienceConfig } from './api'
 import { bindingStatusLabel, jobStatusLabel, TtsWorkflowController, type TtsWorkflowApi } from './tts-workflow'
+import { validateLedIdleMediaDimensions } from './ui-media-validation'
 
 const app = document.querySelector<HTMLDivElement>('#app')
-if (!app) throw new Error('App root was not found')
+if (!app) throw new Error('未找到管理页面根节点')
 const root = app
 let content: PublishedContent | null = null
 let ttsProviders: TtsProviderDescriptor[] = []
@@ -46,11 +47,18 @@ const escapeHtml = (value: string | null | undefined): string => (value ?? '').r
 const assetKindName = (kind: AssetKind): string => ['宣传视频', '展示图片', '动画素材', '讲解音频'][kind] ?? '素材'
 const formatSize = (bytes: number): string => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} 吉字节` : bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} 兆字节` : `${Math.max(1, Math.round(bytes / 1024))} 千字节`
 const formatVersion = (version: number): string => `第 ${version} 版`
-const displayAccountName = (value: string): string => value.toLowerCase() === 'admin' ? '管理员' : value
+const displayAccountName = (value: string): string => {
+  if (value.toLowerCase() === 'admin') return '管理员'
+  return /[A-Za-z]/.test(value) ? '管理账号' : value
+}
 const displayLanguage = (value: string): string => value.toLowerCase() === 'zh-cn' ? '中文（中国大陆）' : '当前配置语言'
 const displayProvider = (provider: TtsProviderDescriptor | undefined): string => provider?.developmentOnly ? '开发测试语音服务' : '本地中文语音服务'
 const displayVoice = (provider: TtsProviderDescriptor | undefined, voiceName: string): string =>
   provider?.developmentOnly ? '开发测试音色' : /^[\u0000-\u007f]+$/.test(voiceName) ? '中文标准讲解' : voiceName
+const displayAssetName = (value: string | null | undefined, kind: AssetKind): string => {
+  const name = (value ?? '').replace(/\.[^.]+$/, '').trim()
+  return !name || /[A-Za-z]/.test(name) ? `${assetKindName(kind)}素材` : name
+}
 const displayRuntimeStatus = (value: string | null | undefined, ready: boolean): string => {
   const normalized = value?.trim().toLowerCase()
   const labels: Record<string, string> = {
@@ -67,24 +75,30 @@ const displayLogAction = (value: string): string => ({
   pause: '暂停', resume: '继续', skip: '跳过', retry: '重试', stop: '终止', clientrecovered: '终端恢复',
   completed: '完成', recovered: '会话恢复', recoverydiscarded: '放弃恢复',
 })[value.toLowerCase()] ?? '状态更新'
-const displayMessage = (value: string): string => value
-  .replace(/\badmin\b/gi, '管理员')
-  .replace(/\btouch-main\b/gi, '触控中控端')
-  .replace(/\bled-main\b/gi, '大屏播放端')
-  .replace(/\bTTS\b/gi, '语音合成')
-  .replace(/\bLED\b/gi, '大屏播放端')
-  .replace(/\bServer\b/gi, '服务端')
-  .replace(/\bMeloTTS\b/gi, '本地语音合成服务')
-  .replace(/\bSHA-?256\b/gi, '文件校验值')
-  .replace(/\bAssetId\b/gi, '素材编号')
-  .replace(/\bMediaType\b/gi, '媒体类型')
-  .replace(/\bURL\b/gi, '资源地址')
-  .replace(/\bV(\d+)\b/g, '第 $1 版')
-  .replace(/adopted a generated narration audio candidate\.?/gi, '采用了一条候选讲解语音。')
-  .replace(/published content\s+第\s*(\d+)\s*版\.?/gi, '发布了第 $1 版内容。')
+const displayMessage = (value: string): string => {
+  const localized = value
+    .replace(/\badmin\b/gi, '管理员')
+    .replace(/\btouch-main\b/gi, '触控中控端')
+    .replace(/\bled-main\b/gi, '大屏播放端')
+    .replace(/\bTTS\b/gi, '语音合成')
+    .replace(/\bLED\b/gi, '大屏播放端')
+    .replace(/\bServer\b/gi, '服务端')
+    .replace(/\bMeloTTS\b/gi, '本地语音合成服务')
+    .replace(/\bSHA-?256\b/gi, '文件校验值')
+    .replace(/\bAssetId\b/gi, '素材编号')
+    .replace(/\bMediaType\b/gi, '媒体类型')
+    .replace(/\bURL\b/gi, '资源地址')
+    .replace(/\bV(\d+)\b/g, '第 $1 版')
+    .replace(/adopted a generated narration audio candidate\.?/gi, '采用了一条候选讲解语音。')
+    .replace(/published content\s+第\s*(\d+)\s*版\.?/gi, '发布了第 $1 版内容。')
+    .replace(/[A-Za-z][A-Za-z0-9_.:/\\-]*/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return /[\u3400-\u9fff]/.test(localized) ? localized : '系统已记录一条运行信息。'
+}
 
 function renderLogin(message = ''): void {
-  root.innerHTML = `<main class="login-shell"><section class="login-brand"><p class="eyebrow">展厅智能中控</p><h1>展厅自动讲解<br/>管理平台</h1><p>统一管理 12 个展陈模块、宣传视频、讲解文案与内容发布。</p><div class="brand-stats"><span>双屏联动</span><span>语音讲解</span><span>组合路线</span></div></section><section class="login-panel"><form id="login-form" class="login-card"><div class="login-mark">展</div><h2>欢迎登录</h2><p class="login-tip">请输入具有内容发布权限的管理账号</p><label>用户名<input id="username" autocomplete="username" placeholder="请输入用户名" /></label><label>密码<input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" /></label><p id="login-error" class="login-error">${escapeHtml(message)}</p><button class="primary login-button" type="submit">登录管理平台</button><p class="login-foot">展厅智能中控系统 · 内部管理入口</p></form></section></main>`
+  root.innerHTML = `<main class="login-shell"><section class="login-brand"><p class="eyebrow">展厅智能中控</p><h1>展厅自动讲解<br/>管理平台</h1><p>统一管理 12 个展陈模块、宣传视频、讲解文案与内容发布。</p><div class="brand-stats"><span>双屏联动</span><span>语音讲解</span><span>组合路线</span></div></section><section class="login-panel"><form id="login-form" class="login-card"><h2>欢迎登录</h2><p class="login-tip">请输入具有内容发布权限的管理账号</p><label>用户名<input id="username" autocomplete="username" placeholder="请输入用户名" /></label><label>密码<input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" /></label><p id="login-error" class="login-error">${escapeHtml(message)}</p><button class="primary login-button" type="submit">登录管理平台</button><p class="login-foot">展厅智能中控系统 · 内部管理入口</p></form></section></main>`
   root.querySelector<HTMLFormElement>('#login-form')?.addEventListener('submit', login)
   root.querySelector<HTMLInputElement>('#password')?.focus()
 }
@@ -212,13 +226,17 @@ function readinessBanner():string{const state=!readiness?.canStart?'blocked':rea
 async function refreshOperations():Promise<void>{try{[clientStatuses,playbackSessions,readiness,operationEvents]=await Promise.all([api.clientStatuses(),api.playbackSessions(),api.readiness(),api.operations()]);renderDashboard();showToast('运行状态已刷新。')}catch(error){showToast(error instanceof Error?error.message:'刷新失败')}}
 function formatTime(value:string):string{const date=new Date(value);return Number.isNaN(date.getTime())?'-':date.getUTCFullYear()<2000?'系统初始化':date.toLocaleString('zh-CN',{hour12:false})}
 
-function moduleCard(module: ExhibitionModule): string { return `<article class="module-card ${module.enabled ? '' : 'disabled'}" data-module="${module.id}"><div class="module-number">${String(module.order).padStart(2,'0')}</div><div class="module-body"><div class="module-heading"><input class="module-name" value="${escapeHtml(module.name)}" aria-label="模块名称"/><label class="switch"><input type="checkbox" class="module-enabled" ${module.enabled?'checked':''}/><span></span></label></div><textarea class="module-description" placeholder="填写模块简介">${escapeHtml(module.description)}</textarea><div class="module-footer"><span>${module.nodes.length} 个讲解节点 · ${module.nodes.reduce((sum,node)=>sum+node.assets.length+(node.ttsAudioUrl?1:0),0)} 个素材</span><button class="node-button">编辑内容</button></div></div></article>` }
+function moduleCard(module: ExhibitionModule): string { return `<article class="module-card ${module.enabled ? '' : 'disabled'}" data-module="${module.id}"><div class="module-number">${String(module.order).padStart(2,'0')}</div><div class="module-body"><div class="module-heading"><input class="module-name" value="${escapeHtml(module.name)}" aria-label="模块名称"/><label class="switch"><input type="checkbox" class="module-enabled" ${module.enabled?'checked':''}/><span></span></label></div><textarea class="module-description" placeholder="填写模块简介">${escapeHtml(module.description)}</textarea><div class="module-cover-setting"><span>${module.coverUrl?'已设置中控卡片底图':'尚未设置中控卡片底图'}</span><label class="upload-button">${module.coverUrl?'替换底图':'上传底图'}<input class="module-cover-file" type="file" accept="image/*"/></label></div><div class="module-footer"><span>${module.nodes.length} 个讲解节点 · ${module.nodes.reduce((sum,node)=>sum+node.assets.length+(node.ttsAudioUrl?1:0),0)} 个素材</span><button class="node-button">编辑内容</button></div></div></article>` }
 
 function bindCard(card: HTMLElement): void {
   const module = content?.modules.find(item => item.id === card.dataset.module); if (!module) return
   card.querySelector<HTMLInputElement>('.module-name')?.addEventListener('input', event => { module.name=(event.target as HTMLInputElement).value; markDirty() })
   card.querySelector<HTMLTextAreaElement>('.module-description')?.addEventListener('input', event => { module.description=(event.target as HTMLTextAreaElement).value; markDirty() })
   card.querySelector<HTMLInputElement>('.module-enabled')?.addEventListener('change', event => { module.enabled=(event.target as HTMLInputElement).checked; markDirty(true) })
+  card.querySelector<HTMLInputElement>('.module-cover-file')?.addEventListener('change', async event => {
+    const file=(event.target as HTMLInputElement).files?.[0];if(!file)return
+    try{const asset=await api.uploadAsset(file,1,0,()=>{});module.coverUrl=asset.url;markDirty(true);await syncDraftNow();showToast('板块底图已上传，发布新版本后中控端生效。')}catch(error){showToast(error instanceof Error?error.message:'板块底图上传失败')}
+  })
   card.querySelector('.node-button')?.addEventListener('click', () => openNodeEditor(module.id))
 }
 
@@ -246,9 +264,9 @@ function renderNodeEditor(): void {
 }
 
 function nodeForm(node: NarrationNode): string {
-  return `<div class="editor-fields"><div class="field-row"><label>节点名称<input id="node-name" value="${escapeHtml(node.name)}"/></label><label class="short-field">顺序<input id="node-order" type="number" min="1" value="${node.order}"/></label><label class="short-field">故障策略<select id="failure-policy"><option value="0" ${node.failurePolicy===0?'selected':''}>跳过继续</option><option value="1" ${node.failurePolicy===1?'selected':''}>停止讲解</option></select></label></div><div class="field-row"><label>声画混音策略<select id="audio-mix-policy"><option value="0" ${node.audioMixPolicy===0?'selected':''}>讲解时压低视频原声</option><option value="1" ${node.audioMixPolicy===1?'selected':''}>保留视频原声音量</option><option value="2" ${node.audioMixPolicy===2?'selected':''}>讲解时静音视频</option></select></label><label class="short-field">讲解时视频音量<input id="video-volume" type="number" min="0" max="1" step="0.05" value="${node.videoVolume || 0.25}"/></label><label class="short-field">讲解音量<input id="narration-volume" type="number" min="0" max="1" step="0.05" value="${node.narrationVolume || 1}"/></label></div><label>讲解文案<textarea id="narration-text" class="narration-text" placeholder="输入供语音合成和讲解员查看的完整文案">${escapeHtml(node.narrationText)}</textarea></label>
+  return `<div class="editor-fields"><div class="segment-guidance"><strong>按段落编排播放顺序</strong><p>一个节点只安排一种声音：语音介绍节点不要上传视频；视频节点不要生成或上传讲解语音。需要穿插时，请按“语音介绍 → 视频 → 语音补充”分别建立节点。</p></div><div class="field-row"><label>节点名称<input id="node-name" value="${escapeHtml(node.name)}"/></label><label class="short-field">顺序<input id="node-order" type="number" min="1" value="${node.order}"/></label><label class="short-field">故障策略<select id="failure-policy"><option value="0" ${node.failurePolicy===0?'selected':''}>跳过继续</option><option value="1" ${node.failurePolicy===1?'selected':''}>停止讲解</option></select></label></div><div class="field-row"><label>历史声画策略<select id="audio-mix-policy"><option value="0" ${node.audioMixPolicy===0?'selected':''}>压低视频原声</option><option value="1" ${node.audioMixPolicy===1?'selected':''}>保留视频原声</option><option value="2" ${node.audioMixPolicy===2?'selected':''}>静音视频</option></select></label><label class="short-field">视频音量<input id="video-volume" type="number" min="0" max="1" step="0.05" value="${node.videoVolume || 0.25}"/></label><label class="short-field">讲解音量<input id="narration-volume" type="number" min="0" max="1" step="0.05" value="${node.narrationVolume || 1}"/></label></div><label>讲解文案<textarea id="narration-text" class="narration-text" placeholder="语音介绍节点填写；纯视频节点可留空">${escapeHtml(node.narrationText)}</textarea></label>
     <section id="tts-workspace" class="tts-workspace">${ttsPanel(node)}</section>
-    <section class="assets-section"><div class="assets-heading"><div><strong>大屏展示素材</strong><p>建议使用1920×1080高清横屏视频；超大视频将直接流式写入服务器磁盘。</p></div></div><div class="upload-row"><select id="asset-kind"><option value="0">宣传视频</option><option value="1">展示图片</option><option value="2">动画素材</option></select><label>时长（秒）<input id="asset-duration" type="number" min="0" step="0.1" value="0"/></label><label class="upload-button">选择并上传<input id="asset-file" type="file" accept="video/*,image/*,.mov,.mkv,.webm"/></label><div id="upload-progress" class="upload-progress"><span></span></div></div><div class="asset-list">${node.assets.length ? node.assets.map(asset => `<article><div class="asset-icon">${asset.kind===0?'▶':asset.kind===1?'▧':'◆'}</div><div><strong>${escapeHtml(asset.name)}</strong><p>${assetKindName(asset.kind)} · ${formatSize(asset.sizeBytes)}${asset.durationSeconds?` · ${asset.durationSeconds} 秒`:''}</p></div><a href="${escapeHtml(asset.url)}" target="_blank">查看</a><button data-remove-asset="${asset.id}">移除</button></article>`).join('') : '<div class="empty-assets">尚未上传大屏素材</div>'}</div></section>
+    <section class="assets-section"><div class="assets-heading"><div><strong>大屏展示素材</strong><p>建议使用1920×1080高清横屏视频；超大视频将直接流式写入服务器磁盘。</p></div></div><div class="upload-row"><select id="asset-kind"><option value="0">宣传视频</option><option value="1">展示图片</option><option value="2">动画素材</option></select><label>时长（秒）<input id="asset-duration" type="number" min="0" step="0.1" value="0"/></label><label class="upload-button">选择并上传<input id="asset-file" type="file" accept="video/*,image/*,.mov,.mkv,.webm"/></label><div id="upload-progress" class="upload-progress"><span></span></div></div><div class="asset-list">${node.assets.length ? node.assets.map(asset => `<article><div class="asset-icon">${asset.kind===0?'▶':asset.kind===1?'▧':'◆'}</div><div><strong>${escapeHtml(displayAssetName(asset.name, asset.kind))}</strong><p>${assetKindName(asset.kind)} · ${formatSize(asset.sizeBytes)}${asset.durationSeconds?` · ${asset.durationSeconds} 秒`:''}</p></div><a href="${escapeHtml(asset.url)}" target="_blank">查看</a><button data-remove-asset="${asset.id}">移除</button></article>`).join('') : '<div class="empty-assets">尚未上传大屏素材</div>'}</div></section>
     <footer class="editor-footer"><span>修改保存在当前草稿中，点击主页面“发布新版本”后终端才会更新。</span><button id="delete-node" class="danger">删除当前节点</button><button id="done-node" class="primary">完成编辑</button></footer></div>`
 }
 
@@ -278,7 +296,7 @@ function ttsPanel(node: NarrationNode): string {
     ? '<div class="tts-development-note">当前选择的是开发测试音色，仅用于流程验证，不代表正式商用语音效果。</div>'
     : ''
   const currentAudio = currentAudioUrl
-    ? `<article class="tts-current-audio"><div><span class="tts-card-label">${draftRevision > 0 ? '当前草稿已采用语音 · 等待发布' : '当前已发布语音'}</span><strong>${escapeHtml(adopted?.asset.name ?? currentAudioUrl.split('/').pop() ?? '讲解音频')}</strong><p>${escapeHtml(currentOrigin)}${adopted ? ` · ${formatSize(adopted.asset.sizeBytes)} · ${escapeHtml(displayVoice(ttsProviders.find(item => item.providerId === adopted.synthesisConfiguration.providerKey), adopted.synthesisConfiguration.voice || '人工音频'))}` : ''}</p></div><a href="${escapeHtml(resolveAssetUrl(currentAudioUrl))}" target="_blank" rel="noreferrer">打开音频</a><button id="remove-audio" class="danger-text">移除</button></article>`
+    ? `<article class="tts-current-audio"><div><span class="tts-card-label">${draftRevision > 0 ? '当前草稿已采用语音 · 等待发布' : '当前已发布语音'}</span><strong>${escapeHtml(displayAssetName(adopted?.asset.name ?? currentAudioUrl.split('/').pop(), 3))}</strong><p>${escapeHtml(currentOrigin)}${adopted ? ` · ${formatSize(adopted.asset.sizeBytes)} · ${escapeHtml(displayVoice(ttsProviders.find(item => item.providerId === adopted.synthesisConfiguration.providerKey), adopted.synthesisConfiguration.voice || '人工音频'))}` : ''}</p></div><a href="${escapeHtml(resolveAssetUrl(currentAudioUrl))}" target="_blank" rel="noreferrer">打开音频</a><button id="remove-audio" class="danger-text">移除</button></article>`
     : '<div class="tts-current-empty">当前尚未采用讲解语音</div>'
   const job = workflow?.job
   const jobView = job
@@ -481,7 +499,7 @@ async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement,
     } else node.assets.push(asset)
     markDirty()
     await syncDraftNow()
-    renderNodeEditor(); showToast(`${file.name} 上传成功。`)
+    renderNodeEditor(); showToast('素材上传成功。')
   } catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'上传失败')}
 }
 
@@ -493,15 +511,18 @@ function openUiEditor(): void {
   const config = uiConfig
   const modal = document.createElement('div'); modal.id='ui-modal'; modal.className='modal-backdrop'
   modal.innerHTML=`<section class="ui-editor-modal"><header class="editor-header"><div><p class="eyebrow">终端外观</p><h2>终端界面设置</h2></div><button id="close-ui" class="icon-button">×</button></header><div class="ui-editor-body">
-    <section class="ui-config-card"><div class="ui-config-title"><div><strong>触控中控端</strong><p>标题、配色和背景图发布后由中控端自动获取。</p></div><span>触控界面 · 1920×1080</span></div><div class="ui-fields"><label>主标题<input id="touch-title" value="${escapeHtml(config.touchTitle)}"/></label><label>副标题<input id="touch-subtitle" value="${escapeHtml(config.touchSubtitle)}"/></label><div class="field-row colors"><label>背景颜色<input id="touch-bg-color" type="color" value="${escapeHtml(config.touchBackgroundColor)}"/></label><label>强调颜色<input id="touch-accent" type="color" value="${escapeHtml(config.touchAccentColor)}"/></label></div><div class="media-setting"><div><strong>背景图</strong><p>${config.touchBackgroundUrl?escapeHtml(config.touchBackgroundUrl.split('/').pop()):'未设置，使用纯色背景'}</p></div><label class="upload-button">上传替换<input id="touch-background-file" type="file" accept="image/*"/></label><button id="clear-touch-background">移除</button></div></div></section>
-    <section class="ui-config-card"><div class="ui-config-title"><div><strong>大屏待机界面</strong><p>支持纯色、图片或循环视频；每段讲解结束后自动返回。</p></div><span>大屏界面 · 1920×1080</span></div><div class="ui-fields"><label>主标题<input id="led-title" value="${escapeHtml(config.ledTitle)}"/></label><label>提示文字<input id="led-subtitle" value="${escapeHtml(config.ledSubtitle)}"/></label><div class="field-row colors"><label>背景颜色<input id="led-bg-color" type="color" value="${escapeHtml(config.ledBackgroundColor)}"/></label><div class="visibility-options"><label class="check-field"><input id="led-show-branding" type="checkbox" ${config.ledShowBranding?'checked':''}/>叠加标题文字</label><label class="check-field"><input id="led-show-status" type="checkbox" ${config.ledShowStatus?'checked':''}/>显示在线状态</label></div></div><div class="media-setting"><div><strong>待机素材</strong><p>${config.ledIdleMediaUrl?`${config.ledIdleMediaKind==='video'?'循环视频':'背景图片'} · ${escapeHtml(config.ledIdleMediaUrl.split('/').pop())}`:'未设置，使用纯色待机页'}</p></div><label class="upload-button">上传图片<input id="led-image-file" type="file" accept="image/*"/></label><label class="upload-button">上传视频<input id="led-video-file" type="file" accept="video/*,.mov,.mkv,.webm"/></label><button id="clear-led-media">移除</button></div></div></section>
+    <section class="ui-config-card"><div class="ui-config-title"><div><strong>触控中控端</strong><p>标题、配色和背景图发布后由中控端自动获取。</p></div><span>触控界面 · 1920×1080</span></div><div class="ui-fields"><label>主标题<input id="touch-title" value="${escapeHtml(config.touchTitle)}"/></label><label>副标题<input id="touch-subtitle" value="${escapeHtml(config.touchSubtitle)}"/></label><div class="field-row colors"><label>背景颜色<input id="touch-bg-color" type="color" value="${escapeHtml(config.touchBackgroundColor)}"/></label><label>强调颜色<input id="touch-accent" type="color" value="${escapeHtml(config.touchAccentColor)}"/></label></div><div class="media-setting"><div><strong>背景图</strong><p>${config.touchBackgroundUrl?'已设置背景图':'未设置，使用纯色背景'}</p></div><label class="upload-button">上传替换<input id="touch-background-file" type="file" accept="image/*"/></label><button id="clear-touch-background">移除</button></div></div></section>
+    <section class="ui-config-card"><div class="ui-config-title"><div><strong>中控欢迎页</strong><p>启动时显示欢迎页；播放欢迎词后进入讲解首页。</p></div><span>触摸开启</span></div><div class="ui-fields"><div class="visibility-options"><label class="check-field"><input id="touch-welcome-enabled" type="checkbox"/>启用欢迎页</label><label>无操作自动返回（秒）<input id="touch-idle-timeout" type="number" min="30" max="3600" step="10"/></label></div><label>欢迎标题<input id="welcome-title" maxlength="200"/></label><label>欢迎提示<input id="welcome-subtitle" maxlength="200"/></label><div class="media-setting"><div><strong>欢迎词音频</strong><p id="welcome-audio-state">未设置时触碰后直接进入首页</p></div><label class="upload-button">上传音频<input id="welcome-audio-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg"/></label><button id="clear-welcome-audio">移除</button></div></div></section>
+    <section class="ui-config-card"><div class="ui-config-title"><div><strong>大屏待机界面</strong><p>支持纯色、1920×1080 图片或无停顿循环视频；每段讲解结束后自动返回。</p></div><span>大屏界面 · 1920×1080</span></div><div class="ui-fields"><label>主标题<input id="led-title" value="${escapeHtml(config.ledTitle)}"/></label><label>提示文字<input id="led-subtitle" value="${escapeHtml(config.ledSubtitle)}"/></label><div class="field-row colors"><label>背景颜色<input id="led-bg-color" type="color" value="${escapeHtml(config.ledBackgroundColor)}"/></label><div class="visibility-options"><label class="check-field"><input id="led-show-branding" type="checkbox" ${config.ledShowBranding?'checked':''}/>叠加标题文字</label><label class="check-field"><input id="led-show-status" type="checkbox" ${config.ledShowStatus?'checked':''}/>显示在线状态</label></div></div><div class="media-setting"><div><strong>待机素材</strong><p>${config.ledIdleMediaUrl?`${config.ledIdleMediaKind==='video'?'循环视频':'背景图片'} · 已设置`:'仅接受 1920×1080，未设置时使用纯色待机页'}</p></div><label class="upload-button">上传图片<input id="led-image-file" type="file" accept="image/*"/></label><label class="upload-button">上传视频<input id="led-video-file" type="file" accept="video/*,.mov,.mkv,.webm"/></label><button id="clear-led-media">移除</button></div></div></section>
     <div id="ui-upload-progress" class="upload-progress"><span></span></div><footer class="editor-footer"><span>界面配置独立发布，不会修改讲解内容版本。</span><button id="cancel-ui">取消</button><button id="save-ui" class="primary">发布界面配置</button></footer></div></section>`
   document.body.appendChild(modal)
-  config.layout ??= { touchTemplate: 'hero-routes', ledTemplate: 'idle-media', touchShowHero: true, touchShowStatusPanel: true, touchShowQuickActions: true, ledShowBranding: config.ledShowBranding, ledShowStatus: config.ledShowStatus }
+  config.layout ??= { touchTemplate: 'module-kiosk', ledTemplate: 'idle-media', touchShowHero: true, touchShowStatusPanel: true, touchShowQuickActions: true, ledShowBranding: config.ledShowBranding, ledShowStatus: config.ledShowStatus, touchWelcomeEnabled: true, touchIdleTimeoutSeconds: 180 }
+  config.layout.touchWelcomeEnabled ??= true
+  config.layout.touchIdleTimeoutSeconds ||= 180
   config.touchElements ??= []
   config.ledElements ??= []
   const advanced = document.createElement('section'); advanced.className = 'ui-config-card ui-advanced-card'
-  advanced.innerHTML = `<div class="ui-config-title"><div><strong>页面模板与元素</strong><p>使用受控模板编辑页面结构；业务流程和安全操作不会被隐藏。</p></div><span>安全配置</span></div><div class="ui-fields"><div class="field-row"><label>中控首页模板<select id="touch-template"><option value="hero-routes">Hero + 常用路线</option><option value="routes-grid">路线网格</option></select></label><label>LED待机模板<select id="led-template"><option value="idle-media">品牌待机</option><option value="idle-minimal">极简待机</option></select></label></div><div class="visibility-options"><label class="check-field"><input id="touch-show-hero" type="checkbox"/>显示首页主视觉</label><label class="check-field"><input id="touch-show-status" type="checkbox"/>显示系统状态面板</label><label class="check-field"><input id="touch-show-quick" type="checkbox"/>显示快速接待</label></div><div class="field-row"><label>首页主视觉标题<input id="touch-hero-title" maxlength="200"/></label><label>首页主视觉说明<input id="touch-hero-subtitle" maxlength="200"/></label></div><div class="field-row"><label>LED待机标题<input id="led-idle-title" maxlength="200"/></label><label>LED待机提示<input id="led-idle-subtitle" maxlength="200"/></label></div></div>`
+  advanced.innerHTML = `<div class="ui-config-title"><div><strong>页面模板与元素</strong><p>使用受控模板编辑页面结构；业务流程和安全操作不会被隐藏。</p></div><span>安全配置</span></div><div class="ui-fields"><div class="field-row"><label>中控首页模板<select id="touch-template"><option value="module-kiosk">板块点播（推荐）</option><option value="hero-routes">主视觉与常用路线</option><option value="routes-grid">路线网格</option></select></label><label>大屏待机模板<select id="led-template"><option value="idle-media">品牌待机</option><option value="idle-minimal">极简待机</option></select></label></div><div class="visibility-options"><label class="check-field"><input id="touch-show-hero" type="checkbox"/>显示首页主视觉</label><label class="check-field"><input id="touch-show-status" type="checkbox"/>显示系统状态面板</label><label class="check-field"><input id="touch-show-quick" type="checkbox"/>显示快速接待</label></div><div class="field-row"><label>首页主视觉标题<input id="touch-hero-title" maxlength="200"/></label><label>首页主视觉说明<input id="touch-hero-subtitle" maxlength="200"/></label></div><div class="field-row"><label>大屏待机标题<input id="led-idle-title" maxlength="200"/></label><label>大屏待机提示<input id="led-idle-subtitle" maxlength="200"/></label></div></div>`
   modal.querySelector('.ui-editor-body')?.insertBefore(advanced, modal.querySelector('.editor-footer'))
   const findElement = (items: UiElementOverride[], key: string) => items.find(item => item.key === key)
   const setField = (id: string, value: string | undefined | null) => { const input = modal.querySelector<HTMLInputElement>(id); if (input) input.value = value ?? '' }
@@ -510,10 +531,18 @@ function openUiEditor(): void {
   const touchHeroSubtitle = findElement(config.touchElements, 'home.hero.subtitle')
   const ledIdleTitle = findElement(config.ledElements, 'idle.title')
   const ledIdleSubtitle = findElement(config.ledElements, 'idle.subtitle')
+  const welcomeTitle = findElement(config.touchElements, 'welcome.title')
+  const welcomeSubtitle = findElement(config.touchElements, 'welcome.subtitle')
+  const welcomeAudio = findElement(config.touchElements, 'welcome.audio')
   setField('#touch-hero-title', touchHeroTitle?.text ?? config.touchTitle)
   setField('#touch-hero-subtitle', touchHeroSubtitle?.text ?? config.touchSubtitle)
   setField('#led-idle-title', ledIdleTitle?.text ?? config.ledTitle)
   setField('#led-idle-subtitle', ledIdleSubtitle?.text ?? config.ledSubtitle)
+  setField('#welcome-title', welcomeTitle?.text ?? '欢迎开启自动讲解之旅')
+  setField('#welcome-subtitle', welcomeSubtitle?.text ?? '触碰下方光环，开启钢铁与科技交融的探索之旅')
+  setField('#touch-idle-timeout', String(config.layout.touchIdleTimeoutSeconds))
+  setChecked('#touch-welcome-enabled', config.layout.touchWelcomeEnabled)
+  const welcomeAudioState = modal.querySelector<HTMLElement>('#welcome-audio-state'); if (welcomeAudioState) welcomeAudioState.textContent = welcomeAudio?.assetUrl ? '已设置欢迎词音频' : '未设置时触碰后直接进入首页'
   const layout = config.layout
   setField('#touch-template', layout.touchTemplate); setField('#led-template', layout.ledTemplate)
   setChecked('#touch-show-hero', layout.touchShowHero); setChecked('#touch-show-status', layout.touchShowStatusPanel); setChecked('#touch-show-quick', layout.touchShowQuickActions)
@@ -524,16 +553,22 @@ function openUiEditor(): void {
     layout.touchShowHero = !!modal.querySelector<HTMLInputElement>('#touch-show-hero')?.checked
     layout.touchShowStatusPanel = !!modal.querySelector<HTMLInputElement>('#touch-show-status')?.checked
     layout.touchShowQuickActions = !!modal.querySelector<HTMLInputElement>('#touch-show-quick')?.checked
+    layout.touchWelcomeEnabled = !!modal.querySelector<HTMLInputElement>('#touch-welcome-enabled')?.checked
+    layout.touchIdleTimeoutSeconds = Math.min(3600, Math.max(30, Number(modal.querySelector<HTMLInputElement>('#touch-idle-timeout')?.value) || 180))
+    upsertElement(config.touchElements!, 'welcome.title', modal.querySelector<HTMLInputElement>('#welcome-title')?.value ?? '')
+    upsertElement(config.touchElements!, 'welcome.subtitle', modal.querySelector<HTMLInputElement>('#welcome-subtitle')?.value ?? '')
     upsertElement(config.touchElements!, 'home.hero.title', modal.querySelector<HTMLInputElement>('#touch-hero-title')?.value ?? '')
     upsertElement(config.touchElements!, 'home.hero.subtitle', modal.querySelector<HTMLInputElement>('#touch-hero-subtitle')?.value ?? '')
     upsertElement(config.ledElements!, 'idle.title', modal.querySelector<HTMLInputElement>('#led-idle-title')?.value ?? '')
     upsertElement(config.ledElements!, 'idle.subtitle', modal.querySelector<HTMLInputElement>('#led-idle-subtitle')?.value ?? '')
   }
   const assetRow = document.createElement('div'); assetRow.className = 'media-setting'
-  assetRow.innerHTML = '<div><strong>品牌Logo</strong><p>上传后可用于中控首页和LED待机页。</p></div><label class="upload-button">上传中控Logo<input id="touch-logo-file" type="file" accept="image/*"/></label><label class="upload-button">上传LED Logo<input id="led-logo-file" type="file" accept="image/*"/></label>'
+  assetRow.innerHTML = '<div><strong>品牌标志图</strong><p>上传后可用于中控首页和大屏待机页。</p></div><label class="upload-button">上传中控标志图<input id="touch-logo-file" type="file" accept="image/*"/></label><label class="upload-button">上传大屏标志图<input id="led-logo-file" type="file" accept="image/*"/></label>'
   advanced.querySelector('.ui-fields')?.appendChild(assetRow)
   modal.querySelector<HTMLInputElement>('#touch-logo-file')?.addEventListener('change', event => uploadUiElementAsset(event.target as HTMLInputElement, 'home.hero.logo', true, modal))
   modal.querySelector<HTMLInputElement>('#led-logo-file')?.addEventListener('change', event => uploadUiElementAsset(event.target as HTMLInputElement, 'idle.logo', false, modal))
+  modal.querySelector<HTMLInputElement>('#welcome-audio-file')?.addEventListener('change', event => uploadUiElementAsset(event.target as HTMLInputElement, 'welcome.audio', true, modal, 3, '欢迎词音频'))
+  modal.querySelector('#clear-welcome-audio')?.addEventListener('click', () => { const item=config.touchElements?.find(value=>value.key==='welcome.audio'); if(item){item.assetUrl=null;item.assetId=null;item.assetSha256=null;item.assetSizeBytes=0;item.assetMediaType=null} openUiEditor();modal.remove() })
   modal.querySelector('#save-ui')?.addEventListener('click', syncAdvanced, true)
   const read=()=>{config.touchTitle=modal.querySelector<HTMLInputElement>('#touch-title')!.value;config.touchSubtitle=modal.querySelector<HTMLInputElement>('#touch-subtitle')!.value;config.touchBackgroundColor=modal.querySelector<HTMLInputElement>('#touch-bg-color')!.value;config.touchAccentColor=modal.querySelector<HTMLInputElement>('#touch-accent')!.value;config.ledTitle=modal.querySelector<HTMLInputElement>('#led-title')!.value;config.ledSubtitle=modal.querySelector<HTMLInputElement>('#led-subtitle')!.value;config.ledBackgroundColor=modal.querySelector<HTMLInputElement>('#led-bg-color')!.value;config.ledShowBranding=modal.querySelector<HTMLInputElement>('#led-show-branding')!.checked;config.ledShowStatus=modal.querySelector<HTMLInputElement>('#led-show-status')!.checked}
   const close=()=>modal.remove()
@@ -549,18 +584,43 @@ function openUiEditor(): void {
 async function uploadUiAsset(input:HTMLInputElement,kind:AssetKind,target:'touch'|'led-image'|'led-video'|'touch-logo'|'led-logo',modal:HTMLElement):Promise<void>{
   const file=input.files?.[0];if(!file||!uiConfig)return
   const progress=modal.querySelector<HTMLElement>('#ui-upload-progress')!;progress.classList.add('visible')
-  try{const asset=await api.uploadAsset(file,kind,0,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`});if(target==='touch')uiConfig.touchBackgroundUrl=asset.url;else{uiConfig.ledIdleMediaUrl=asset.url;uiConfig.ledIdleMediaKind=target==='led-video'?'video':'image'};modal.remove();openUiEditor();showToast(`${file.name} 上传成功，请点击“发布界面配置”。`)}catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'界面素材上传失败')}
+  try{if(target==='led-image'||target==='led-video')await validateLedIdleMediaFile(file,target==='led-video');const asset=await api.uploadAsset(file,kind,0,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`});if(target==='touch')uiConfig.touchBackgroundUrl=asset.url;else{uiConfig.ledIdleMediaUrl=asset.url;uiConfig.ledIdleMediaKind=target==='led-video'?'video':'image'};modal.remove();openUiEditor();showToast('界面素材上传成功，请点击“发布界面配置”。')}catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'界面素材上传失败')}
 }
-async function uploadUiElementAsset(input: HTMLInputElement, key: string, touch: boolean, modal: HTMLElement): Promise<void> {
+
+async function validateLedIdleMediaFile(file: File, video: boolean): Promise<void> {
+  const url = URL.createObjectURL(file)
+  try {
+    const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+      if (video) {
+        const element = document.createElement('video')
+        element.preload = 'metadata'
+        element.muted = true
+        element.onloadedmetadata = () => resolve({ width: element.videoWidth, height: element.videoHeight })
+        element.onerror = () => reject(new Error('无法读取视频信息，请确认文件可以正常播放。'))
+        element.src = url
+        return
+      }
+      const element = document.createElement('img')
+      element.onload = () => resolve({ width: element.naturalWidth, height: element.naturalHeight })
+      element.onerror = () => reject(new Error('无法读取图片信息，请确认文件格式正确。'))
+      element.src = url
+    })
+    const error = validateLedIdleMediaDimensions(dimensions.width, dimensions.height)
+    if (error) throw new Error(error)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+async function uploadUiElementAsset(input: HTMLInputElement, key: string, touch: boolean, modal: HTMLElement, kind: AssetKind = 1, label = '界面素材'): Promise<void> {
   const file = input.files?.[0]; if (!file || !uiConfig) return
   const progress = modal.querySelector<HTMLElement>('#ui-upload-progress'); progress?.classList.add('visible')
   try {
-    const asset = await api.uploadAsset(file, 1, 0, percent => { const bar = progress?.querySelector<HTMLElement>('span'); if (bar) bar.style.width = `${percent}%` })
+    const asset = await api.uploadAsset(file, kind, 0, percent => { const bar = progress?.querySelector<HTMLElement>('span'); if (bar) bar.style.width = `${percent}%` })
     const items = touch ? (uiConfig.touchElements ??= []) : (uiConfig.ledElements ??= [])
     const existing = items.find(item => item.key === key)
     const value: UiElementOverride = { key, text: existing?.text ?? null, assetUrl: asset.url, color: existing?.color ?? null, visible: true, assetId: asset.id, assetSha256: asset.sha256, assetSizeBytes: asset.sizeBytes, assetMediaType: asset.mediaType ?? null }
     if (existing) Object.assign(existing, value); else items.push(value)
-    modal.remove(); openUiEditor(); showToast(`${file.name} 上传成功，请点击“发布界面配置”。`)
+    modal.remove(); openUiEditor(); showToast(`${label}上传成功，请点击“发布界面配置”。`)
   } catch (error) { progress?.classList.remove('visible'); showToast(error instanceof Error ? error.message : '界面素材上传失败') }
 }
 
@@ -576,7 +636,7 @@ function markDirty(rerender=false): void {
 function addModule(): void { if(!content)return;const order=Math.max(0,...content.modules.map(item=>item.order))+1;content.modules.push({id:crypto.randomUUID(),name:'新模块',order,description:'',coverUrl:null,enabled:true,nodes:[]});markDirty(true) }
 
 function validateDraft(modules: ExhibitionModule[]): string | null {
-  for(const module of modules){if(!module.name.trim())return `第 ${module.order} 个模块名称不能为空。`;for(const node of module.nodes){if(!node.name.trim())return `${module.name}存在未命名节点。`;if(!node.narrationText.trim()&&!node.ttsAudioUrl)return `${module.name} / ${node.name}需要讲解文案或讲解音频。`}}
+  for(const module of modules){if(!module.name.trim())return `第 ${module.order} 个模块名称不能为空。`;for(const node of module.nodes){if(!node.name.trim())return `${module.name}存在未命名节点。`;const hasVideo=node.assets.some(asset=>asset.kind===0||asset.kind===2),hasAudio=!!node.ttsAudioUrl||!!node.narrationAudio;if(hasVideo&&hasAudio)return `${module.name} / ${node.name}同时包含视频和讲解语音，请拆分为按顺序播放的独立节点。`;if(!node.narrationText.trim()&&!node.ttsAudioUrl&&!hasVideo)return `${module.name} / ${node.name}需要讲解文案、讲解音频或视频。`}}
   return null
 }
 

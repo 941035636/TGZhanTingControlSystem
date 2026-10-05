@@ -41,7 +41,7 @@ namespace TG.Control.Touch.UI.Theme
         public Color NeutralTint { get; } = Color.white;
         public Color InputBackground { get; } = ParseColor("#0D2744");
         public Color Divider => Border;
-        public Color BackdropVeil { get; } = new Color(.015f, .055f, .105f, .94f);
+        public Color BackdropVeil { get; } = new Color(.015f, .055f, .105f, .68f);
         public Color HeroOverlay => new Color(AppBackground.r, AppBackground.g, AppBackground.b, .76f);
 
         // Typography scale for a fixed 55-inch, 1920x1080 touch terminal.

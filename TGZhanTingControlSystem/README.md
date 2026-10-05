@@ -23,13 +23,13 @@
 - 电脑端模块查看、新增、启停、简介编辑、Server草稿保存和显式发布；
 - 讲解节点新增、删除、排序、文案和故障策略编辑；
 - 宣传视频、图片、动画及讲解音频流式上传与SHA-256校验；
-- 管理端账号登录、12小时会话和发布权限校验；
+- 管理端多账号登录、PBKDF2-SHA256密码散列、12小时会话和角色权限校验；
 - 触控端基于UGUI的12模块选择、常用路线、任意组合、一键全讲及连接状态界面，按1920×1080设计；
 - LED端全屏视频画布和UGUI待机层，讲解结束、终止或播放失败后自动返回待机界面；
 - 管理端可独立发布两端标题、背景、配色，以及LED待机图片/循环视频；
 - 触控端与LED端注册、断线重试和长轮询指令；
 - 任意顺序模块启动；
-- 活动讲解暂停、继续、跳过当前节点和终止；
+- 活动讲解暂停、继续、跳过当前节点和终止；中控可按10%步进实时调节LED视频原声音量，设置在当前讲解跨节点及Server恢复后保持；
 - 服务端为LED主机上的视频与讲解音频生成相同计划起播时间；
 - 多节点顺序推进；
 - 节点失败后按`Skip/Stop`策略处理；
@@ -57,6 +57,7 @@ powershell -ExecutionPolicy Bypass -File scripts\Build-All.ps1
 运行服务：
 
 ```powershell
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
 dotnet run --project src\Server\TG.Control.Server\TG.Control.Server.csproj
 ```
 
@@ -65,17 +66,23 @@ Server输出目录的`AdminWeb`文件夹。运行时静态文件直接由该目�
 无需手工复制管理端文件；构建环境需要安装Node.js/npm。
 仅在明确只做Server诊断时可传入`-p:SkipAdminWebBuild=true`跳过该步骤。
 
-访问：
+本地开发访问：
 
 - 管理端：`http://localhost:5080/`
 - 健康检查：`http://localhost:5080/api/health`
 
-本地开发账号：`admin`，仅开发使用的密码为`TG-DEVELOPMENT-ONLY`。Phase 9G正式安装器会在首次安装时
-生成随机管理密码，并写入ACL受限的ProgramData初始凭据文件；不得把开发值当作现场凭据。
+仅当`ASPNETCORE_ENVIRONMENT=Development`时，本地开发账号为`admin`、密码为`tg001`。
+基础`appsettings.json`不再包含可用口令或终端密钥。Phase 9G正式安装器会在首次安装时
+生成随机管理密码、只保存PBKDF2-SHA256散列，并把一次性初始密码写入ACL受限的ProgramData凭据文件；不得把开发值当作现场凭据。
 
 两个Unity终端默认使用请求头`X-TG-Terminal-Key`访问终端接口。开发环境默认密钥为
-`TG-DEVELOPMENT-ONLY`。正式部署通过ProgramData中的`server.site.json`、`touch-client.json`和
-`led-player.json`统一设置现场地址、ClientId与随机终端密钥，无需重新构建Unity客户端。
+`TG-DEVELOPMENT-ONLY`。正式部署默认使用`https://localhost:5443`和受信任的本机证书；ProgramData中的
+`server.site.json`、`touch-client.json`和`led-player.json`统一设置现场地址、ClientId与随机终端密钥。
+管理密码不写入配置，终端密钥使用Windows DPAPI LocalMachine加密保存，无需重新构建Unity客户端。
+
+正式现场支持把服务端、中控端和播放端分别安装到三台电脑。三套独立安装包、可编辑IP配置文件、
+证书分发和安装顺序见`docs/Architecture/Three-Machine-Deployment.md`。构建入口为
+`scripts/Build-SplitProductionPackages.ps1`。
 
 ## Unity
 
@@ -87,7 +94,8 @@ Server输出目录的`AdminWeb`文件夹。运行时静态文件直接由该目�
 两个工程采用运行时自动引导脚本，即使当前场景为空，也会创建基础通信、播放组件和
 可操作的UGUI界面。触控端与LED端统一以1920×1080为设计基准，均不依赖场景天空盒。
 
-LED工程正式运行前必须导入已授权的AVPro Video，并按`docs/03_AVPro接入说明.md`配置。
+LED工程已合入已授权的AVPro Video 3.2运行依赖；构建和交付必须保留完整插件目录，并按
+`docs/03_AVPro接入说明.md`验收。不得再导入历史AVPro 1.8或LibVLC/UMP覆盖当前实现。
 
 ## 重要边界
 

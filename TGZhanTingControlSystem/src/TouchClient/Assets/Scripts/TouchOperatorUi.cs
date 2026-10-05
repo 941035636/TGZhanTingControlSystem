@@ -16,6 +16,8 @@ namespace TG.Control.Touch
     /// <summary>Runtime UGUI console; independent from scene layout and configurable by the server.</summary>
     public sealed class TouchOperatorUi : MonoBehaviour
     {
+        private const int OperatorExitCode = 42;
+
         [SerializeField] private TouchApiClient apiClient;
         [SerializeField] private TouchControlFacade facade;
 
@@ -37,15 +39,23 @@ namespace TG.Control.Touch
         private bool navigateToPlaybackWhenSessionArrives;
         private bool startRequestPending;
         private bool routesInitialized;
+        private bool welcomeEnabled = true;
+        private float idleTimeoutSeconds = 180;
+        private float lastInteractionAt;
 
         private Image background;
+        private Sprite embeddedBackgroundSprite;
         private TouchAppShell appShell;
         private ReceptionHomePage receptionHomePage;
+        private ModuleKioskHomePage moduleKioskPage;
+        private WelcomeExperiencePage welcomeExperiencePage;
         private RouteEditorPage routeEditorPage;
         private PlaybackPage playbackPageView;
         private SystemStatusPage systemStatusPageView;
         private TouchImageLoader imageLoader;
         private GameObject homePage;
+        private GameObject legacyHomePage;
+        private bool useModuleKiosk = true;
         private GameObject editorPage;
         private GameObject playbackPageRoot;
         private GameObject systemStatusPageRoot;
@@ -83,11 +93,24 @@ namespace TG.Control.Touch
             Refresh();
         }
 
-        private void Update() => appShell?.Tick(DateTime.Now);
+        private void Update()
+        {
+            appShell?.Tick(DateTime.Now);
+            if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.touchCount > 0)
+                lastInteractionAt = Time.realtimeSinceStartup;
+            if (!welcomeEnabled || welcomeExperiencePage == null || welcomeExperiencePage.Visible ||
+                facade == null || facade.HasActiveSession) return;
+            if (Time.realtimeSinceStartup - lastInteractionAt >= idleTimeoutSeconds)
+                welcomeExperiencePage.Show();
+        }
 
         private void OnDestroy()
         {
-            if (appShell != null) appShell.NavigationRequested -= OnShellNavigationRequested;
+            if (appShell != null)
+            {
+                appShell.NavigationRequested -= OnShellNavigationRequested;
+                appShell.ExitConfirmed -= ExitApplication;
+            }
             if (receptionHomePage != null)
             {
                 receptionHomePage.TemporaryRequested -= NewTemporaryRoute;
@@ -96,6 +119,12 @@ namespace TG.Control.Touch
                 receptionHomePage.RouteStartRequested -= StartRoute;
                 receptionHomePage.RouteEditRequested -= EditRoute;
             }
+            if (moduleKioskPage != null)
+            {
+                moduleKioskPage.ModuleStartRequested -= StartModuleFromHome;
+                moduleKioskPage.StartAllRequested -= StartAllFromHome;
+            }
+            if (welcomeExperiencePage != null) welcomeExperiencePage.Entered -= OnWelcomeEntered;
             if (routeEditorPage != null)
             {
                 routeEditorPage.BackRequested -= ReturnHome;
@@ -115,6 +144,7 @@ namespace TG.Control.Touch
                 playbackPageView.ResumeRequested -= ResumePlayback;
                 playbackPageView.RetryRequested -= RetryPlayback;
                 playbackPageView.SkipRequested -= SkipPlayback;
+                playbackPageView.VideoVolumeRequested -= SetVideoVolume;
                 playbackPageView.StopRequested -= ConfirmStop;
                 playbackPageView.StopCancelled -= CancelStopConfirmation;
             }
@@ -153,6 +183,7 @@ namespace TG.Control.Touch
             appShell = new TouchAppShell(uiFactory, theme);
             appShell.Build(canvas.transform);
             appShell.NavigationRequested += OnShellNavigationRequested;
+            appShell.ExitConfirmed += ExitApplication;
             background = appShell.Background;
 
             var body = appShell.ContentRoot;
@@ -163,7 +194,12 @@ namespace TG.Control.Touch
             receptionHomePage.ContinuePlaybackRequested += ContinueCurrentPlayback;
             receptionHomePage.RouteStartRequested += StartRoute;
             receptionHomePage.RouteEditRequested += EditRoute;
-            homePage = receptionHomePage.Root.gameObject;
+            legacyHomePage = receptionHomePage.Root.gameObject;
+            legacyHomePage.SetActive(false);
+            moduleKioskPage = new ModuleKioskHomePage(uiFactory, theme, imageLoader, body);
+            moduleKioskPage.ModuleStartRequested += StartModuleFromHome;
+            moduleKioskPage.StartAllRequested += StartAllFromHome;
+            homePage = moduleKioskPage.Root.gameObject;
             routeEditorPage = new RouteEditorPage(uiFactory, theme, imageLoader, body);
             routeEditorPage.BackRequested += ReturnHome;
             routeEditorPage.NameChanged += ChangeRouteName;
@@ -181,6 +217,7 @@ namespace TG.Control.Touch
             playbackPageView.ResumeRequested += ResumePlayback;
             playbackPageView.RetryRequested += RetryPlayback;
             playbackPageView.SkipRequested += SkipPlayback;
+            playbackPageView.VideoVolumeRequested += SetVideoVolume;
             playbackPageView.StopRequested += ConfirmStop;
             playbackPageView.StopCancelled += CancelStopConfirmation;
             playbackPageRoot = playbackPageView.Root.gameObject;
@@ -188,11 +225,18 @@ namespace TG.Control.Touch
             systemStatusPageView.ViewPlaybackRequested += ContinueCurrentPlayback;
             systemStatusPageRoot = systemStatusPageView.Root.gameObject;
             Stretch(homePage.GetComponent<RectTransform>());
+            Stretch(legacyHomePage.GetComponent<RectTransform>());
             Stretch(editorPage.GetComponent<RectTransform>());
             Stretch(playbackPageRoot.GetComponent<RectTransform>());
             Stretch(systemStatusPageRoot.GetComponent<RectTransform>());
+            welcomeExperiencePage = new WelcomeExperiencePage(this, uiFactory, theme, imageLoader, canvas.transform);
+            welcomeExperiencePage.Entered += OnWelcomeEntered;
+            lastInteractionAt = Time.realtimeSinceStartup;
+            welcomeExperiencePage.Show();
             ShowPage(PageState.Home);
         }
+
+        private static void ExitApplication() => Application.Quit(OperatorExitCode);
 
         private void OnConnectionChanged(bool value)
         {
@@ -265,6 +309,11 @@ namespace TG.Control.Touch
         private void OnSessionChanged(PlaybackSessionStatus value)
         {
             startRequestPending = false;
+            if (value != null)
+            {
+                welcomeExperiencePage?.Hide();
+                lastInteractionAt = Time.realtimeSinceStartup;
+            }
             var sameSession = value != null && string.Equals(playbackDisplay.SessionId, value.sessionId,
                 StringComparison.Ordinal);
             if (!sameSession) confirmStop = false;
@@ -369,6 +418,20 @@ namespace TG.Control.Touch
                 .Where(module => module.enabled && module.nodes != null && module.nodes.Length > 0)
                 .OrderBy(module => module.order).Select(module => module.id).ToArray() ?? Array.Empty<string>();
             BeginStart("全部主题讲解", moduleIds, facade.StartAll);
+        }
+
+        private void StartModuleFromHome(ExhibitionModule module)
+        {
+            if (module == null) return;
+            var moduleIds = new[] { module.id };
+            BeginStart(module.name, moduleIds, () => facade.StartModules(moduleIds));
+        }
+
+        private void OnWelcomeEntered()
+        {
+            lastInteractionAt = Time.realtimeSinceStartup;
+            ShowPage(PageState.Home);
+            Refresh();
         }
 
         private void ContinueCurrentPlayback()
@@ -486,6 +549,7 @@ namespace TG.Control.Touch
         private void ResumePlayback() => facade.Resume();
         private void RetryPlayback() => facade.Retry();
         private void SkipPlayback() => facade.Skip();
+        private void SetVideoVolume(double volume) => facade.SetVideoVolume(volume);
 
         private void RemoveSelection(string moduleId)
         {
@@ -505,7 +569,8 @@ namespace TG.Control.Touch
         {
             var changed = pageState != state;
             pageState = state;
-            if (homePage != null) homePage.SetActive(state == PageState.Home);
+            if (homePage != null) homePage.SetActive(state == PageState.Home && useModuleKiosk);
+            if (legacyHomePage != null) legacyHomePage.SetActive(state == PageState.Home && !useModuleKiosk);
             if (editorPage != null) editorPage.SetActive(state == PageState.RouteEditor);
             if (playbackPageRoot != null) playbackPageRoot.SetActive(state == PageState.Playback);
             if (systemStatusPageRoot != null) systemStatusPageRoot.SetActive(state == PageState.SystemStatus);
@@ -598,6 +663,7 @@ namespace TG.Control.Touch
             if (appShell == null) return;
             appShell.SetGlobalState(connected, readiness, facade.HasActiveSession);
             if (presenter != null) receptionHomePage?.Render(presenter.State, presenter.NormalizeAssetUrl);
+            if (presenter != null) moduleKioskPage?.Render(presenter.State, presenter.NormalizeAssetUrl);
             if (presenter != null) routeEditorPage?.Render(presenter.State, routeDraft, status, presenter.NormalizeAssetUrl);
             if (presenter != null) playbackPageView?.Render(presenter.State, playbackDisplay.RouteName,
                 playbackDisplay.ModuleIds, confirmStop);
@@ -615,14 +681,48 @@ namespace TG.Control.Touch
             {
                 theme.SetConfigurableAccent(color);
                 receptionHomePage?.RefreshTheme();
+                moduleKioskPage?.RefreshTheme();
                 routeEditorPage?.RefreshTheme();
                 playbackPageView?.RefreshTheme();
                 systemStatusPageView?.RefreshTheme();
             }
-            background.sprite = null;
-            background.color = ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out color)
-                ? color : theme.Background;
+            ApplyShellBackground(config);
+            var layout = config.layout;
+            useModuleKiosk = layout == null || string.Equals(layout.touchTemplate, "module-kiosk",
+                StringComparison.OrdinalIgnoreCase);
+            welcomeEnabled = layout == null || layout.touchWelcomeEnabled;
+            idleTimeoutSeconds = Mathf.Clamp(layout?.touchIdleTimeoutSeconds ?? 180, 30, 3600);
+            welcomeExperiencePage?.Configure(config, presenter == null ? (Func<string, string>)null : presenter.NormalizeAssetUrl);
+            if (!welcomeEnabled) welcomeExperiencePage?.Hide();
+            ShowPage(pageState);
             Refresh();
+        }
+
+        private void ApplyShellBackground(UiExperienceConfig config)
+        {
+            var fallbackColor = ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out var configured)
+                ? configured : theme.Background;
+            var embedded = Resources.Load<Texture2D>("Touch/touch-technology-background");
+            if (embedded != null)
+            {
+                if (embeddedBackgroundSprite == null)
+                    embeddedBackgroundSprite = Sprite.Create(embedded, new Rect(0, 0, embedded.width, embedded.height),
+                        new Vector2(.5f, .5f), 100);
+                background.sprite = embeddedBackgroundSprite;
+                background.type = Image.Type.Simple;
+                background.preserveAspect = false;
+                background.color = Color.white;
+            }
+            else
+            {
+                background.sprite = null;
+                background.color = fallbackColor;
+            }
+            if (string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) return;
+            imageLoader.Load(background, presenter.NormalizeAssetUrl(config.touchBackgroundUrl), success =>
+            {
+                if (!success && embedded == null) background.color = fallbackColor;
+            });
         }
 
         private IEnumerator UiExperienceLoop()

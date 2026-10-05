@@ -21,7 +21,10 @@ namespace TG.Control.LedPlayer
         private GameObject idleRoot;
         private Image solidBackground;
         private Image idleImage;
-        private DisplayUGUI idleVideo;
+        private readonly DisplayUGUI[] idleVideos = new DisplayUGUI[2];
+        private readonly MediaPlayer[] idleMediaPlayers = new MediaPlayer[2];
+        private readonly bool[] idleVideoPrepared = new bool[2];
+        private readonly bool[] idleVideoReady = new bool[2];
         private Text title;
         private Text subtitle;
         private Text brand;
@@ -29,8 +32,12 @@ namespace TG.Control.LedPlayer
         private Text statusText;
         private Text connectionText;
         private Image connectionPill;
-        private MediaPlayer idleMediaPlayer;
         private int mediaGeneration;
+        private int activeIdleVideoIndex;
+        private bool idleVideoTransitioning;
+        private double idleVideoTransitionStartedAt;
+
+        private const double SeamlessLoopBlendSeconds = 0.35;
 
         private void Awake()
         {
@@ -59,7 +66,8 @@ namespace TG.Control.LedPlayer
                 apiClient.UiExperienceChanged -= ApplyConfig;
             }
             if (playbackController != null) playbackController.PlaybackActiveChanged -= OnPlaybackActiveChanged;
-            if (idleMediaPlayer != null) idleMediaPlayer.Events.RemoveListener(OnIdleVideoEvent);
+            foreach (var player in idleMediaPlayers)
+                if (player != null) player.Events.RemoveListener(OnIdleVideoEvent);
         }
 
         private void BuildUi()
@@ -81,11 +89,18 @@ namespace TG.Control.LedPlayer
             idleImage = Image("Idle Image", idleRoot.transform, Color.white);
             Stretch(idleImage.rectTransform);
             idleImage.gameObject.SetActive(false);
-            idleVideo = new GameObject("Idle Video", typeof(RectTransform), typeof(DisplayUGUI)).GetComponent<DisplayUGUI>();
-            idleVideo.transform.SetParent(idleRoot.transform, false);
-            Stretch(idleVideo.rectTransform);
-            idleVideo.color = Color.white;
-            idleVideo.gameObject.SetActive(false);
+            for (var i = 0; i < idleVideos.Length; i++)
+            {
+                var display = new GameObject("Idle Video " + (i == 0 ? "A" : "B"), typeof(RectTransform), typeof(DisplayUGUI))
+                    .GetComponent<DisplayUGUI>();
+                display.transform.SetParent(idleRoot.transform, false);
+                Stretch(display.rectTransform);
+                display.color = new Color(1f, 1f, 1f, 0f);
+                display.NoDefaultDisplay = true;
+                display.DisplayInEditor = false;
+                display.gameObject.SetActive(false);
+                idleVideos[i] = display;
+            }
             var veil = Image("Readability Veil", idleRoot.transform, new Color(.02f, .10f, .08f, .52f));
             Stretch(veil.rectTransform);
 
@@ -110,14 +125,18 @@ namespace TG.Control.LedPlayer
 
         private void CreateIdleVideoPlayer()
         {
-            idleMediaPlayer = gameObject.AddComponent<MediaPlayer>();
-            idleMediaPlayer.AutoStart = false;
-            idleMediaPlayer.Loop = true;
-            idleVideo.Player = idleMediaPlayer;
-            idleVideo.ScaleMode = ScaleMode.ScaleToFit;
-            idleVideo.NoDefaultDisplay = true;
-            idleVideo.DisplayInEditor = false;
-            idleMediaPlayer.Events.AddListener(OnIdleVideoEvent);
+            for (var i = 0; i < idleMediaPlayers.Length; i++)
+            {
+                var player = gameObject.AddComponent<MediaPlayer>();
+                player.AutoStart = false;
+                // A second pre-opened player takes over just before the end. This avoids
+                // the decoder seek/rebuffer pause that can be visible with native looping.
+                player.Loop = false;
+                player.Events.AddListener(OnIdleVideoEvent);
+                idleMediaPlayers[i] = player;
+                idleVideos[i].Player = player;
+                idleVideos[i].ScaleMode = ScaleMode.ScaleToFit;
+            }
         }
 
         private void OnConnectionChanged(bool value)
@@ -136,10 +155,11 @@ namespace TG.Control.LedPlayer
         private void OnPlaybackActiveChanged(bool value)
         {
             playbackActive = value;
+            if (value && idleVideoTransitioning) CancelIdleVideoTransition();
             idleRoot.SetActive(!value);
-            if (idleMediaPlayer == null) return;
-            if (value) idleMediaPlayer.Control?.Pause();
-            else if (idleVideo.gameObject.activeSelf) idleMediaPlayer.Control?.Play();
+            foreach (var player in idleMediaPlayers)
+                if (value) player?.Control?.Pause();
+            if (!value && IsIdleVideoVisible()) idleMediaPlayers[activeIdleVideoIndex]?.Control?.Play();
         }
 
         private void OnContentSyncChanged(ContentSyncProgress progress)
@@ -200,9 +220,17 @@ namespace TG.Control.LedPlayer
         private void LoadIdleMedia(string kind, string url)
         {
             mediaGeneration++;
-            if (idleMediaPlayer != null) idleMediaPlayer.CloseMedia();
+            idleVideoTransitioning = false;
+            activeIdleVideoIndex = 0;
+            for (var i = 0; i < idleMediaPlayers.Length; i++)
+            {
+                idleVideoPrepared[i] = false;
+                idleVideoReady[i] = false;
+                idleMediaPlayers[i]?.CloseMedia();
+                SetIdleVideoAlpha(i, 0f);
+                if (idleVideos[i] != null) idleVideos[i].gameObject.SetActive(false);
+            }
             idleImage.gameObject.SetActive(false);
-            idleVideo.gameObject.SetActive(false);
             if (string.IsNullOrWhiteSpace(url) || string.Equals(kind, "none", StringComparison.OrdinalIgnoreCase)) return;
             var normalized = apiClient.NormalizeUrl(url);
             if (string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
@@ -230,15 +258,123 @@ namespace TG.Control.LedPlayer
             string error = null;
             yield return LedContentCache.Shared.Resolve(url, value => localUrl = value, value => error = value);
             if (generation != mediaGeneration || !string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(localUrl)) yield break;
-            idleVideo.gameObject.SetActive(true);
-            idleMediaPlayer.OpenMedia(MediaPathType.AbsolutePathOrURL, localUrl, false);
+            for (var i = 0; i < idleMediaPlayers.Length; i++)
+            {
+                idleVideos[i].gameObject.SetActive(true);
+                idleMediaPlayers[i].OpenMedia(MediaPathType.AbsolutePathOrURL, localUrl, false);
+            }
         }
 
         private void OnIdleVideoEvent(MediaPlayer source, MediaPlayerEvent.EventType eventType, ErrorCode errorCode)
         {
-            if (source != idleMediaPlayer || playbackActive || !idleVideo.gameObject.activeSelf) return;
-            if (eventType == MediaPlayerEvent.EventType.ReadyToPlay || eventType == MediaPlayerEvent.EventType.FirstFrameReady)
-                idleMediaPlayer.Control?.Play();
+            var index = Array.IndexOf(idleMediaPlayers, source);
+            if (index < 0) return;
+            if (eventType == MediaPlayerEvent.EventType.Error)
+            {
+                Debug.LogError("LED待机视频加载失败：" + errorCode);
+                return;
+            }
+
+            if (eventType == MediaPlayerEvent.EventType.ReadyToPlay)
+            {
+                idleVideoPrepared[index] = true;
+                if (index == activeIdleVideoIndex && !playbackActive)
+                    source.Control?.Play();
+                else
+                {
+                    source.Control?.Pause();
+                    source.Control?.Seek(0d);
+                }
+            }
+            else if (eventType == MediaPlayerEvent.EventType.FirstFrameReady)
+            {
+                idleVideoReady[index] = true;
+                if (index == activeIdleVideoIndex && !playbackActive) SetIdleVideoAlpha(index, 1f);
+            }
+            else if (eventType == MediaPlayerEvent.EventType.FinishedPlaying && index == activeIdleVideoIndex && !playbackActive)
+            {
+                CompleteIdleVideoLoop();
+            }
+        }
+
+        private void Update()
+        {
+            if (playbackActive || !IsIdleVideoVisible()) return;
+            var current = idleMediaPlayers[activeIdleVideoIndex];
+            if (current?.Control == null || current.Info == null || !current.Control.HasMetaData()) return;
+            var duration = current.Info.GetDuration();
+            if (duration <= SeamlessLoopBlendSeconds) return;
+            var currentTime = current.Control.GetCurrentTime();
+            var standbyIndex = 1 - activeIdleVideoIndex;
+
+            if (!idleVideoTransitioning && idleVideoPrepared[standbyIndex] &&
+                currentTime >= duration - SeamlessLoopBlendSeconds)
+            {
+                var standby = idleMediaPlayers[standbyIndex];
+                standby.Control?.Seek(0d);
+                standby.AudioVolume = 0f;
+                standby.Control?.Play();
+                idleVideoTransitionStartedAt = currentTime;
+                idleVideoTransitioning = true;
+            }
+
+            if (!idleVideoTransitioning) return;
+            if (!idleVideoReady[standbyIndex]) return;
+            var progress = Mathf.Clamp01((float)((currentTime - idleVideoTransitionStartedAt) / SeamlessLoopBlendSeconds));
+            SetIdleVideoAlpha(activeIdleVideoIndex, 1f - progress);
+            SetIdleVideoAlpha(standbyIndex, progress);
+            current.AudioVolume = 1f - progress;
+            idleMediaPlayers[standbyIndex].AudioVolume = progress;
+            if (progress >= 1f || current.Control.IsFinished()) CompleteIdleVideoLoop();
+        }
+
+        private void CompleteIdleVideoLoop()
+        {
+            var previousIndex = activeIdleVideoIndex;
+            var nextIndex = 1 - previousIndex;
+            if (!idleVideoReady[nextIndex])
+            {
+                SetIdleVideoAlpha(previousIndex, 1f);
+                SetIdleVideoAlpha(nextIndex, 0f);
+                idleMediaPlayers[previousIndex].AudioVolume = 1f;
+                idleMediaPlayers[nextIndex]?.Control?.Pause();
+                idleMediaPlayers[nextIndex]?.Control?.Seek(0d);
+                idleMediaPlayers[previousIndex]?.Control?.Seek(0d);
+                idleMediaPlayers[previousIndex]?.Control?.Play();
+                idleVideoTransitioning = false;
+                return;
+            }
+
+            SetIdleVideoAlpha(previousIndex, 0f);
+            SetIdleVideoAlpha(nextIndex, 1f);
+            idleMediaPlayers[previousIndex].AudioVolume = 0f;
+            idleMediaPlayers[previousIndex].Control?.Pause();
+            idleMediaPlayers[previousIndex].Control?.Seek(0d);
+            idleMediaPlayers[nextIndex].AudioVolume = 1f;
+            if (!idleMediaPlayers[nextIndex].Control.IsPlaying()) idleMediaPlayers[nextIndex].Control.Play();
+            activeIdleVideoIndex = nextIndex;
+            idleVideoTransitioning = false;
+        }
+
+        private void CancelIdleVideoTransition()
+        {
+            var standbyIndex = 1 - activeIdleVideoIndex;
+            SetIdleVideoAlpha(activeIdleVideoIndex, 1f);
+            SetIdleVideoAlpha(standbyIndex, 0f);
+            idleMediaPlayers[activeIdleVideoIndex].AudioVolume = 1f;
+            idleMediaPlayers[standbyIndex].AudioVolume = 0f;
+            idleMediaPlayers[standbyIndex].Control?.Pause();
+            idleMediaPlayers[standbyIndex].Control?.Seek(0d);
+            idleVideoTransitioning = false;
+        }
+
+        private bool IsIdleVideoVisible() => idleVideos[activeIdleVideoIndex] != null &&
+                                                 idleVideos[activeIdleVideoIndex].gameObject.activeSelf;
+
+        private void SetIdleVideoAlpha(int index, float alpha)
+        {
+            if (idleVideos[index] == null) return;
+            idleVideos[index].color = new Color(1f, 1f, 1f, Mathf.Clamp01(alpha));
         }
 
         private void RefreshStatus()

@@ -15,6 +15,9 @@ internal sealed class LauncherConfiguration
     public string LogDirectory { get; init; } = @"C:\ProgramData\TG Exhibition\Logs\Launcher";
     public int HealthPollSeconds { get; init; } = 3;
     public int ClientRestartDelaySeconds { get; init; } = 5;
+    public bool EnableTouchClient { get; init; } = true;
+    public bool EnableLedPlayer { get; init; } = true;
+    public bool ShowAdminButton { get; init; } = true;
     public bool AutoStartTouchClient { get; init; } = true;
     public bool AutoStartLedPlayer { get; init; } = true;
     public bool AutoRestartClients { get; init; } = true;

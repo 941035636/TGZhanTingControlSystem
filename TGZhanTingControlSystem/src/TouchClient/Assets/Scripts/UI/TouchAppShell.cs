@@ -20,10 +20,12 @@ namespace TG.Control.Touch.UI
         private ContentHost contentHost;
         private Image background;
         private Image ambientAccent;
+        private GameObject exitConfirmation;
 
         public Image Background => background;
         public RectTransform ContentRoot => contentHost.ContentRoot;
         public event Action<TouchShellSection> NavigationRequested;
+        public event Action ExitConfirmed;
 
         public TouchAppShell(TouchUiFactory factory, TouchTheme theme)
         {
@@ -56,6 +58,9 @@ namespace TG.Control.Touch.UI
             TouchUiFactory.Anchor(contentHost.Root, 0, 0, 1, 1,
                 theme.SideNavigationWidth + theme.PagePadding, theme.PagePadding,
                 -theme.PagePadding, -theme.TopBarHeight - theme.PagePadding);
+
+            topBar.ExitRequested += ShowExitConfirmation;
+            BuildExitConfirmation(canvas);
         }
 
         public void SetBranding(string title, string subtitle) => topBar.SetBranding(title, subtitle);
@@ -100,6 +105,51 @@ namespace TG.Control.Touch.UI
             topBar.RefreshTheme();
             navigation.RefreshTheme();
             contentHost.RefreshTheme(theme);
+        }
+
+        private void BuildExitConfirmation(Transform canvas)
+        {
+            var backdrop = factory.Image("Exit Confirmation Backdrop", canvas,
+                new Color(0, 0, 0, .72f));
+            TouchUiFactory.Stretch(backdrop.rectTransform);
+            exitConfirmation = backdrop.gameObject;
+
+            var dialog = factory.RoundedImage("Exit Confirmation Dialog", backdrop.transform,
+                theme.SurfaceElevated);
+            TouchUiFactory.Anchor(dialog.rectTransform, .5f, .5f, .5f, .5f,
+                -350, -180, 350, 180);
+
+            var title = factory.Label("Exit Confirmation Title", dialog.transform,
+                "确认退出中控端？", theme.PageTitle, FontStyle.Bold,
+                theme.TextPrimary, TextAnchor.MiddleCenter);
+            TouchUiFactory.Anchor(title.rectTransform, 0, 1, 1, 1,
+                theme.Space32, -100, -theme.Space32, -theme.Space32);
+
+            var detail = factory.Label("Exit Confirmation Detail", dialog.transform,
+                "退出后可通过运行管理程序重新启动中控端。", theme.Body, FontStyle.Normal,
+                theme.TextSecondary, TextAnchor.MiddleCenter);
+            TouchUiFactory.Anchor(detail.rectTransform, 0, .5f, 1, 1,
+                theme.Space32, -20, -theme.Space32, -102);
+
+            var cancel = factory.TouchButton(dialog.transform, "取消", false, HideExitConfirmation);
+            TouchUiFactory.Anchor(cancel.GetComponent<RectTransform>(), .5f, 0, .5f, 0,
+                -240, theme.Space32, -20, theme.Space32 + theme.ButtonHeight);
+
+            var confirm = factory.TouchButton(dialog.transform, "确认退出", false, ConfirmExit);
+            TouchUiFactory.Anchor(confirm.GetComponent<RectTransform>(), .5f, 0, .5f, 0,
+                20, theme.Space32, 240, theme.Space32 + theme.ButtonHeight);
+            confirm.GetComponent<Image>().color = Color.Lerp(theme.SecondaryButton, theme.Error, .34f);
+
+            exitConfirmation.SetActive(false);
+        }
+
+        private void ShowExitConfirmation() => exitConfirmation.SetActive(true);
+        private void HideExitConfirmation() => exitConfirmation.SetActive(false);
+
+        private void ConfirmExit()
+        {
+            exitConfirmation.SetActive(false);
+            ExitConfirmed?.Invoke();
         }
     }
 }

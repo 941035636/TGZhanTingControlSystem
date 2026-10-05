@@ -144,8 +144,9 @@ namespace TG.Control.Touch
         public void Skip() => Control(PlaybackAction.Skip);
         public void Retry() => Control(PlaybackAction.Retry);
         public void Stop() => Control(PlaybackAction.Stop);
+        public void SetVideoVolume(double volume) => Control(PlaybackAction.SetVideoVolume, Math.Max(0, Math.Min(1, volume)));
 
-        private void Control(PlaybackAction action)
+        private void Control(PlaybackAction action, double volume = -1)
         {
             if (!HasActiveSession)
             {
@@ -162,7 +163,7 @@ namespace TG.Control.Touch
                     sessionMonitorGeneration++;
                     SessionChanged?.Invoke(null);
                 }
-            }, message => Error?.Invoke(message));
+            }, message => Error?.Invoke(message), volume);
         }
 
         private IEnumerator MonitorSession(string sessionId, int generation)

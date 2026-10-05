@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$ServerConfig = (Join-Path $env:ProgramData 'TG Exhibition\Config\server.site.json'),
-    [string]$ServerBaseUrl = 'http://127.0.0.1:5080'
+    [string]$CredentialsPath = (Join-Path $env:ProgramData 'TG Exhibition\Config\initial-credentials.txt'),
+    [string]$ServerBaseUrl = 'https://localhost:5443',
+    [string]$Password
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,10 +12,14 @@ if (-not (Test-Path -LiteralPath $ServerConfig -PathType Leaf)) {
 }
 
 $config = Get-Content -LiteralPath $ServerConfig -Raw | ConvertFrom-Json
-$username = [string]$config.Admin.Username
-$password = [string]$config.Admin.Password
+$username = if ($config.Admin.Accounts.Count -gt 0) { [string]$config.Admin.Accounts[0].Username } else { [string]$config.Admin.Username }
+if ([string]::IsNullOrWhiteSpace($Password) -and (Test-Path -LiteralPath $CredentialsPath -PathType Leaf)) {
+    $credentialText = Get-Content -LiteralPath $CredentialsPath -Raw
+    if ($credentialText -match '(?m)^Initial password:\s*(.+?)\s*$') { $Password = $Matches[1] }
+}
+$password = $Password
 if ([string]::IsNullOrWhiteSpace($username) -or [string]::IsNullOrWhiteSpace($password)) {
-    throw 'Admin credentials are missing from the Server site configuration.'
+    throw 'Admin login test needs -Password or the ACL-restricted initial-credentials.txt file.'
 }
 
 $body = @{ username = $username; password = $password } | ConvertTo-Json

@@ -1,0 +1,5 @@
+{
+  "serverBaseUrl": "https://192.168.1.100:5443",
+  "certificateSubject": "CN=TG Exhibition Server",
+  "terminalApiKey": ""
+}

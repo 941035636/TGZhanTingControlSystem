@@ -4,6 +4,7 @@ namespace TG.Control.Launcher;
 
 internal sealed class RuntimeSupervisor(LauncherConfiguration configuration, LauncherLog log) : IDisposable
 {
+    private const int OperatorExitCode = 42;
     private readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(2) };
     private Process? touchProcess;
     private Process? ledProcess;
@@ -23,14 +24,14 @@ internal sealed class RuntimeSupervisor(LauncherConfiguration configuration, Lau
             var serverOnline = await IsServerOnlineAsync(cancellationToken);
             if (serverOnline)
             {
-                if (configuration.AutoStartTouchClient && !touchStoppedByOperator) touchProcess = EnsureProcess(
+                if (configuration.EnableTouchClient && configuration.AutoStartTouchClient && !touchStoppedByOperator) touchProcess = EnsureProcess(
                     touchProcess, configuration.TouchClientExecutable, "TG_TOUCH_CLIENT_CONFIG",
                     configuration.TouchClientConfiguration, configuration.TouchClientLogFile,
-                    "TouchClient", ref touchRestartAfter);
-                if (configuration.AutoStartLedPlayer && !ledStoppedByOperator) ledProcess = EnsureProcess(
+                    "TouchClient", ref touchRestartAfter, ref touchStoppedByOperator);
+                if (configuration.EnableLedPlayer && configuration.AutoStartLedPlayer && !ledStoppedByOperator) ledProcess = EnsureProcess(
                     ledProcess, configuration.LedPlayerExecutable, "TG_LED_PLAYER_CONFIG",
                     configuration.LedPlayerConfiguration, configuration.LedPlayerLogFile,
-                    "LedPlayer", ref ledRestartAfter);
+                    "LedPlayer", ref ledRestartAfter, ref ledStoppedByOperator);
             }
 
             StatusChanged?.Invoke(new RuntimeSnapshot(serverOnline, IsRunning(touchProcess), IsRunning(ledProcess),
@@ -46,6 +47,7 @@ internal sealed class RuntimeSupervisor(LauncherConfiguration configuration, Lau
 
     public void StartTouchNow()
     {
+        if (!configuration.EnableTouchClient) return;
         touchStoppedByOperator = false;
         touchRestartAfter = default;
         touchProcess = StartProcess(configuration.TouchClientExecutable,
@@ -55,6 +57,7 @@ internal sealed class RuntimeSupervisor(LauncherConfiguration configuration, Lau
 
     public void StartLedNow()
     {
+        if (!configuration.EnableLedPlayer) return;
         ledStoppedByOperator = false;
         ledRestartAfter = default;
         ledProcess = StartProcess(configuration.LedPlayerExecutable,
@@ -75,12 +78,21 @@ internal sealed class RuntimeSupervisor(LauncherConfiguration configuration, Lau
     }
 
     private Process? EnsureProcess(Process? current, string executable, string environmentName,
-        string configurationPath, string logFile, string displayName, ref DateTimeOffset restartAfter)
+        string configurationPath, string logFile, string displayName, ref DateTimeOffset restartAfter,
+        ref bool stoppedByOperator)
     {
         if (IsRunning(current)) return current;
         if (current is not null)
         {
-            log.Write($"{displayName} exited with code {SafeExitCode(current)}.");
+            var exitCode = SafeExitCode(current);
+            if (exitCode == OperatorExitCode)
+            {
+                stoppedByOperator = true;
+                log.Write($"{displayName} was closed by the operator.");
+                current.Dispose();
+                return null;
+            }
+            log.Write($"{displayName} exited with code {exitCode}.");
             current.Dispose();
             current = null;
             restartAfter = DateTimeOffset.Now.AddSeconds(Math.Max(1, configuration.ClientRestartDelaySeconds));

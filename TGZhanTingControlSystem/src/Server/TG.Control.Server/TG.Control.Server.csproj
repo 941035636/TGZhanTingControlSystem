@@ -13,6 +13,9 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
   </ItemGroup>
   <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="../../TtsWorker/MeloTtsLocal/worker.py" Link="TtsWorker/MeloTtsLocal/worker.py"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../TtsWorker/MeloTtsLocal/melotts-v0.1.2-windows-offline.patch"

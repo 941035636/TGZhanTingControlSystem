@@ -38,20 +38,20 @@ namespace TG.Control.Touch.UI.Components
             var border = factory.Image("Navigation Border", root.transform, theme.Border);
             TouchUiFactory.Anchor(border.rectTransform, 1, 0, 1, 1, -1, 0, 0, 0);
 
-            var heading = factory.Label("Navigation Heading", root.transform, "接待工作台", theme.SectionTitle,
+            var heading = factory.Label("Navigation Heading", root.transform, "讲解控制", theme.SectionTitle,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(heading.rectTransform, 0, 1, 1, 1,
                 theme.PagePadding, -64, -theme.PagePadding, -theme.Space16);
-            var caption = factory.Label("Navigation Caption", root.transform, "EXHIBITION CONTROL", theme.Caption,
+            var caption = factory.Label("Navigation Caption", root.transform, "简洁接待模式", theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1,
                 theme.PagePadding, -88, -theme.PagePadding, -62);
 
-            CreateItem(factory, TouchShellSection.ReceptionHome, "01", "接待首页", 0);
-            CreateItem(factory, TouchShellSection.Routes, "02", "讲解路线", 1);
-            CreateItem(factory, TouchShellSection.Combination, "03", "主题组合", 2);
-            CreateItem(factory, TouchShellSection.Playback, "04", "当前讲解", 3);
-            CreateItem(factory, TouchShellSection.SystemStatus, "05", "系统状态", 4);
+            CreateItem(factory, TouchShellSection.ReceptionHome, "", "讲解首页", 0);
+            CreateItem(factory, TouchShellSection.Playback, "", "当前讲解", 1);
+            CreateItem(factory, TouchShellSection.SystemStatus, "", "系统状态", 2);
+            CreateItem(factory, TouchShellSection.Routes, "", "讲解路线", 3);
+            CreateItem(factory, TouchShellSection.Combination, "", "主题组合", 4);
 
             var footer = factory.Label("Navigation Footer", root.transform,
                 "55英寸触控终端\n仅展示当前可用功能", theme.Caption, FontStyle.Normal,
@@ -112,7 +112,7 @@ namespace TG.Control.Touch.UI.Components
                 theme.Space16, 0, theme.Space16 + 34, 0);
             var textLabel = factory.Label("Label", image.transform, text, theme.Body, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, 58, 0, -theme.Space32, 0);
+            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, theme.Space24, 0, -theme.Space32, 0);
             var activity = factory.RoundedImage("Activity", image.transform, theme.Success);
             TouchUiFactory.Anchor(activity.rectTransform, 1, .5f, 1, .5f,
                 -theme.Space24, -5, -theme.Space16, 5);

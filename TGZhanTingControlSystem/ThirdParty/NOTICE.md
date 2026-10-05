@@ -1,5 +1,13 @@
 # Third-party notices
 
+## AVPro Video 3.2 Ultra
+
+- Product: AVPro Video, RenderHeads Ltd
+- Version embedded in LedPlayer: 3.2.0f1 Ultra
+- License: commercial proprietary software; it is not covered by the repository's open-source notices.
+- Runtime files include `AVProVideo.dll`, `AVProVideoWinRT.dll` and `Audio360.dll` in the Windows x64 Player.
+- Release engineering must verify that the purchased license covers every development seat, target device and any permitted runtime redistribution before commercial delivery. No proprietary license text is reproduced here.
+
 ## MeloTTS local Chinese provider
 
 - Project: MeloTTS
@@ -21,11 +29,18 @@
 
 - Project: Inno Setup
 - Upstream: https://jrsoftware.org/isinfo.php
-- Production installer compiler: Inno Setup 7.x x64
+- Production installer compiler: Inno Setup 6.7+ or 7.x
 - Installer compiler is a build-time dependency only; customer machines receive the generated offline Setup executable.
 - Inno Setup is copyrighted software. Commercial distribution must follow its current license terms; see the
   upstream text copied as `InnoSetup-LICENSE.txt`. The upstream project requests that commercial users purchase
   a commercial license; release engineering must complete that procurement decision before commercial delivery.
+
+## Inno Setup Simplified Chinese translation
+
+- Project: Inno Setup Chinese Simplified Translation
+- Upstream: https://github.com/kira-96/Inno-Setup-Chinese-Simplified-Translation
+- Maintainer: Zhenghan Yang (Kira)
+- License: MIT; full text in `InnoSetup-ChineseSimplified-LICENSE.txt`
 
 ## BERT model dependency
 

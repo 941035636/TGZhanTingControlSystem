@@ -16,7 +16,8 @@ public enum PlaybackAction
     Stop,
     Seek,
     Skip,
-    Retry
+    Retry,
+    SetVideoVolume
 }
 
 public enum PlaybackState
@@ -43,9 +44,10 @@ public sealed record StartNarrationRequest(IReadOnlyList<string> ModuleIds, stri
 
 public sealed record StartNarrationResponse(string SessionId, DateTimeOffset StartAtUtc, int NodeCount);
 
-public sealed record ControlNarrationRequest(string SessionId, PlaybackAction Action);
+public sealed record ControlNarrationRequest(string SessionId, PlaybackAction Action, double? Volume = null);
 
-public sealed record ControlNarrationResponse(string SessionId, PlaybackAction Action, bool Accepted, string Message);
+public sealed record ControlNarrationResponse(string SessionId, PlaybackAction Action, bool Accepted, string Message,
+    double? Volume = null);
 
 public sealed record PlaybackCommand(
     long Sequence,
@@ -99,7 +101,8 @@ public sealed record PlaybackSessionStatus(
     IReadOnlyList<string> ExpectedClients,
     IReadOnlyList<string> ReadyClients,
     IReadOnlyList<string> CompletedClients,
-    double PreparationProgress = 0);
+    double PreparationProgress = 0,
+    double VideoVolume = 0.25);
 
 public sealed record TtsSynthesisRequest(string Text, string Voice, double Rate, double Volume, double Pitch);
 

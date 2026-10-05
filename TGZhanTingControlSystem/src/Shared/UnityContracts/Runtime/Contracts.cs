@@ -3,7 +3,7 @@ using System;
 namespace TG.Control.UnityContracts
 {
     public enum ClientKind { Touch, LedPlayer }
-    public enum PlaybackAction { Prepare, PlayVideo, PlayNarration, Pause, Resume, Stop, Seek, Skip, Retry }
+    public enum PlaybackAction { Prepare, PlayVideo, PlayNarration, Pause, Resume, Stop, Seek, Skip, Retry, SetVideoVolume }
     public enum PlaybackState { Received, Ready, Playing, Paused, Completed, Failed, Skipped }
     public enum AudioMixPolicy { Duck, KeepOriginal, MuteVideo }
 
@@ -72,6 +72,7 @@ namespace TG.Control.UnityContracts
     {
         public string sessionId;
         public PlaybackAction action;
+        public double volume = -1;
     }
 
     [Serializable]
@@ -81,6 +82,7 @@ namespace TG.Control.UnityContracts
         public PlaybackAction action;
         public bool accepted;
         public string message;
+        public double volume;
     }
 
     [Serializable]
@@ -100,6 +102,7 @@ namespace TG.Control.UnityContracts
         public string[] readyClients;
         public string[] completedClients;
         public double preparationProgress;
+        public double videoVolume = 0.25;
     }
 
     [Serializable]
@@ -253,6 +256,8 @@ namespace TG.Control.UnityContracts
         public bool touchShowQuickActions = true;
         public bool ledShowBranding = true;
         public bool ledShowStatus = true;
+        public bool touchWelcomeEnabled = true;
+        public int touchIdleTimeoutSeconds = 180;
     }
 
     [Serializable]

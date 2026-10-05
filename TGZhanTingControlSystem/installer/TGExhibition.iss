@@ -37,7 +37,7 @@ VersionInfoCompany=TG Exhibition
 VersionInfoProductName=TG智慧展厅智能中控系统
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 
 [Files]
 Source: "{#SourceRoot}\Server\*"; DestDir: "{app}\Server"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -61,7 +61,7 @@ Name: "{commonappdata}\TG Exhibition\Runtime"
 
 [Icons]
 Name: "{group}\运行管理"; Filename: "{app}\Launcher\TG.Control.Launcher.exe"
-Name: "{group}\管理端"; Filename: "http://127.0.0.1:5080/"
+Name: "{group}\管理端"; Filename: "https://localhost:5443/"
 Name: "{group}\部署健康检查"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Tools\Test-DeploymentHealth.ps1"""
 Name: "{group}\卸载"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\TG智慧展厅"; Filename: "{app}\Launcher\TG.Control.Launcher.exe"; Tasks: desktopicon
