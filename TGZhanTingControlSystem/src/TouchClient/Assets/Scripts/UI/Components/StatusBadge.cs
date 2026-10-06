@@ -20,10 +20,16 @@ namespace TG.Control.Touch.UI.Components
         public StatusBadge(TouchUiFactory factory, TouchTheme theme, Transform parent, string name)
         {
             this.theme = theme;
-            background = factory.RoundedImage(name, parent, theme.SurfaceElevated);
+            background = factory.RoundedImage(name, parent, theme.ShellPanel);
             var layout = background.gameObject.AddComponent<LayoutElement>();
             layout.preferredHeight = theme.StatusBadgeHeight;
             layout.minWidth = 168;
+
+            var rail = factory.Image("Badge Electric Blue Rail", background.transform,
+                new Color(theme.ShellHighlight.r, theme.ShellHighlight.g, theme.ShellHighlight.b, .52f));
+            TouchUiFactory.Anchor(rail.rectTransform, 0, 1, 1, 1, theme.Space12, -2,
+                -theme.Space12, 0);
+            rail.raycastTarget = false;
 
             indicator = factory.RoundedImage("State Indicator", background.transform, theme.TextSecondary);
             TouchUiFactory.Anchor(indicator.rectTransform, 0, .5f, 0, .5f,
@@ -39,7 +45,9 @@ namespace TG.Control.Touch.UI.Components
             label.text = text ?? string.Empty;
             var stateColor = ToneColor(tone);
             indicator.color = stateColor;
-            background.color = Color.Lerp(theme.SurfaceElevated, stateColor, .14f);
+            // Keep the shell's royal-blue surface consistent; only the indicator carries
+            // the semantic online/warning/error color.
+            background.color = theme.ShellPanel;
         }
 
         public void RefreshTheme() => Set(label.text, tone);

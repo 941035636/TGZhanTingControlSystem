@@ -13,8 +13,12 @@ namespace TG.Control.Touch.UI.Theme
         public Color SurfaceElevated { get; } = ParseColor("#12385B");
         // Top bar and navigation form one continuous product shell, so they intentionally
         // share the same opaque structural blue instead of appearing as separate panels.
-        public Color HeaderBackground { get; } = ParseColor("#001A4B");
-        public Color NavigationBackground { get; } = ParseColor("#001A4B");
+        public Color HeaderBackground { get; } = ParseColor("#001D59");
+        public Color NavigationBackground { get; } = ParseColor("#001D59");
+        public Color ShellPanel { get; } = ParseColor("#073777");
+        public Color ShellPanelActive { get; } = ParseColor("#0755BC");
+        public Color ShellHighlight { get; } = ParseColor("#2CAEFF");
+        public Color ShellBorder { get; } = ParseColor("#197BD8");
         // Product structure always uses the fixed brand blue. Server configuration must not recolor
         // navigation, semantic states or every primary action.
         public Color Primary { get; } = ParseColor("#1677FF");

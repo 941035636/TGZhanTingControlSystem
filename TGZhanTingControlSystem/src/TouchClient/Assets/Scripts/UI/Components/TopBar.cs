@@ -27,17 +27,21 @@ namespace TG.Control.Touch.UI.Components
         public TopBar(TouchUiFactory factory, TouchTheme theme, Transform parent)
         {
             this.theme = theme;
-            root = factory.Image("Top Bar", parent, Color.clear);
+            root = factory.Image("Top Bar", parent, theme.HeaderBackground);
             root.raycastTarget = false;
-            var divider = factory.Image("Top Bar Border", root.transform, theme.Border);
+            var topRim = factory.Image("Top Bar Electric Blue Rim", root.transform,
+                new Color(theme.ShellHighlight.r, theme.ShellHighlight.g, theme.ShellHighlight.b, .5f));
+            TouchUiFactory.Anchor(topRim.rectTransform, 0, 1, 1, 1, 0, -2, 0, 0);
+            topRim.raycastTarget = false;
+            var divider = factory.Image("Top Bar Border", root.transform, theme.ShellBorder);
             TouchUiFactory.Anchor(divider.rectTransform, 0, 0, 1, 0, 0, 0, 0, 2);
-            var brandBeam = factory.Image("Top Bar Brand Beam", root.transform,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .82f));
+            divider.raycastTarget = false;
+            var brandBeam = factory.Image("Top Bar Brand Beam", root.transform, theme.ShellHighlight);
             TouchUiFactory.Anchor(brandBeam.rectTransform, 0, 0, 0, 0, theme.PagePadding, 0,
-                theme.PagePadding + 246, 3);
+                theme.PagePadding + 300, 4);
             brandBeam.raycastTarget = false;
 
-            brandMark = factory.RoundedImage("Brand Mark", root.transform, theme.PrimaryMuted);
+            brandMark = factory.RoundedImage("Brand Mark", root.transform, theme.ShellPanelActive);
             TouchUiFactory.Anchor(brandMark.rectTransform, 0, .5f, 0, .5f,
                 theme.PagePadding, -26, theme.PagePadding + 52, 26);
             var brandLetters = factory.Label("Brand Letters", brandMark.transform, "TG", theme.SectionTitle,
@@ -53,7 +57,7 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(subtitle.rectTransform, 0, 0, .5f, .5f,
                 theme.PagePadding + 72, theme.CardSpacing / 2, 0, 0);
 
-            timeSurface = factory.RoundedImage("Local Time Panel", root.transform, theme.SurfaceSoft);
+            timeSurface = factory.RoundedImage("Local Time Panel", root.transform, theme.ShellPanel);
             TouchUiFactory.Anchor(timeSurface.rectTransform, 1, .5f, 1, .5f, -820, -24, -570, 24);
             dateLabel = factory.Label("Current Date", timeSurface.transform, string.Empty, theme.Caption,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleRight);
@@ -70,7 +74,7 @@ namespace TG.Control.Touch.UI.Components
                 () => ExitRequested?.Invoke());
             TouchUiFactory.Anchor(exitButton.GetComponent<RectTransform>(), 1, .5f, 1, .5f,
                 -138, -22, -theme.PagePadding, 22);
-            exitButton.GetComponent<Image>().color = Color.Lerp(theme.SecondaryButton, theme.Error, .12f);
+            exitButton.GetComponent<Image>().color = theme.ShellPanel;
             connectionBadge.Set("服务连接中", StatusTone.Warning);
             readinessBadge.Set("状态检查中", StatusTone.Neutral);
             Tick(DateTime.Now, true);
@@ -100,9 +104,9 @@ namespace TG.Control.Touch.UI.Components
 
         public void RefreshTheme()
         {
-            root.color = Color.clear;
-            brandMark.color = theme.PrimaryMuted;
-            timeSurface.color = theme.SurfaceSoft;
+            root.color = theme.HeaderBackground;
+            brandMark.color = theme.ShellPanelActive;
+            timeSurface.color = theme.ShellPanel;
             connectionBadge.RefreshTheme();
             readinessBadge.RefreshTheme();
         }

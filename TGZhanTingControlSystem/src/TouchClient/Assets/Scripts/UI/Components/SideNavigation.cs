@@ -16,6 +16,7 @@ namespace TG.Control.Touch.UI.Components
             public TouchShellSection Section;
             public Image Background;
             public Image Accent;
+            public Image TopBeam;
             public Text Label;
             public Image Activity;
             public Button Button;
@@ -33,12 +34,17 @@ namespace TG.Control.Touch.UI.Components
         public SideNavigation(TouchUiFactory factory, TouchTheme theme, Transform parent)
         {
             this.theme = theme;
-            root = factory.Image("Side Navigation", parent, Color.clear);
+            root = factory.Image("Side Navigation", parent, theme.NavigationBackground);
             root.raycastTarget = false;
-            var border = factory.Image("Navigation Border", root.transform, theme.Border);
-            TouchUiFactory.Anchor(border.rectTransform, 1, 0, 1, 1, -1, 0, 0, 0);
+            var leftRail = factory.Image("Navigation Electric Blue Rail", root.transform,
+                new Color(theme.ShellHighlight.r, theme.ShellHighlight.g, theme.ShellHighlight.b, .48f));
+            TouchUiFactory.Anchor(leftRail.rectTransform, 0, 0, 0, 1, 0, 0, 2, 0);
+            leftRail.raycastTarget = false;
+            var border = factory.Image("Navigation Border", root.transform, theme.ShellBorder);
+            TouchUiFactory.Anchor(border.rectTransform, 1, 0, 1, 1, -2, 0, 0, 0);
+            border.raycastTarget = false;
             var signal = factory.Image("Navigation Signal", root.transform,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .72f));
+                theme.ShellHighlight);
             TouchUiFactory.Anchor(signal.rectTransform, 0, 1, 0, 1, theme.PagePadding, -12,
                 theme.PagePadding + 52, -9);
             signal.raycastTarget = false;
@@ -51,6 +57,11 @@ namespace TG.Control.Touch.UI.Components
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1,
                 theme.PagePadding, -88, -theme.PagePadding, -62);
+            var headingRule = factory.Image("Navigation Heading Rule", root.transform,
+                new Color(theme.ShellHighlight.r, theme.ShellHighlight.g, theme.ShellHighlight.b, .48f));
+            TouchUiFactory.Anchor(headingRule.rectTransform, 0, 1, 1, 1,
+                theme.PagePadding, -104, -theme.PagePadding, -102);
+            headingRule.raycastTarget = false;
 
             CreateItem(factory, TouchShellSection.ReceptionHome, "讲解首页", 0);
             CreateItem(factory, TouchShellSection.Playback, "当前讲解", 1);
@@ -63,6 +74,12 @@ namespace TG.Control.Touch.UI.Components
                 theme.TextSecondary, TextAnchor.LowerLeft);
             TouchUiFactory.Anchor(footer.rectTransform, 0, 0, 1, 0,
                 theme.PagePadding, theme.PagePadding, -theme.PagePadding, theme.PagePadding + 38);
+            var footerRule = factory.Image("Navigation Footer Rule", root.transform,
+                new Color(theme.ShellBorder.r, theme.ShellBorder.g, theme.ShellBorder.b, .55f));
+            TouchUiFactory.Anchor(footerRule.rectTransform, 0, 0, 1, 0,
+                theme.PagePadding, theme.PagePadding + 64, -theme.PagePadding,
+                theme.PagePadding + 66);
+            footerRule.raycastTarget = false;
             SetActive(TouchShellSection.ReceptionHome);
             SetPlaybackAvailable(false);
         }
@@ -84,14 +101,14 @@ namespace TG.Control.Touch.UI.Components
 
         public void RefreshTheme()
         {
-            root.color = Color.clear;
+            root.color = theme.NavigationBackground;
             foreach (var item in items) Apply(item);
         }
 
         private void CreateItem(TouchUiFactory factory, TouchShellSection section, string text, int index)
         {
             var image = factory.RoundedImage("Navigation - " + text, root.transform,
-                new Color(theme.NavigationBackground.r, theme.NavigationBackground.g, theme.NavigationBackground.b, .18f));
+                new Color(theme.ShellPanel.r, theme.ShellPanel.g, theme.ShellPanel.b, .42f));
             var top = -(112 + index * (theme.NavigationItemHeight + theme.Space12));
             TouchUiFactory.Anchor(image.rectTransform, 0, 1, 1, 1,
                 theme.Space12, top - theme.NavigationItemHeight, -theme.Space12, top);
@@ -110,8 +127,12 @@ namespace TG.Control.Touch.UI.Components
             colors.fadeDuration = .08f;
             button.colors = colors;
 
-            var accent = factory.Image("Selection", image.transform, theme.Primary);
+            var accent = factory.Image("Selection", image.transform, theme.ShellHighlight);
             TouchUiFactory.Anchor(accent.rectTransform, 0, 0, 0, 1, 0, theme.Space8, 5, -theme.Space8);
+            var topBeam = factory.Image("Selected Item Light Rail", image.transform, theme.ShellHighlight);
+            TouchUiFactory.Anchor(topBeam.rectTransform, 0, 1, 1, 1, theme.Space16, -2,
+                -theme.Space16, 0);
+            topBeam.raycastTarget = false;
             var textLabel = factory.Label("Label", image.transform, text, 20, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, theme.Space24, 0, -theme.Space32, 0);
@@ -124,6 +145,7 @@ namespace TG.Control.Touch.UI.Components
                 Section = section,
                 Background = image,
                 Accent = accent,
+                TopBeam = topBeam,
                 Label = textLabel,
                 Activity = activity,
                 Button = button
@@ -134,10 +156,11 @@ namespace TG.Control.Touch.UI.Components
         {
             var selected = item.Section == active;
             item.Background.color = selected
-                ? new Color(theme.PrimaryMuted.r, theme.PrimaryMuted.g, theme.PrimaryMuted.b, .92f)
-                : new Color(theme.NavigationBackground.r, theme.NavigationBackground.g, theme.NavigationBackground.b, .18f);
+                ? theme.ShellPanelActive
+                : new Color(theme.ShellPanel.r, theme.ShellPanel.g, theme.ShellPanel.b, .42f);
             item.Accent.gameObject.SetActive(selected);
-            item.Accent.color = theme.Primary;
+            item.Accent.color = theme.ShellHighlight;
+            item.TopBeam.gameObject.SetActive(selected);
             item.Label.color = !item.Available ? theme.Disabled : theme.TextPrimary;
             item.Activity.gameObject.SetActive(item.Section == TouchShellSection.Playback && item.Available);
             item.Activity.color = theme.Success;
