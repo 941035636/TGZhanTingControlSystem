@@ -8,13 +8,13 @@ namespace TG.Control.Touch.UI.Theme
         private static readonly string[] FontFamilies = { "Microsoft YaHei UI", "Microsoft YaHei", "Arial" };
 
         // Core product surfaces. Configurable server colors never replace these structural colors.
-        public Color AppBackground { get; } = ParseColor("#061427");
+        public Color AppBackground { get; } = ParseColor("#00184C");
         public Color Surface { get; } = ParseColor("#0C2948");
         public Color SurfaceElevated { get; } = ParseColor("#12385B");
         // Top bar and navigation form one continuous product shell, so they intentionally
         // share the same opaque structural blue instead of appearing as separate panels.
-        public Color HeaderBackground { get; } = ParseColor("#071D35");
-        public Color NavigationBackground { get; } = ParseColor("#071D35");
+        public Color HeaderBackground { get; } = ParseColor("#001A4B");
+        public Color NavigationBackground { get; } = ParseColor("#001A4B");
         // Product structure always uses the fixed brand blue. Server configuration must not recolor
         // navigation, semantic states or every primary action.
         public Color Primary { get; } = ParseColor("#1677FF");

@@ -704,9 +704,8 @@ namespace TG.Control.Touch
             var fallbackColor = !isKiosk &&
                 ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out var configured)
                 ? configured : theme.Background;
-            // The operational workspace draws its atmosphere in the controls themselves.
-            // The welcome page owns its separate full-bleed artwork; a small exposed strip
-            // of that artwork behind the kiosk controls is not useful.
+            // The kiosk page owns its full-surface standby-aligned backdrop. The shell
+            // behind it stays a solid royal blue instead of showing an unrelated strip.
             background.sprite = null;
             background.color = fallbackColor;
             if (string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) return;
