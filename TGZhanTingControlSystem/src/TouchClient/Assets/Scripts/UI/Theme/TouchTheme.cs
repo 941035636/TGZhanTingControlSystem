@@ -13,8 +13,8 @@ namespace TG.Control.Touch.UI.Theme
         public Color SurfaceElevated { get; } = ParseColor("#12385B");
         // Top bar and navigation form one continuous product shell, so they intentionally
         // share the same opaque structural blue instead of appearing as separate panels.
-        public Color HeaderBackground { get; } = ParseColor("#0B2948");
-        public Color NavigationBackground { get; } = ParseColor("#0B2948");
+        public Color HeaderBackground { get; } = ParseColor("#071D35");
+        public Color NavigationBackground { get; } = ParseColor("#071D35");
         // Product structure always uses the fixed brand blue. Server configuration must not recolor
         // navigation, semantic states or every primary action.
         public Color Primary { get; } = ParseColor("#1677FF");
@@ -45,7 +45,7 @@ namespace TG.Control.Touch.UI.Theme
         public Color Divider => Border;
         // The app backdrop is a supplied exhibition visual, not decorative wallpaper.
         // Keep only a trace veil so it remains clear behind the transparent home layout.
-        public Color BackdropVeil { get; } = new Color(.015f, .055f, .105f, .04f);
+        public Color BackdropVeil { get; } = new Color(.015f, .055f, .105f, .18f);
         public Color HeroOverlay => new Color(AppBackground.r, AppBackground.g, AppBackground.b, .76f);
 
         // Typography scale for a fixed 55-inch, 1920x1080 touch terminal.

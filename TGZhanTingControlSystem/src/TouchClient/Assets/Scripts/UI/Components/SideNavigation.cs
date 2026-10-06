@@ -16,7 +16,6 @@ namespace TG.Control.Touch.UI.Components
             public TouchShellSection Section;
             public Image Background;
             public Image Accent;
-            public Text Number;
             public Text Label;
             public Image Activity;
             public Button Button;
@@ -44,26 +43,26 @@ namespace TG.Control.Touch.UI.Components
                 theme.PagePadding + 52, -9);
             signal.raycastTarget = false;
 
-            var heading = factory.Label("Navigation Heading", root.transform, "讲解控制", theme.SectionTitle,
+            var heading = factory.Label("Navigation Heading", root.transform, "展厅讲解", 27,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(heading.rectTransform, 0, 1, 1, 1,
                 theme.PagePadding, -64, -theme.PagePadding, -theme.Space16);
-            var caption = factory.Label("Navigation Caption", root.transform, "简洁接待模式", theme.Caption,
+            var caption = factory.Label("Navigation Caption", root.transform, "轻触选择功能", 16,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1,
                 theme.PagePadding, -88, -theme.PagePadding, -62);
 
-            CreateItem(factory, TouchShellSection.ReceptionHome, "01", "讲解首页", 0);
-            CreateItem(factory, TouchShellSection.Playback, "02", "当前讲解", 1);
-            CreateItem(factory, TouchShellSection.SystemStatus, "03", "系统状态", 2);
-            CreateItem(factory, TouchShellSection.Routes, "04", "讲解路线", 3);
-            CreateItem(factory, TouchShellSection.Combination, "05", "主题组合", 4);
+            CreateItem(factory, TouchShellSection.ReceptionHome, "讲解首页", 0);
+            CreateItem(factory, TouchShellSection.Playback, "当前讲解", 1);
+            CreateItem(factory, TouchShellSection.SystemStatus, "系统状态", 2);
+            CreateItem(factory, TouchShellSection.Routes, "讲解路线", 3);
+            CreateItem(factory, TouchShellSection.Combination, "主题组合", 4);
 
             var footer = factory.Label("Navigation Footer", root.transform,
-                "55英寸触控终端\n仅展示当前可用功能", theme.Caption, FontStyle.Normal,
+                "轻触选择，开启讲解", 16, FontStyle.Normal,
                 theme.TextSecondary, TextAnchor.LowerLeft);
             TouchUiFactory.Anchor(footer.rectTransform, 0, 0, 1, 0,
-                theme.PagePadding, theme.PagePadding, -theme.PagePadding, theme.PagePadding + 58);
+                theme.PagePadding, theme.PagePadding, -theme.PagePadding, theme.PagePadding + 38);
             SetActive(TouchShellSection.ReceptionHome);
             SetPlaybackAvailable(false);
         }
@@ -89,7 +88,7 @@ namespace TG.Control.Touch.UI.Components
             foreach (var item in items) Apply(item);
         }
 
-        private void CreateItem(TouchUiFactory factory, TouchShellSection section, string number, string text, int index)
+        private void CreateItem(TouchUiFactory factory, TouchShellSection section, string text, int index)
         {
             var image = factory.RoundedImage("Navigation - " + text, root.transform,
                 new Color(theme.NavigationBackground.r, theme.NavigationBackground.g, theme.NavigationBackground.b, .18f));
@@ -113,13 +112,9 @@ namespace TG.Control.Touch.UI.Components
 
             var accent = factory.Image("Selection", image.transform, theme.Primary);
             TouchUiFactory.Anchor(accent.rectTransform, 0, 0, 0, 1, 0, theme.Space8, 5, -theme.Space8);
-            var numberLabel = factory.Label("Index", image.transform, number, theme.Caption, FontStyle.Bold,
-                theme.TextSecondary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(numberLabel.rectTransform, 0, 0, 0, 1,
-                theme.Space16, 0, theme.Space16 + 34, 0);
-            var textLabel = factory.Label("Label", image.transform, text, theme.Body, FontStyle.Bold,
+            var textLabel = factory.Label("Label", image.transform, text, 20, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, theme.Space16 + 38, 0, -theme.Space32, 0);
+            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, theme.Space24, 0, -theme.Space32, 0);
             var activity = factory.RoundedImage("Activity", image.transform, theme.Success);
             TouchUiFactory.Anchor(activity.rectTransform, 1, .5f, 1, .5f,
                 -theme.Space24, -5, -theme.Space16, 5);
@@ -129,7 +124,6 @@ namespace TG.Control.Touch.UI.Components
                 Section = section,
                 Background = image,
                 Accent = accent,
-                Number = numberLabel,
                 Label = textLabel,
                 Activity = activity,
                 Button = button
@@ -144,7 +138,6 @@ namespace TG.Control.Touch.UI.Components
                 : new Color(theme.NavigationBackground.r, theme.NavigationBackground.g, theme.NavigationBackground.b, .18f);
             item.Accent.gameObject.SetActive(selected);
             item.Accent.color = theme.Primary;
-            item.Number.color = !item.Available ? theme.Disabled : selected ? theme.Primary : theme.TextSecondary;
             item.Label.color = !item.Available ? theme.Disabled : theme.TextPrimary;
             item.Activity.gameObject.SetActive(item.Section == TouchShellSection.Playback && item.Available);
             item.Activity.color = theme.Success;

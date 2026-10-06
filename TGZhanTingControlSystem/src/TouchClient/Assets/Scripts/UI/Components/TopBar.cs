@@ -44,12 +44,12 @@ namespace TG.Control.Touch.UI.Components
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleCenter);
             TouchUiFactory.Stretch(brandLetters.rectTransform);
 
-            title = factory.Label("Product Name", root.transform, "展厅自动讲解系统", theme.PageTitle,
+            title = factory.Label("Product Name", root.transform, "展厅自动讲解系统", 30,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(title.rectTransform, 0, .47f, .5f, 1,
                 theme.PagePadding + 72, 0, 0, -theme.CardSpacing / 2);
-            subtitle = factory.Label("Product Subtitle", root.transform, "TG EXHIBITION · 智慧展陈中控终端",
-                theme.Caption, FontStyle.Normal, theme.TextSecondary, TextAnchor.UpperLeft);
+            subtitle = factory.Label("Product Subtitle", root.transform, "智慧展陈 · 中控终端",
+                16, FontStyle.Normal, theme.TextSecondary, TextAnchor.UpperLeft);
             TouchUiFactory.Anchor(subtitle.rectTransform, 0, 0, .5f, .5f,
                 theme.PagePadding + 72, theme.CardSpacing / 2, 0, 0);
 
@@ -79,11 +79,13 @@ namespace TG.Control.Touch.UI.Components
         public void SetBranding(string productName, string productSubtitle)
         {
             if (!string.IsNullOrWhiteSpace(productName)) title.text = productName;
-            if (!string.IsNullOrWhiteSpace(productSubtitle)) subtitle.text = productSubtitle;
+            if (!string.IsNullOrWhiteSpace(productSubtitle))
+                subtitle.text = productSubtitle.StartsWith("TG EXHIBITION", StringComparison.OrdinalIgnoreCase)
+                    ? "智慧展陈 · 中控终端" : productSubtitle;
         }
 
         public void SetConnection(bool connected) =>
-            connectionBadge.Set(connected ? "Server 在线" : "Server 重连中",
+            connectionBadge.Set(connected ? "服务在线" : "服务重连中",
                 connected ? StatusTone.Success : StatusTone.Error);
 
         public void SetReadiness(string text, StatusTone tone) => readinessBadge.Set(text, tone);
