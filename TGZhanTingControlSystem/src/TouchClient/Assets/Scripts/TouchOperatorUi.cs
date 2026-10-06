@@ -44,7 +44,6 @@ namespace TG.Control.Touch
         private float lastInteractionAt;
 
         private Image background;
-        private Sprite embeddedBackgroundSprite;
         private TouchAppShell appShell;
         private ReceptionHomePage receptionHomePage;
         private ModuleKioskHomePage moduleKioskPage;
@@ -700,32 +699,20 @@ namespace TG.Control.Touch
 
         private void ApplyShellBackground(UiExperienceConfig config)
         {
-            var fallbackColor = ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out var configured)
+            var isKiosk = config.layout == null || string.Equals(config.layout.touchTemplate,
+                "module-kiosk", StringComparison.OrdinalIgnoreCase);
+            var fallbackColor = !isKiosk &&
+                ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out var configured)
                 ? configured : theme.Background;
-            // The kiosk home uses its own 16:9 technology backdrop. Keep the previous
-            // image as a resilient fallback for installations that have not imported the
-            // new bundled asset yet.
-            var embedded = Resources.Load<Texture2D>("Touch/touch-home-background") ??
-                           Resources.Load<Texture2D>("Touch/touch-technology-background");
-            if (embedded != null)
-            {
-                if (embeddedBackgroundSprite == null)
-                    embeddedBackgroundSprite = Sprite.Create(embedded, new Rect(0, 0, embedded.width, embedded.height),
-                        new Vector2(.5f, .5f), 100);
-                background.sprite = embeddedBackgroundSprite;
-                background.type = Image.Type.Simple;
-                background.preserveAspect = false;
-                background.color = Color.white;
-            }
-            else
-            {
-                background.sprite = null;
-                background.color = fallbackColor;
-            }
+            // The operational workspace draws its atmosphere in the controls themselves.
+            // The welcome page owns its separate full-bleed artwork; a small exposed strip
+            // of that artwork behind the kiosk controls is not useful.
+            background.sprite = null;
+            background.color = fallbackColor;
             if (string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) return;
             imageLoader.Load(background, presenter.NormalizeAssetUrl(config.touchBackgroundUrl), success =>
             {
-                if (!success && embedded == null) background.color = fallbackColor;
+                if (!success) background.color = fallbackColor;
             });
         }
 

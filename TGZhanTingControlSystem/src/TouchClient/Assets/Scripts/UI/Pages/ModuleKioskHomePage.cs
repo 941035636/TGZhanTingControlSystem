@@ -14,6 +14,13 @@ namespace TG.Control.Touch.UI.Pages
     /// <summary>A complete twelve-module wall with a fixed, easy-to-find playback action.</summary>
     public sealed class ModuleKioskHomePage
     {
+        private static readonly Color ElectricCyan = TouchTheme.ParseColor("#35DFFF");
+        private static readonly Color Cobalt = TouchTheme.ParseColor("#1254AD");
+        private static readonly Color FrameBlue = TouchTheme.ParseColor("#286BAF");
+        private static Sprite workspaceGradient;
+        private static Sprite cardGradient;
+        private static Sprite actionGradient;
+
         private sealed class ModuleCard
         {
             public ExhibitionModule Module;
@@ -21,6 +28,7 @@ namespace TG.Control.Touch.UI.Pages
             public Image Placeholder;
             public Image Cover;
             public Image CoverShade;
+            public Image SelectionGlow;
             public GameObject SelectedTag;
         }
 
@@ -59,21 +67,33 @@ namespace TG.Control.Touch.UI.Pages
             this.imageLoader = imageLoader;
             root = factory.Rect("Module Kiosk Home Page", parent);
 
-            var stage = factory.RoundedImage("Kiosk Dark Glass Stage", root,
-                new Color(.018f, .065f, .12f, .91f));
+            var stage = factory.Image("Kiosk Cobalt Workspace", root, Color.white);
+            stage.sprite = workspaceGradient ?? (workspaceGradient = CreateGradientSprite(
+                "Kiosk Cobalt Workspace Gradient", new Color(.025f, .13f, .31f),
+                new Color(.015f, .065f, .19f), new Color(.04f, .32f, .61f)));
             TouchUiFactory.Stretch(stage.rectTransform);
             stage.raycastTarget = false;
 
-            var topBeam = factory.Image("Kiosk Top Beam", root,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .8f));
-            TouchUiFactory.Anchor(topBeam.rectTransform, 0, 1, 0, 1, 28, -3, 214, 0);
+            var topBeam = factory.Image("Kiosk Top Beam", root, ElectricCyan);
+            TouchUiFactory.Anchor(topBeam.rectTransform, 0, 1, 0, 1, 28, -5, 344, -1);
             topBeam.raycastTarget = false;
 
-            var headingMark = factory.Image("Kiosk Heading Mark", root, theme.ConfigurableAccent);
+            var headingGlow = factory.Image("Heading Light Wash", root,
+                new Color(.08f, .43f, .9f, .19f));
+            TouchUiFactory.Anchor(headingGlow.rectTransform, 0, 1, 1, 1, 20, -139, -20, -10);
+            headingGlow.raycastTarget = false;
+
+            var headingRightRail = factory.Image("Heading Right Light Rail", root,
+                new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .6f));
+            TouchUiFactory.Anchor(headingRightRail.rectTransform, 1, 1, 1, 1,
+                -434, -139, -28, -137);
+            headingRightRail.raycastTarget = false;
+
+            var headingMark = factory.Image("Kiosk Heading Mark", root, ElectricCyan);
             TouchUiFactory.Anchor(headingMark.rectTransform, 0, 1, 0, 1, 28, -89, 33, -35);
             headingMark.raycastTarget = false;
             var modeLabel = factory.Label("Kiosk Mode Label", root, "智慧展厅  /  自助讲解", 18,
-                FontStyle.Bold, theme.ConfigurableAccent, TextAnchor.MiddleLeft);
+                FontStyle.Bold, ElectricCyan, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(modeLabel.rectTransform, 0, 1, .65f, 1, 50, -45, 0, -13);
 
             pageTitle = factory.Label("Kiosk Title", root, "选择讲解板块", 38,
@@ -88,9 +108,9 @@ namespace TG.Control.Touch.UI.Pages
             TouchUiFactory.Anchor(pageSubtitle.rectTransform, 0, 1, .78f, 1, 50, -130, 0, -99);
 
             var countSurface = factory.RoundedImage("Module Count Surface", root,
-                new Color(.035f, .16f, .28f, .88f));
+                new Color(.06f, .27f, .48f, .95f));
             TouchUiFactory.Anchor(countSurface.rectTransform, 1, 1, 1, 1, -280, -97, -28, -45);
-            var countDot = factory.RoundedImage("Module Count Dot", countSurface.transform, theme.ConfigurableAccent);
+            var countDot = factory.RoundedImage("Module Count Dot", countSurface.transform, ElectricCyan);
             TouchUiFactory.Anchor(countDot.rectTransform, 0, .5f, 0, .5f, 22, -5, 32, 5);
             countDot.raycastTarget = false;
             moduleCount = factory.Label("Module Count", countSurface.transform, "正在载入板块", 18,
@@ -98,11 +118,11 @@ namespace TG.Control.Touch.UI.Pages
             TouchUiFactory.Stretch(moduleCount.rectTransform, 48, 0, -16, 0);
 
             var galleryFrame = factory.RoundedImage("Module Gallery", root,
-                new Color(.005f, .033f, .075f, .92f));
+                new Color(.025f, .13f, .29f, .96f));
             TouchUiFactory.Anchor(galleryFrame.rectTransform, 0, 0, 1, 1, 20, 140, -20, -145);
             var galleryEdge = factory.Image("Gallery Edge", galleryFrame.transform,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .34f));
-            TouchUiFactory.Anchor(galleryEdge.rectTransform, 0, 1, 1, 1, 18, -2, -18, 0);
+                new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .8f));
+            TouchUiFactory.Anchor(galleryEdge.rectTransform, 0, 1, 1, 1, 18, -3, -18, 0);
             galleryEdge.raycastTarget = false;
             grid = factory.ScrollGrid(galleryFrame.transform, "Module Wall", 4,
                 new Vector2(360, 190), new Vector2(14, 14));
@@ -127,15 +147,25 @@ namespace TG.Control.Touch.UI.Pages
             galleryEmptyState.SetActive(false);
 
             var actionBar = factory.RoundedImage("Kiosk Playback Action Bar", root,
-                new Color(.022f, .092f, .17f, .97f));
+                new Color(.05f, .20f, .40f, .98f));
             TouchUiFactory.Anchor(actionBar.rectTransform, 0, 0, 1, 0, 20, 16, -20, 124);
+            var actionLight = factory.Image("Playback Action Blue Light", actionBar.transform, Color.white);
+            actionLight.sprite = actionGradient ?? (actionGradient = CreateGradientSprite(
+                "Playback Action Gradient", new Color(.04f, .22f, .49f),
+                new Color(.02f, .11f, .28f), new Color(.06f, .40f, .75f)));
+            TouchUiFactory.Stretch(actionLight.rectTransform, 3, 3, -3, -3);
+            actionLight.raycastTarget = false;
             var actionLine = factory.Image("Kiosk Action Line", actionBar.transform,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .38f));
-            TouchUiFactory.Anchor(actionLine.rectTransform, 0, 1, 1, 1, 22, -2, -22, 0);
+                ElectricCyan);
+            TouchUiFactory.Anchor(actionLine.rectTransform, 0, 1, 1, 1, 22, -3, -22, 0);
             actionLine.raycastTarget = false;
 
+            var actionMarker = factory.Image("Action Left Signal", actionBar.transform, ElectricCyan);
+            TouchUiFactory.Anchor(actionMarker.rectTransform, 0, 0, 0, 1, 3, 18, 8, -18);
+            actionMarker.raycastTarget = false;
+
             var selectedCaption = factory.Label("Selected Caption", actionBar.transform,
-                "当前选择", 16, FontStyle.Bold, theme.ConfigurableAccent, TextAnchor.MiddleLeft);
+                "当前选择", 16, FontStyle.Bold, ElectricCyan, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(selectedCaption.rectTransform, 0, 0, 0, 1, 28, 65, 150, -14);
             selectedTitle = factory.Label("Selected Module", actionBar.transform,
                 "请选择讲解板块", 30, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
@@ -161,11 +191,12 @@ namespace TG.Control.Touch.UI.Pages
             startButton = factory.TouchButton(actionBar.transform, "开始讲解", true, StartSelected);
             TouchUiFactory.Anchor(startButton.GetComponent<RectTransform>(), 1, 0, 1, 1,
                 -594, 18, -314, -18);
+            startButton.GetComponent<Image>().color = Cobalt;
             startAllButton = factory.TouchButton(actionBar.transform, "全部讲解", false,
                 () => StartAllRequested?.Invoke());
             TouchUiFactory.Anchor(startAllButton.GetComponent<RectTransform>(), 1, 0, 1, 1,
                 -298, 18, -18, -18);
-            startAllButton.GetComponent<Image>().color = new Color(.06f, .24f, .36f, 1);
+            startAllButton.GetComponent<Image>().color = new Color(.055f, .30f, .56f, 1);
         }
 
         public void Render(TouchUiState state, Func<string, string> urlResolver)
@@ -230,16 +261,18 @@ namespace TG.Control.Touch.UI.Pages
             TouchUiFactory.Clear(grid);
             foreach (var module in modules)
             {
-                var border = factory.RoundedImage("Module - " + module.name, grid, theme.Border);
+                var border = factory.RoundedImage("Module - " + module.name, grid, FrameBlue);
                 var frame = factory.RoundedImage("Photo Card", border.transform,
-                    new Color(.025f, .10f, .19f, 1));
+                    new Color(.035f, .18f, .38f, 1));
                 TouchUiFactory.Stretch(frame.rectTransform, 3, 3, -3, -3);
                 frame.raycastTarget = false;
                 var mask = frame.gameObject.AddComponent<Mask>();
                 mask.showMaskGraphic = true;
 
-                var placeholder = factory.Image("Technology Placeholder", frame.transform,
-                    new Color(.018f, .11f, .22f, 1));
+                var placeholder = factory.Image("Technology Placeholder", frame.transform, Color.white);
+                placeholder.sprite = cardGradient ?? (cardGradient = CreateGradientSprite(
+                    "Kiosk Card Gradient", new Color(.05f, .32f, .66f),
+                    new Color(.02f, .13f, .37f), new Color(.07f, .52f, .85f)));
                 TouchUiFactory.Stretch(placeholder.rectTransform);
                 placeholder.raycastTarget = false;
                 BuildPlaceholderVisual(placeholder.transform);
@@ -267,11 +300,11 @@ namespace TG.Control.Touch.UI.Pages
                 }
 
                 var titleBand = factory.Image("Readable Title Band", frame.transform,
-                    new Color(.006f, .033f, .078f, .94f));
+                    new Color(.007f, .055f, .15f, .94f));
                 TouchUiFactory.Anchor(titleBand.rectTransform, 0, 0, 1, 0, 0, 0, 0, 68);
                 titleBand.raycastTarget = false;
                 var titleSeparator = factory.Image("Title Band Edge", frame.transform,
-                    new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .6f));
+                    new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .74f));
                 TouchUiFactory.Anchor(titleSeparator.rectTransform, 0, 0, 1, 0, 0, 68, 0, 70);
                 titleSeparator.raycastTarget = false;
                 var title = factory.Label("Module Title", frame.transform, module.name, 25,
@@ -284,13 +317,17 @@ namespace TG.Control.Touch.UI.Pages
                 shadow.effectColor = new Color(0, 0, 0, .85f);
                 shadow.effectDistance = new Vector2(1, -2);
 
-                var corner = factory.Image("Photo Corner Detail", frame.transform,
-                    new Color(theme.ConfigurableAccent.r, theme.ConfigurableAccent.g,
-                        theme.ConfigurableAccent.b, .8f));
-                TouchUiFactory.Anchor(corner.rectTransform, 0, 1, 0, 1, 18, -18, 72, -15);
-                corner.raycastTarget = false;
+                AddCornerBracket(frame.transform, "Upper Left", 14, -14, false, false);
+                AddCornerBracket(frame.transform, "Upper Right", -14, -14, true, false);
+                AddCornerBracket(frame.transform, "Lower Left", 14, 82, false, true);
+                AddCornerBracket(frame.transform, "Lower Right", -14, 82, true, true);
+
+                var selectionGlow = factory.Image("Selected Card Light Rail", frame.transform, ElectricCyan);
+                TouchUiFactory.Anchor(selectionGlow.rectTransform, 0, 0, 0, 1, 0, 70, 7, -2);
+                selectionGlow.raycastTarget = false;
+                selectionGlow.gameObject.SetActive(false);
                 var selectedTag = factory.RoundedImage("Selected Tag", frame.transform,
-                    new Color(.02f, .36f, .52f, .94f));
+                    new Color(.015f, .52f, .73f, .97f));
                 TouchUiFactory.Anchor(selectedTag.rectTransform, 1, 1, 1, 1, -100, -48, -15, -15);
                 selectedTag.raycastTarget = false;
                 var selectedTagText = factory.Label("Selected Tag Text", selectedTag.transform, "已选择", 16,
@@ -309,6 +346,7 @@ namespace TG.Control.Touch.UI.Pages
                     Placeholder = placeholder,
                     Cover = cover,
                     CoverShade = shade,
+                    SelectionGlow = selectionGlow,
                     SelectedTag = selectedTag.gameObject
                 });
             }
@@ -323,7 +361,8 @@ namespace TG.Control.Touch.UI.Pages
             foreach (var card in cards)
             {
                 var active = string.Equals(card.Module.id, selectedModuleId, StringComparison.OrdinalIgnoreCase);
-                card.Border.color = active ? theme.ConfigurableAccent : new Color(.14f, .36f, .51f, .8f);
+                card.Border.color = active ? ElectricCyan : FrameBlue;
+                card.SelectionGlow.gameObject.SetActive(active);
                 card.SelectedTag.SetActive(active);
                 if (active) selected = card.Module;
             }
@@ -344,24 +383,83 @@ namespace TG.Control.Touch.UI.Pages
 
         private void BuildPlaceholderVisual(Transform parent)
         {
-            var halo = factory.RoundedImage("Placeholder Light", parent,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .11f));
-            TouchUiFactory.Anchor(halo.rectTransform, .22f, .20f, .78f, .86f, 0, 0, 0, 0);
-            halo.raycastTarget = false;
-            for (var index = 0; index < 4; index++)
+            var aperture = factory.RoundedImage("Cobalt Aperture", parent,
+                new Color(.08f, .57f, .94f, .3f));
+            TouchUiFactory.Anchor(aperture.rectTransform, .29f, .34f, .71f, .94f, 0, 0, 0, 0);
+            aperture.raycastTarget = false;
+            var apertureCore = factory.RoundedImage("Aperture Core", parent,
+                new Color(.045f, .22f, .53f, .75f));
+            TouchUiFactory.Anchor(apertureCore.rectTransform, .31f, .34f, .69f, .91f, 0, 0, 0, 0);
+            apertureCore.raycastTarget = false;
+            for (var index = 0; index < 6; index++)
             {
-                var beam = factory.Image("Placeholder Light Beam", parent,
-                    new Color(theme.ConfigurableAccent.r, theme.ConfigurableAccent.g,
-                        theme.ConfigurableAccent.b, .13f + index * .03f));
-                var x = .26f + index * .16f;
-                TouchUiFactory.Anchor(beam.rectTransform, x, .28f, x, .82f, 0, 0, 2, 0);
+                var x = .13f + index * .145f;
+                var beam = factory.Image("Data Column " + index, parent,
+                    new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b,
+                        index == 2 || index == 3 ? .34f : .19f));
+                TouchUiFactory.Anchor(beam.rectTransform, x, .41f, x, .89f, 0, 0, 2, 0);
                 beam.raycastTarget = false;
             }
-            var horizon = factory.Image("Placeholder Horizon", parent,
-                new Color(theme.ConfigurableAccent.r, theme.ConfigurableAccent.g,
-                    theme.ConfigurableAccent.b, .3f));
-            TouchUiFactory.Anchor(horizon.rectTransform, .08f, .35f, .92f, .35f, 0, 0, 0, 2);
+            var horizonGlow = factory.Image("Horizon Glow", parent,
+                new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .33f));
+            TouchUiFactory.Anchor(horizonGlow.rectTransform, .08f, .36f, .92f, .36f, 0, 0, 0, 3);
+            horizonGlow.raycastTarget = false;
+            var horizon = factory.Image("Horizon Core", parent,
+                new Color(.63f, .96f, 1f, .66f));
+            TouchUiFactory.Anchor(horizon.rectTransform, .22f, .37f, .78f, .37f, 0, 0, 0, 1);
             horizon.raycastTarget = false;
+        }
+
+        private void AddCornerBracket(Transform parent, string name, float x, float y,
+            bool right, bool lower)
+        {
+            var edge = new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .9f);
+            var horizontal = factory.Image(name + " Horizontal", parent, edge);
+            var vertical = factory.Image(name + " Vertical", parent, edge);
+            var anchorX = right ? 1 : 0;
+            var anchorY = lower ? 0 : 1;
+            var horizontalMinX = right ? x - 40 : x;
+            var horizontalMaxX = right ? x : x + 40;
+            TouchUiFactory.Anchor(horizontal.rectTransform, anchorX, anchorY, anchorX, anchorY,
+                horizontalMinX, y, horizontalMaxX, y + 2);
+            var verticalMinX = right ? x - 2 : x;
+            var verticalMaxX = right ? x : x + 2;
+            TouchUiFactory.Anchor(vertical.rectTransform, anchorX, anchorY, anchorX, anchorY,
+                verticalMinX, lower ? y : y - 15, verticalMaxX, lower ? y + 15 : y);
+            horizontal.raycastTarget = false;
+            vertical.raycastTarget = false;
+        }
+
+        private static Sprite CreateGradientSprite(string name, Color upperLeft, Color lowerRight, Color glow)
+        {
+            const int width = 256;
+            const int height = 128;
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            {
+                name = name,
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            var pixels = new Color[width * height];
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var u = x / (float)(width - 1);
+                var v = y / (float)(height - 1);
+                var color = Color.Lerp(lowerRight, upperLeft, .6f * v + .4f * (1 - u));
+                var dx = (u - .22f) * 1.1f;
+                var dy = (v - .76f) * .8f;
+                var light = Mathf.Clamp01(1 - (dx * dx + dy * dy) * 3.2f);
+                pixels[y * width + x] = Color.Lerp(color, glow, light * .24f);
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            var sprite = Sprite.Create(texture, new Rect(0, 0, width, height),
+                new Vector2(.5f, .5f), 100);
+            sprite.name = name;
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
         }
 
         private void UpdateGalleryEmptyState(TouchUiState state, int count)
