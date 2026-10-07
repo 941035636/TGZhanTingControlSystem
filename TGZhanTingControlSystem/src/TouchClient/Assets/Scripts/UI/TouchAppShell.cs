@@ -49,13 +49,12 @@ namespace TG.Control.Touch.UI
             TouchUiFactory.Anchor(ambientAccent.rectTransform, 1, 1, 1, 1, -520, -4, 0, 0);
             ambientAccent.raycastTarget = false;
 
-            // A single structural shell color sits behind both chrome regions. TopBar and
-            // SideNavigation only render their content above it, preventing alpha blending
-            // from making the two adjacent areas look like unrelated color blocks.
-            chromeHeader = factory.Image("Shell Chrome Header", canvas, theme.HeaderBackground);
+            // Leave the shell open around the floating controls. Full-width opaque
+            // chrome made the header and navigation read like an admin dashboard.
+            chromeHeader = factory.Image("Shell Chrome Header", canvas, Color.clear);
             TouchUiFactory.Anchor(chromeHeader.rectTransform, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
             chromeHeader.raycastTarget = false;
-            chromeNavigation = factory.Image("Shell Chrome Navigation", canvas, theme.NavigationBackground);
+            chromeNavigation = factory.Image("Shell Chrome Navigation", canvas, Color.clear);
             TouchUiFactory.Anchor(chromeNavigation.rectTransform, 0, 0, 0, 1, 0, 0,
                 theme.SideNavigationWidth, -theme.TopBarHeight);
             chromeNavigation.raycastTarget = false;
@@ -116,8 +115,8 @@ namespace TG.Control.Touch.UI
         public void RefreshTheme()
         {
             ambientAccent.color = new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .03f);
-            chromeHeader.color = theme.HeaderBackground;
-            chromeNavigation.color = theme.NavigationBackground;
+            chromeHeader.color = Color.clear;
+            chromeNavigation.color = Color.clear;
             topBar.RefreshTheme();
             navigation.RefreshTheme();
             contentHost.RefreshTheme(theme);
