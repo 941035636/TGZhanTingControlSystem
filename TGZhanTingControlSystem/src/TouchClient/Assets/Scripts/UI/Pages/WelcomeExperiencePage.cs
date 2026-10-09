@@ -18,29 +18,37 @@ namespace TG.Control.Touch.UI.Pages
     public sealed class WelcomeExperiencePage
     {
         private static Sprite defaultBackgroundSprite;
-        private static Sprite circleSprite;
+        private static Sprite ringSprite;
+        private static Sprite glowSprite;
+        private static Sprite buttonSprite;
+        private static Sprite handSprite;
 
         private readonly MonoBehaviour host;
         private readonly TouchImageLoader imageLoader;
         private readonly GameObject root;
         private readonly Image background;
-        private readonly Image backgroundVeil;
-        private readonly Image brandLogo;
+        private Image brandLogo;
+        private Text brandMarkText;
+        private readonly CanvasGroup headingGroup;
+        private readonly Image wakeImage;
+        private readonly Image wakeGlow;
+        private readonly Image transitionCover;
         private readonly Text eyebrow;
         private readonly Text title;
         private readonly Text subtitle;
         private readonly Text caption;
         private readonly Text status;
         private Text clock;
-        private readonly Text wakeLabel;
-        private readonly Text wakeHint;
         private readonly Button wakeButton;
         private readonly Button homeFallbackButton;
-        private readonly List<RectTransform> pulseRings = new List<RectTransform>();
+        private readonly List<Image> pulseRings = new List<Image>();
         private Coroutine animation;
-        private string backgroundUrl;
+        private Coroutine transition;
         private string logoUrl;
         private bool requesting;
+        private bool completing;
+        private float shownAt;
+        private float pressFeedbackUntil;
         private int renderedSecond = -1;
 
         public bool Visible => root.activeSelf;
@@ -54,7 +62,7 @@ namespace TG.Control.Touch.UI.Pages
             this.host = host;
             this.imageLoader = imageLoader;
 
-            background = factory.Image("Welcome Technology Background", canvas, Color.white);
+            background = factory.Image("Standby Clean Exhibition Background", canvas, Color.white);
             TouchUiFactory.Stretch(background.rectTransform);
             background.sprite = LoadDefaultBackground();
             background.type = Image.Type.Simple;
@@ -62,30 +70,32 @@ namespace TG.Control.Touch.UI.Pages
             background.raycastTarget = false;
             root = background.gameObject;
 
-            backgroundVeil = factory.Image("Welcome Contrast Veil", root.transform,
-                new Color(.01f, .055f, .19f, .22f));
-            TouchUiFactory.Stretch(backgroundVeil.rectTransform);
-            backgroundVeil.raycastTarget = false;
-
             BuildTopBrand(factory);
 
-            brandLogo = factory.Image("Welcome Brand Logo", root.transform, Color.white);
-            TouchUiFactory.Anchor(brandLogo.rectTransform, .5f, 1, .5f, 1, -88, -152, 88, -88);
-            brandLogo.preserveAspect = true;
-            brandLogo.raycastTarget = false;
-            brandLogo.gameObject.SetActive(false);
-
-            eyebrow = Label(factory, root.transform, "展厅自动讲解系统", 23, FontStyle.Bold,
-                new Color(.60f, .86f, 1f, 1), 196, 232);
-            title = Label(factory, root.transform, "欢迎莅临智慧展厅", 68, FontStyle.Bold, Color.white, 90, 186);
+            var headings = factory.Rect("Standby Welcome Headings", root.transform);
+            TouchUiFactory.Stretch(headings);
+            headingGroup = headings.gameObject.AddComponent<CanvasGroup>();
+            headingGroup.interactable = false;
+            headingGroup.blocksRaycasts = false;
+            var headingAccent = factory.Image("Standby Heading Accent", headings, new Color(.51f, .94f, 1f, .92f));
+            TouchUiFactory.Anchor(headingAccent.rectTransform, .5f, 1, .5f, 1, -44, -132, 44, -129);
+            headingAccent.raycastTarget = false;
+            eyebrow = TopLabel(factory, headings, "展厅自动讲解系统", 24, FontStyle.Bold,
+                new Color(.88f, .96f, 1f, 1), 149, 42);
+            title = TopLabel(factory, headings, "欢迎莅临智慧展厅", 76, FontStyle.Bold,
+                Color.white, 201, 91);
             AddShadow(title, new Color(0, .08f, .24f, .78f), new Vector2(0, -3));
-            subtitle = Label(factory, root.transform, "探索 · 体验 · 发现 · 共创未来", 27, FontStyle.Normal,
-                new Color(.80f, .91f, 1f, 1), 36, 82);
+            subtitle = TopLabel(factory, headings, "探索 · 体验 · 发现 · 共创未来", 28, FontStyle.Normal,
+                new Color(.88f, .96f, 1f, 1), 305, 54);
 
             BuildPulseRings(factory, theme);
-            var wakeImage = factory.Image("Welcome Touch Action", root.transform, new Color(.04f, .38f, .92f, .96f));
-            wakeImage.sprite = GetCircleSprite();
-            TouchUiFactory.Anchor(wakeImage.rectTransform, .5f, .5f, .5f, .5f, -96, -190, 96, 2);
+            wakeGlow = factory.Image("Standby Touch Soft Glow", root.transform, new Color(.11f, .72f, 1f, .58f));
+            wakeGlow.sprite = GetGlowSprite();
+            TouchUiFactory.Anchor(wakeGlow.rectTransform, .5f, .5f, .5f, .5f, -138, -433, 138, -157);
+            wakeGlow.raycastTarget = false;
+            wakeImage = factory.Image("Welcome Touch Action", root.transform, Color.white);
+            wakeImage.sprite = GetButtonSprite();
+            TouchUiFactory.Anchor(wakeImage.rectTransform, .5f, .5f, .5f, .5f, -91, -386, 91, -204);
             wakeButton = wakeImage.gameObject.AddComponent<Button>();
             wakeButton.targetGraphic = wakeImage;
             wakeButton.onClick.AddListener(RequestWelcome);
@@ -97,23 +107,33 @@ namespace TG.Control.Touch.UI.Pages
             colors.fadeDuration = .08f;
             wakeButton.colors = colors;
 
-            wakeLabel = factory.Label("Welcome Touch Label", wakeImage.transform, "触碰开启", 28,
-                FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
-            TouchUiFactory.Anchor(wakeLabel.rectTransform, 0, .5f, 1, 1, 18, -4, -18, -6);
-            wakeHint = factory.Label("Welcome Touch Hint", wakeImage.transform, "开启参观之旅", 16,
-                FontStyle.Normal, new Color(.78f, .90f, 1f, 1), TextAnchor.MiddleCenter);
-            TouchUiFactory.Anchor(wakeHint.rectTransform, 0, 0, 1, .5f, 12, 23, -12, 7);
+            var hand = factory.Image("Standby White Touch Gesture", wakeImage.transform, Color.white);
+            hand.sprite = GetHandSprite();
+            TouchUiFactory.Anchor(hand.rectTransform, .5f, .5f, .5f, .5f, -48, -47, 48, 49);
+            hand.raycastTarget = false;
+            var gestureRipple = factory.Image("Standby Gesture Ripple", wakeImage.transform,
+                new Color(1f, 1f, 1f, .92f));
+            gestureRipple.sprite = GetRingSprite();
+            TouchUiFactory.Anchor(gestureRipple.rectTransform, .5f, .5f, .5f, .5f, -19, 26, 19, 64);
+            gestureRipple.raycastTarget = false;
 
-            caption = Label(factory, root.transform, string.Empty, 31, FontStyle.Normal, Color.white, -304, -246);
+            caption = BottomLabel(factory, root.transform, string.Empty, 31, FontStyle.Normal,
+                Color.white, 167, 237);
             caption.resizeTextMinSize = 20;
             AddShadow(caption, new Color(0, .06f, .18f, .9f), new Vector2(0, -2));
-            status = Label(factory, root.transform, "触碰中央按钮，开启智慧参观之旅", 20,
-                FontStyle.Normal, new Color(.72f, .86f, 1f, 1), -356, -316);
+            status = BottomLabel(factory, root.transform, "轻触屏幕，开启智慧参观之旅", 24,
+                FontStyle.Bold, Color.white, 98, 145);
+            AddShadow(status, new Color(0, .08f, .22f, .88f), new Vector2(0, -2));
 
             homeFallbackButton = factory.TouchButton(root.transform, "进入讲解首页", false, Complete);
-            TouchUiFactory.Anchor(homeFallbackButton.GetComponent<RectTransform>(), .5f, .5f, .5f, .5f,
-                -170, -426, 170, -362);
+            TouchUiFactory.Anchor(homeFallbackButton.GetComponent<RectTransform>(), .5f, 0, .5f, 0,
+                -170, 27, 170, 91);
             homeFallbackButton.gameObject.SetActive(false);
+
+            transitionCover = factory.Image("Standby Page Transition", canvas, new Color(.0f, .035f, .14f, 0));
+            TouchUiFactory.Stretch(transitionCover.rectTransform);
+            transitionCover.raycastTarget = true;
+            transitionCover.gameObject.SetActive(false);
         }
 
         public void Configure(UiExperienceConfig config, Func<string, string> resolver)
@@ -123,21 +143,8 @@ namespace TG.Control.Touch.UI.Pages
             title.text = TextOf(config, "welcome.title", "欢迎莅临智慧展厅");
             subtitle.text = TextOf(config, "welcome.subtitle", "探索 · 体验 · 发现 · 共创未来");
 
-            var element = config.touchElements?.LastOrDefault(item => item != null && item.key == "welcome.background");
-            var url = element == null ? null : Resolve(element.assetUrl, resolver);
-            if (string.IsNullOrWhiteSpace(url)) url = Resolve(config.touchBackgroundUrl, resolver);
-            if (!string.Equals(backgroundUrl, url, StringComparison.OrdinalIgnoreCase))
-            {
-                backgroundUrl = url;
-                background.sprite = LoadDefaultBackground();
-                background.color = Color.white;
-                if (!string.IsNullOrWhiteSpace(url)) imageLoader.Load(background, url, success =>
-                {
-                    if (!success && string.Equals(backgroundUrl, url, StringComparison.OrdinalIgnoreCase))
-                        background.sprite = LoadDefaultBackground();
-                });
-            }
-
+            // The approved standby artwork is fixed. Server-configured images may still be used
+            // elsewhere, but cannot replace this page with the previous tunnel background.
             var logoElement = config.touchElements?.LastOrDefault(item => item != null && item.key == "welcome.logo");
             var logo = logoElement == null ? null : Resolve(logoElement.assetUrl, resolver);
             if (!string.Equals(logoUrl, logo, StringComparison.OrdinalIgnoreCase))
@@ -145,10 +152,14 @@ namespace TG.Control.Touch.UI.Pages
                 logoUrl = logo;
                 brandLogo.sprite = null;
                 brandLogo.gameObject.SetActive(false);
+                brandMarkText.gameObject.SetActive(true);
                 if (!string.IsNullOrWhiteSpace(logo)) imageLoader.Load(brandLogo, logo, success =>
                 {
                     if (string.Equals(logoUrl, logo, StringComparison.OrdinalIgnoreCase))
+                    {
                         brandLogo.gameObject.SetActive(success);
+                        brandMarkText.gameObject.SetActive(!success);
+                    }
                 });
             }
         }
@@ -158,20 +169,30 @@ namespace TG.Control.Touch.UI.Pages
             root.transform.SetAsLastSibling();
             root.SetActive(true);
             requesting = false;
+            completing = false;
             wakeButton.gameObject.SetActive(true);
             wakeButton.interactable = true;
+            wakeGlow.gameObject.SetActive(true);
+            wakeImage.rectTransform.localScale = Vector3.one;
             homeFallbackButton.gameObject.SetActive(false);
             caption.text = string.Empty;
-            status.text = "触碰中央按钮，开启智慧参观之旅";
+            status.text = "轻触屏幕，开启智慧参观之旅";
+            shownAt = Time.unscaledTime;
+            renderedSecond = -1;
+            headingGroup.alpha = 0;
             SetPulseVisible(true);
             StartAnimation();
+            StartTransition(FadeIntoStandby());
         }
 
         public void Hide()
         {
             StopAnimation();
+            StopTransition();
             requesting = false;
+            completing = false;
             root.SetActive(false);
+            transitionCover.gameObject.SetActive(false);
         }
 
         public void SetWelcomeStatus(WelcomePlaybackStatus value)
@@ -186,12 +207,11 @@ namespace TG.Control.Touch.UI.Pages
                 case WelcomePlaybackState.Requested:
                 case WelcomePlaybackState.Preparing:
                     wakeButton.interactable = false;
-                    wakeLabel.text = "正在准备";
-                    wakeHint.text = "连接欢迎语音";
                     status.text = string.IsNullOrWhiteSpace(value.message) ? "正在准备欢迎语音…" : value.message;
                     break;
                 case WelcomePlaybackState.Playing:
                     wakeButton.gameObject.SetActive(false);
+                    wakeGlow.gameObject.SetActive(false);
                     SetPulseVisible(false);
                     caption.text = FindCaption(value.captions, value.positionSeconds);
                     if (string.IsNullOrWhiteSpace(caption.text)) caption.text = "欢迎来到智慧展厅";
@@ -221,6 +241,7 @@ namespace TG.Control.Touch.UI.Pages
             if (!Visible) return;
             requesting = false;
             wakeButton.gameObject.SetActive(false);
+            wakeGlow.gameObject.SetActive(false);
             SetPulseVisible(false);
             caption.text = "欢迎语音暂时无法播放";
             status.text = string.IsNullOrWhiteSpace(message)
@@ -233,46 +254,57 @@ namespace TG.Control.Touch.UI.Pages
         {
             if (requesting) return;
             requesting = true;
+            pressFeedbackUntil = Time.unscaledTime + .20f;
             wakeButton.interactable = false;
-            wakeLabel.text = "正在连接";
-            wakeHint.text = "请稍候";
             status.text = "正在连接LED播放端，准备欢迎语音…";
             WelcomeRequested?.Invoke();
         }
 
         private void BuildTopBrand(TouchUiFactory factory)
         {
-            var mark = factory.Image("Welcome Brand Mark", root.transform, new Color(.18f, .65f, 1f, 1));
-            mark.sprite = GetCircleSprite();
-            TouchUiFactory.Anchor(mark.rectTransform, 0, 1, 0, 1, 42, -76, 90, -28);
+            var markGlow = factory.Image("Standby Brand Soft Halo", root.transform,
+                new Color(.13f, .77f, 1f, .46f));
+            markGlow.sprite = GetGlowSprite();
+            TouchUiFactory.Anchor(markGlow.rectTransform, 0, 1, 0, 1, 21, -96, 101, -16);
+            markGlow.raycastTarget = false;
+            var mark = factory.Image("Standby TG Brand Mark", root.transform, new Color(.06f, .53f, .98f, 1));
+            mark.sprite = GetButtonSprite();
+            TouchUiFactory.Anchor(mark.rectTransform, 0, 1, 0, 1, 31, -84, 89, -26);
             mark.raycastTarget = false;
-            var markText = factory.Label("Welcome Brand Mark Text", mark.transform, "TG", 16,
+            brandMarkText = factory.Label("Standby Brand Mark Text", mark.transform, "TG", 23,
                 FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
-            TouchUiFactory.Stretch(markText.rectTransform);
+            TouchUiFactory.Stretch(brandMarkText.rectTransform);
+            brandLogo = factory.Image("Standby Optional Brand Logo", mark.transform, Color.white);
+            TouchUiFactory.Stretch(brandLogo.rectTransform, 6, 6, -6, -6);
+            brandLogo.preserveAspect = true;
+            brandLogo.raycastTarget = false;
+            brandLogo.gameObject.SetActive(false);
             var systemName = factory.Label("Welcome System Name", root.transform, "展厅自动讲解系统", 25,
                 FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(systemName.rectTransform, 0, 1, .36f, 1, 104, -66, 0, -24);
+            TouchUiFactory.Anchor(systemName.rectTransform, 0, 1, 0, 1, 106, -65, 410, -26);
+            AddShadow(systemName, new Color(.0f, .10f, .28f, .62f), new Vector2(0, -1));
             var systemSubtitle = factory.Label("Welcome System Subtitle", root.transform, "智慧展厅 · 中控终端", 14,
-                FontStyle.Normal, new Color(.68f, .82f, .96f, 1), TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(systemSubtitle.rectTransform, 0, 1, .36f, 1, 104, -91, 0, -62);
-            clock = factory.Label("Welcome Local Clock", root.transform, string.Empty, 20,
+                FontStyle.Normal, new Color(.80f, .92f, 1f, 1), TextAnchor.MiddleLeft);
+            TouchUiFactory.Anchor(systemSubtitle.rectTransform, 0, 1, 0, 1, 106, -89, 402, -61);
+            clock = factory.Label("Welcome Local Clock", root.transform, string.Empty, 22,
                 FontStyle.Bold, Color.white, TextAnchor.MiddleRight);
-            TouchUiFactory.Anchor(clock.rectTransform, .70f, 1, 1, 1, 0, -70, -42, -24);
+            TouchUiFactory.Anchor(clock.rectTransform, 1, 1, 1, 1, -365, -75, -36, -31);
+            AddShadow(clock, new Color(.0f, .10f, .28f, .58f), new Vector2(0, -1));
         }
 
         private void BuildPulseRings(TouchUiFactory factory, TouchTheme theme)
         {
             for (var index = 0; index < 3; index++)
             {
-                var alpha = .22f - index * .045f;
+                var alpha = .34f - index * .075f;
                 var ring = factory.Image("Welcome Touch Pulse " + index, root.transform,
-                    new Color(theme.Primary.r, .72f, 1f, alpha));
-                ring.sprite = GetCircleSprite();
-                var radius = 122 + index * 34;
+                    new Color(.23f, .86f, 1f, alpha));
+                ring.sprite = GetRingSprite();
+                var radius = 101 + index * 11;
                 TouchUiFactory.Anchor(ring.rectTransform, .5f, .5f, .5f, .5f,
-                    -radius, -94 - radius, radius, -94 + radius);
+                    -radius, -295 - radius, radius, -295 + radius);
                 ring.raycastTarget = false;
-                pulseRings.Add(ring.rectTransform);
+                pulseRings.Add(ring);
             }
         }
 
@@ -290,17 +322,31 @@ namespace TG.Control.Touch.UI.Pages
 
         private void Complete()
         {
-            Hide();
-            Entered?.Invoke();
+            if (completing) return;
+            completing = true;
+            wakeButton.interactable = false;
+            StartTransition(FadeToHome());
         }
 
-        private static Text Label(TouchUiFactory factory, Transform parent, string text, int size,
+        private static Text TopLabel(TouchUiFactory factory, Transform parent, string text, int size,
+            FontStyle style, Color color, float top, float height)
+        {
+            var label = factory.Label("Welcome " + text, parent, text, size, style, color, TextAnchor.MiddleCenter);
+            TouchUiFactory.Anchor(label.rectTransform, .10f, 1, .90f, 1, 0, -top - height, 0, -top);
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = Math.Max(16, size - 16);
+            label.resizeTextMaxSize = size;
+            label.raycastTarget = false;
+            return label;
+        }
+
+        private static Text BottomLabel(TouchUiFactory factory, Transform parent, string text, int size,
             FontStyle style, Color color, float bottom, float top)
         {
             var label = factory.Label("Welcome " + text, parent, text, size, style, color, TextAnchor.MiddleCenter);
-            TouchUiFactory.Anchor(label.rectTransform, .10f, .5f, .90f, .5f, 0, bottom, 0, top);
+            TouchUiFactory.Anchor(label.rectTransform, .10f, 0, .90f, 0, 0, bottom, 0, top);
             label.resizeTextForBestFit = true;
-            label.resizeTextMinSize = Math.Max(16, size - 16);
+            label.resizeTextMinSize = Math.Max(16, size - 8);
             label.resizeTextMaxSize = size;
             label.raycastTarget = false;
             return label;
@@ -323,19 +369,77 @@ namespace TG.Control.Touch.UI.Pages
         {
             while (root.activeSelf)
             {
+                var elapsed = Time.unscaledTime - shownAt;
+                headingGroup.alpha = Mathf.Clamp01(elapsed / .75f);
+                var breath = 1f + Mathf.Sin(Time.unscaledTime * 1.7f) * .027f;
+                var pressed = Time.unscaledTime < pressFeedbackUntil ? .92f : 1f;
+                wakeImage.rectTransform.localScale = Vector3.one * breath * pressed;
+                wakeGlow.color = new Color(.11f, .72f, 1f,
+                    .45f + Mathf.Sin(Time.unscaledTime * 1.7f) * .10f);
                 for (var index = 0; index < pulseRings.Count; index++)
                 {
-                    var scale = 1f + Mathf.Sin(Time.unscaledTime * 1.3f - index * .7f) * .035f;
-                    pulseRings[index].localScale = new Vector3(scale, scale, 1);
+                    var phase = Time.unscaledTime * 1.35f - index * .65f;
+                    var scale = 1f + Mathf.Sin(phase) * .035f;
+                    pulseRings[index].rectTransform.localScale = Vector3.one * scale;
+                    pulseRings[index].color = new Color(.23f, .86f, 1f,
+                        (.32f - index * .07f) * (.82f + .18f * Mathf.Sin(phase)));
                 }
                 var now = DateTime.Now;
                 if (renderedSecond != now.Second)
                 {
                     renderedSecond = now.Second;
-                    clock.text = now.ToString("yyyy-MM-dd   HH:mm:ss");
+                    clock.text = now.ToString("yyyy-MM-dd HH:mm:ss");
                 }
                 yield return null;
             }
+        }
+
+        private void StartTransition(IEnumerator routine)
+        {
+            StopTransition();
+            transition = host.StartCoroutine(routine);
+        }
+
+        private void StopTransition()
+        {
+            if (transition == null) return;
+            host.StopCoroutine(transition);
+            transition = null;
+        }
+
+        private IEnumerator FadeIntoStandby()
+        {
+            transitionCover.transform.SetAsLastSibling();
+            transitionCover.gameObject.SetActive(true);
+            yield return FadeCover(1f, 0f, .40f);
+            transitionCover.gameObject.SetActive(false);
+            transition = null;
+        }
+
+        private IEnumerator FadeToHome()
+        {
+            transitionCover.transform.SetAsLastSibling();
+            transitionCover.gameObject.SetActive(true);
+            yield return FadeCover(0f, 1f, .30f);
+            StopAnimation();
+            root.SetActive(false);
+            requesting = false;
+            Entered?.Invoke();
+            yield return FadeCover(1f, 0f, .35f);
+            transitionCover.gameObject.SetActive(false);
+            completing = false;
+            transition = null;
+        }
+
+        private IEnumerator FadeCover(float start, float end, float seconds)
+        {
+            for (var elapsed = 0f; elapsed < seconds; elapsed += Time.unscaledDeltaTime)
+            {
+                var amount = Mathf.SmoothStep(start, end, Mathf.Clamp01(elapsed / seconds));
+                transitionCover.color = new Color(0f, .035f, .14f, amount);
+                yield return null;
+            }
+            transitionCover.color = new Color(0f, .035f, .14f, end);
         }
 
         private static void AddShadow(Graphic graphic, Color color, Vector2 distance)
@@ -348,42 +452,161 @@ namespace TG.Control.Touch.UI.Pages
         private static Sprite LoadDefaultBackground()
         {
             if (defaultBackgroundSprite != null) return defaultBackgroundSprite;
-            var texture = Resources.Load<Texture2D>("Touch/touch-technology-background");
-            if (texture == null) return null;
+            var texture = Resources.Load<Texture2D>("Touch/standby-clean-background");
+            if (texture == null)
+            {
+                Debug.LogError("Standby clean background is missing from Resources/Touch.");
+                return null;
+            }
             defaultBackgroundSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                 new Vector2(.5f, .5f), 100);
-            defaultBackgroundSprite.name = "TG Welcome Technology Background";
+            defaultBackgroundSprite.name = "TG Standby Clean Background";
             defaultBackgroundSprite.hideFlags = HideFlags.HideAndDontSave;
             return defaultBackgroundSprite;
         }
 
-        private static Sprite GetCircleSprite()
+        private static Sprite GetRingSprite()
         {
-            if (circleSprite != null) return circleSprite;
+            if (ringSprite != null) return ringSprite;
             const int size = 128;
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
             {
-                name = "TG Welcome Circle",
+                name = "TG Standby Soft Ring",
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
                 hideFlags = HideFlags.HideAndDontSave
             };
             var pixels = new Color[size * size];
             var center = (size - 1) * .5f;
-            var radius = center - 1;
             for (var y = 0; y < size; y++)
             for (var x = 0; x < size; x++)
             {
-                var distance = Vector2.Distance(new Vector2(x, y), new Vector2(center, center));
-                var alpha = Mathf.Clamp01(radius - distance + 1f);
+                var radius = Vector2.Distance(new Vector2(x, y), new Vector2(center, center)) / center;
+                var edge = Mathf.Exp(-Mathf.Pow((radius - .83f) / .035f, 2));
+                var halo = Mathf.Exp(-Mathf.Pow((radius - .83f) / .13f, 2)) * .23f;
+                var alpha = Mathf.Clamp01(edge + halo) * Mathf.Clamp01((1f - radius) * 16f);
                 pixels[y * size + x] = new Color(1, 1, 1, alpha);
             }
             texture.SetPixels(pixels);
             texture.Apply(false, true);
-            circleSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f));
-            circleSprite.name = "TG Welcome Circle";
-            circleSprite.hideFlags = HideFlags.HideAndDontSave;
-            return circleSprite;
+            ringSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f));
+            ringSprite.name = "TG Standby Soft Ring";
+            ringSprite.hideFlags = HideFlags.HideAndDontSave;
+            return ringSprite;
+        }
+
+        private static Sprite GetGlowSprite()
+        {
+            if (glowSprite != null) return glowSprite;
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "TG Standby Touch Glow",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            var pixels = new Color[size * size];
+            var center = (size - 1) * .5f;
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var radius = Vector2.Distance(new Vector2(x, y), new Vector2(center, center)) / center;
+                var alpha = Mathf.Pow(Mathf.Clamp01(1f - radius), 2) * .78f;
+                pixels[y * size + x] = new Color(1, 1, 1, alpha);
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            glowSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f));
+            glowSprite.name = "TG Standby Touch Glow";
+            glowSprite.hideFlags = HideFlags.HideAndDontSave;
+            return glowSprite;
+        }
+
+        private static Sprite GetButtonSprite()
+        {
+            if (buttonSprite != null) return buttonSprite;
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "TG Standby Touch Button",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            var pixels = new Color[size * size];
+            var center = (size - 1) * .5f;
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var radius = Vector2.Distance(new Vector2(x, y), new Vector2(center, center)) / center;
+                var color = Color.Lerp(new Color(.13f, .63f, 1f), new Color(.015f, .25f, .80f),
+                    Mathf.Clamp01(radius * radius));
+                var rim = Mathf.Exp(-Mathf.Pow((radius - .91f) / .025f, 2));
+                color = Color.Lerp(color, new Color(.37f, .91f, 1f), rim * .85f);
+                color.a = Mathf.Clamp01((.99f - radius) * 45f);
+                pixels[y * size + x] = color;
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            buttonSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f));
+            buttonSprite.name = "TG Standby Touch Button";
+            buttonSprite.hideFlags = HideFlags.HideAndDontSave;
+            return buttonSprite;
+        }
+
+        private static Sprite GetHandSprite()
+        {
+            if (handSprite != null) return handSprite;
+            const int size = 128;
+            var outline = new[]
+            {
+                new Vector2(46, 12), new Vector2(77, 12), new Vector2(88, 20),
+                new Vector2(95, 36), new Vector2(98, 56), new Vector2(95, 65),
+                new Vector2(90, 69), new Vector2(85, 67), new Vector2(81, 72),
+                new Vector2(76, 73), new Vector2(71, 69), new Vector2(71, 97),
+                new Vector2(68, 104), new Vector2(61, 106), new Vector2(55, 102),
+                new Vector2(52, 96), new Vector2(52, 53), new Vector2(43, 63),
+                new Vector2(37, 66), new Vector2(31, 63), new Vector2(29, 57),
+                new Vector2(31, 49), new Vector2(39, 36), new Vector2(43, 20)
+            };
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "TG White Touch Gesture",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            var pixels = new Color[size * size];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var coverage = 0;
+                for (var sampleY = 0; sampleY < 2; sampleY++)
+                for (var sampleX = 0; sampleX < 2; sampleX++)
+                    if (InsidePolygon(new Vector2(x + .25f + sampleX * .5f,
+                            y + .25f + sampleY * .5f), outline)) coverage++;
+                pixels[y * size + x] = new Color(1, 1, 1, coverage * .25f);
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            handSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f));
+            handSprite.name = "TG White Touch Gesture";
+            handSprite.hideFlags = HideFlags.HideAndDontSave;
+            return handSprite;
+        }
+
+        private static bool InsidePolygon(Vector2 point, Vector2[] vertices)
+        {
+            var inside = false;
+            for (int index = 0, previous = vertices.Length - 1; index < vertices.Length; previous = index++)
+            {
+                var a = vertices[index];
+                var b = vertices[previous];
+                if ((a.y > point.y) == (b.y > point.y)) continue;
+                if (point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+            }
+            return inside;
         }
 
         private static string FindCaption(WelcomeCaptionCue[] cues, double position) => cues == null
