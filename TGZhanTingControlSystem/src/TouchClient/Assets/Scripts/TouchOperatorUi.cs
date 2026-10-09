@@ -99,9 +99,15 @@ namespace TG.Control.Touch
             appShell?.Tick(DateTime.Now);
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.touchCount > 0)
                 lastInteractionAt = Time.realtimeSinceStartup;
+            var welcomeState = facade == null || facade.CurrentWelcome == null
+                ? WelcomePlaybackState.Standby
+                : facade.CurrentWelcome.state;
+            var welcomeBusy = welcomeState == WelcomePlaybackState.Requested ||
+                              welcomeState == WelcomePlaybackState.Preparing ||
+                              welcomeState == WelcomePlaybackState.Playing;
             if (!welcomeEnabled || welcomeExperiencePage == null || welcomeExperiencePage.Visible || facade == null ||
                 !connected || facade.HasActiveSession || routeDraft.IsDirty || pageState == PageState.RouteEditor ||
-                facade.CurrentWelcome?.state is WelcomePlaybackState.Requested or WelcomePlaybackState.Preparing or WelcomePlaybackState.Playing) return;
+                welcomeBusy) return;
             if (Time.realtimeSinceStartup - lastInteractionAt >= idleTimeoutSeconds)
                 welcomeExperiencePage.Show();
         }

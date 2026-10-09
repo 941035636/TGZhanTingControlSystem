@@ -31,7 +31,8 @@ namespace TG.Control.LedPlayer
         }
         private void HandleFormal(PlaybackCommand command)
         {
-            if (command.action is PlaybackAction.Prepare or PlaybackAction.PlayVideo or PlaybackAction.PlayNarration) Cancel(true);
+            if (command.action == PlaybackAction.Prepare || command.action == PlaybackAction.PlayVideo ||
+                command.action == PlaybackAction.PlayNarration) Cancel(true);
         }
         private void HandleWelcome(WelcomePlaybackCommand command)
         {
