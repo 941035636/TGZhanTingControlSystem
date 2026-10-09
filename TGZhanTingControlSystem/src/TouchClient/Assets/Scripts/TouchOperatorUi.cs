@@ -109,7 +109,7 @@ namespace TG.Control.Touch
                 !connected || facade.HasActiveSession || routeDraft.IsDirty || pageState == PageState.RouteEditor ||
                 welcomeBusy) return;
             if (Time.realtimeSinceStartup - lastInteractionAt >= idleTimeoutSeconds)
-                welcomeExperiencePage.Show();
+                ShowWelcomeExperience();
         }
 
         private void OnDestroy()
@@ -247,8 +247,8 @@ namespace TG.Control.Touch
             welcomeExperiencePage.Entered += OnWelcomeEntered;
             welcomeExperiencePage.WelcomeRequested += OnWelcomeRequested;
             lastInteractionAt = Time.realtimeSinceStartup;
-            welcomeExperiencePage.Show();
             ShowPage(PageState.Home);
+            ShowWelcomeExperience();
         }
 
         private static void ExitApplication() => Application.Quit(OperatorExitCode);
@@ -361,10 +361,12 @@ namespace TG.Control.Touch
         {
             navigateToPlaybackWhenSessionArrives = false;
             status = "操作失败：" + value;
+            if (welcomeExperiencePage != null && welcomeExperiencePage.Visible && welcomeExperiencePage.IsRequestPending)
+                welcomeExperiencePage.ShowRequestFailure(value);
             receptionHomePage?.ShowError(status);
             playbackPageView?.ShowError(value);
-            if (!facade.HasActiveSession) playbackDisplay.ClearPending();
-            if (startRequestPending && !facade.HasActiveSession)
+            if (facade == null || !facade.HasActiveSession) playbackDisplay.ClearPending();
+            if (startRequestPending && (facade == null || !facade.HasActiveSession))
             {
                 startRequestPending = false;
                 ShowPage(PageState.Home);
@@ -453,8 +455,16 @@ namespace TG.Control.Touch
         {
             if (!string.IsNullOrWhiteSpace(facade?.CurrentWelcome?.requestId)) facade.AcknowledgeWelcome(facade.CurrentWelcome.requestId);
             lastInteractionAt = Time.realtimeSinceStartup;
+            appShell?.SetVisible(true);
             ShowPage(PageState.Home);
             Refresh();
+        }
+
+        private void ShowWelcomeExperience()
+        {
+            if (!welcomeEnabled || welcomeExperiencePage == null) return;
+            appShell?.SetVisible(false);
+            welcomeExperiencePage.Show();
         }
 
         private void OnWelcomeRequested()
@@ -726,7 +736,11 @@ namespace TG.Control.Touch
             welcomeEnabled = layout == null || layout.touchWelcomeEnabled;
             idleTimeoutSeconds = Mathf.Clamp(layout?.touchIdleTimeoutSeconds ?? 180, 30, 3600);
             welcomeExperiencePage?.Configure(config, presenter == null ? (Func<string, string>)null : presenter.NormalizeAssetUrl);
-            if (!welcomeEnabled) welcomeExperiencePage?.Hide();
+            if (!welcomeEnabled)
+            {
+                welcomeExperiencePage?.Hide();
+                appShell?.SetVisible(true);
+            }
             ShowPage(pageState);
             Refresh();
         }

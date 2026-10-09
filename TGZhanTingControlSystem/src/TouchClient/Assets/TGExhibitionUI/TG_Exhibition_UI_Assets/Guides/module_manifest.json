@@ -1,0 +1,158 @@
+[
+  {
+    "index": 1,
+    "name": "一路向新",
+    "composite": "ModuleCards/Extracted/Module_01_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_01_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      225,
+      226,
+      574,
+      414
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 2,
+    "name": "历史沿革",
+    "composite": "ModuleCards/Extracted/Module_02_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_02_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      582,
+      226,
+      922,
+      414
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 3,
+    "name": "不曾忘却的记忆",
+    "composite": "ModuleCards/Extracted/Module_03_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_03_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      932,
+      226,
+      1275,
+      414
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 4,
+    "name": "子分公司",
+    "composite": "ModuleCards/Extracted/Module_04_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_04_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      1285,
+      226,
+      1629,
+      414
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 5,
+    "name": "领导关怀",
+    "composite": "ModuleCards/Extracted/Module_05_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_05_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      225,
+      424,
+      574,
+      610
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 6,
+    "name": "企业荣誉",
+    "composite": "ModuleCards/Extracted/Module_06_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_06_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      582,
+      424,
+      922,
+      610
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 7,
+    "name": "科技创新",
+    "composite": "ModuleCards/Extracted/Module_07_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_07_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      932,
+      424,
+      1275,
+      610
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 8,
+    "name": "产品体系",
+    "composite": "ModuleCards/Extracted/Module_08_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_08_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      1285,
+      424,
+      1629,
+      610
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 9,
+    "name": "数智领航",
+    "composite": "ModuleCards/Extracted/Module_09_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_09_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      225,
+      621,
+      574,
+      807
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 10,
+    "name": "绿色低碳",
+    "composite": "ModuleCards/Extracted/Module_10_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_10_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      582,
+      621,
+      922,
+      807
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 11,
+    "name": "敢当石特",
+    "composite": "ModuleCards/Extracted/Module_11_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_11_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      932,
+      621,
+      1275,
+      807
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  },
+  {
+    "index": 12,
+    "name": "党建赋能",
+    "composite": "ModuleCards/Extracted/Module_12_Composite.png",
+    "photo_region": "ModuleCards/PhotoRegions/Module_12_PhotoRegion_REFERENCE.png",
+    "source_bounds": [
+      1285,
+      621,
+      1629,
+      807
+    ],
+    "limitations": "Flattened composite contains text/gradients/icons; photo region may contain module number; replace with clean photos later."
+  }
+]

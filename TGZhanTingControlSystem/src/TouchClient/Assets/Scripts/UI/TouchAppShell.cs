@@ -15,6 +15,7 @@ namespace TG.Control.Touch.UI
     {
         private readonly TouchUiFactory factory;
         private readonly TouchTheme theme;
+        private RectTransform shellRoot;
         private TopBar topBar;
         private SideNavigation navigation;
         private ContentHost contentHost;
@@ -26,6 +27,7 @@ namespace TG.Control.Touch.UI
 
         public Image Background => background;
         public RectTransform ContentRoot => contentHost.ContentRoot;
+        public bool Visible => shellRoot != null && shellRoot.gameObject.activeSelf;
         public event Action<TouchShellSection> NavigationRequested;
         public event Action ExitConfirmed;
 
@@ -37,42 +39,55 @@ namespace TG.Control.Touch.UI
 
         public void Build(Transform canvas)
         {
-            background = factory.Image("App Background", canvas, theme.AppBackground);
+            shellRoot = factory.Rect("Touch App Shell", canvas);
+            TouchUiFactory.Stretch(shellRoot);
+
+            background = factory.Image("App Background", shellRoot, theme.AppBackground);
             TouchUiFactory.Stretch(background.rectTransform);
             background.raycastTarget = false;
 
-            var veil = factory.Image("App Background Veil", canvas, theme.BackdropVeil);
+            var veil = factory.Image("App Background Veil", shellRoot, theme.BackdropVeil);
             TouchUiFactory.Stretch(veil.rectTransform);
             veil.raycastTarget = false;
-            ambientAccent = factory.Image("Ambient Accent", canvas,
+            ambientAccent = factory.Image("Ambient Accent", shellRoot,
                 new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .035f));
             TouchUiFactory.Anchor(ambientAccent.rectTransform, 1, 1, 1, 1, -520, -4, 0, 0);
             ambientAccent.raycastTarget = false;
 
             // A quiet white shell deliberately leaves visual priority to the exhibition content.
-            chromeHeader = factory.Image("Shell Chrome Header", canvas, theme.HeaderBackground);
+            chromeHeader = factory.Image("Shell Chrome Header", shellRoot, theme.HeaderBackground);
             TouchUiFactory.Anchor(chromeHeader.rectTransform, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
             chromeHeader.raycastTarget = false;
-            chromeNavigation = factory.Image("Shell Chrome Navigation", canvas, theme.NavigationBackground);
+            chromeNavigation = factory.Image("Shell Chrome Navigation", shellRoot, theme.NavigationBackground);
             TouchUiFactory.Anchor(chromeNavigation.rectTransform, 0, 0, 0, 1, 0, 0,
                 theme.SideNavigationWidth, -theme.TopBarHeight);
             chromeNavigation.raycastTarget = false;
 
-            topBar = new TopBar(factory, theme, canvas);
+            topBar = new TopBar(factory, theme, shellRoot);
             TouchUiFactory.Anchor(topBar.Root, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
 
-            navigation = new SideNavigation(factory, theme, canvas);
+            navigation = new SideNavigation(factory, theme, shellRoot);
             TouchUiFactory.Anchor(navigation.Root, 0, 0, 0, 1, 0, 0,
                 theme.SideNavigationWidth, -theme.TopBarHeight);
             navigation.NavigateRequested += section => NavigationRequested?.Invoke(section);
 
-            contentHost = new ContentHost(factory, theme, canvas);
+            contentHost = new ContentHost(factory, theme, shellRoot);
             TouchUiFactory.Anchor(contentHost.Root, 0, 0, 1, 1,
                 theme.SideNavigationWidth + theme.PagePadding, theme.PagePadding,
                 -theme.PagePadding, -theme.TopBarHeight - theme.PagePadding);
 
             topBar.ExitRequested += ShowExitConfirmation;
-            BuildExitConfirmation(canvas);
+            BuildExitConfirmation(shellRoot);
+        }
+
+        /// <summary>
+        /// Welcome/standby is a mutually exclusive presentation mode. Deactivating the complete shell
+        /// prevents its pages from rendering through a transparent welcome asset and also removes every
+        /// underlying navigation control from the raycast hierarchy.
+        /// </summary>
+        public void SetVisible(bool visible)
+        {
+            if (shellRoot != null) shellRoot.gameObject.SetActive(visible);
         }
 
         public void SetBranding(string title, string subtitle) => topBar.SetBranding(title, subtitle);

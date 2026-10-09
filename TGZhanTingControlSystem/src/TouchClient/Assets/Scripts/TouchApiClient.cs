@@ -53,7 +53,7 @@ namespace TG.Control.Touch
             StartCoroutine(GetJson("/api/readiness", success, failure));
 
         public void RequestWelcome(Action<WelcomeRequestResponse> success, Action<string> failure) =>
-            StartCoroutine(PostJson<object, WelcomeRequestResponse>("/api/welcome/request", new EmptyRequest(), success, failure));
+            StartCoroutine(PostWelcomeRequest(success, failure));
 
         public void GetWelcomeStatus(Action<WelcomePlaybackStatus> success, Action<string> failure) =>
             StartCoroutine(GetJson("/api/welcome/status", success, failure));
@@ -180,6 +180,37 @@ namespace TG.Control.Touch
                         : JsonUtility.FromJson<TResponse>(request.downloadHandler.text));
                 }
                 else failure?.Invoke(request.downloadHandler.text + " " + request.error);
+            }
+        }
+
+        private IEnumerator PostWelcomeRequest(Action<WelcomeRequestResponse> success, Action<string> failure)
+        {
+            var bytes = Encoding.UTF8.GetBytes(JsonUtility.ToJson(new EmptyRequest()));
+            using (var request = new UnityWebRequest(ServerBaseUrl + "/api/welcome/request", UnityWebRequest.kHttpVerbPOST))
+            {
+                request.uploadHandler = new UploadHandlerRaw(bytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                ApplyTerminalHeader(request);
+                request.timeout = 15;
+                yield return request.SendWebRequest();
+
+                var responseBody = request.downloadHandler?.text;
+                // The welcome endpoint intentionally uses 409 for a rejected request (LED offline,
+                // missing welcome audio, active narration, etc.). It still returns a typed status
+                // that the welcome page must consume so the operator is never left in a busy state.
+                if ((request.result == UnityWebRequest.Result.Success || request.responseCode == 409) &&
+                    !string.IsNullOrWhiteSpace(responseBody))
+                {
+                    var response = JsonUtility.FromJson<WelcomeRequestResponse>(responseBody);
+                    if (response?.status != null)
+                    {
+                        success?.Invoke(response);
+                        yield break;
+                    }
+                }
+
+                failure?.Invoke(string.IsNullOrWhiteSpace(responseBody) ? request.error : responseBody);
             }
         }
 
