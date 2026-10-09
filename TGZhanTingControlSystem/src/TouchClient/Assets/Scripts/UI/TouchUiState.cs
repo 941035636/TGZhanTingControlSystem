@@ -10,6 +10,7 @@ namespace TG.Control.Touch.UI
         public PlaybackSessionStatus Session { get; internal set; }
         public SystemReadiness Readiness { get; internal set; }
         public UiExperienceConfig UiExperience { get; internal set; }
+        public WelcomePlaybackStatus Welcome { get; internal set; }
         public NarrationRoute[] Routes { get; internal set; } = Array.Empty<NarrationRoute>();
         public bool Connected { get; internal set; }
         public bool HasActiveSession { get; internal set; }

@@ -52,6 +52,15 @@ namespace TG.Control.Touch
         public void GetReadiness(Action<SystemReadiness> success, Action<string> failure) =>
             StartCoroutine(GetJson("/api/readiness", success, failure));
 
+        public void RequestWelcome(Action<WelcomeRequestResponse> success, Action<string> failure) =>
+            StartCoroutine(PostJson<object, WelcomeRequestResponse>("/api/welcome/request", new EmptyRequest(), success, failure));
+
+        public void GetWelcomeStatus(Action<WelcomePlaybackStatus> success, Action<string> failure) =>
+            StartCoroutine(GetJson("/api/welcome/status", success, failure));
+
+        public void AcknowledgeWelcome(string requestId) =>
+            StartCoroutine(PostJson<object, EmptyResponse>("/api/welcome/acknowledge?requestId=" + UnityWebRequest.EscapeURL(requestId ?? string.Empty), new EmptyRequest(), null, null));
+
         public void GetActiveNarrationSession(Action<PlaybackSessionLookup> success, Action<string> failure) =>
             StartCoroutine(GetJson("/api/playback/active", success, failure));
 
@@ -213,5 +222,6 @@ namespace TG.Control.Touch
         };
 
         [Serializable] private sealed class EmptyResponse { }
+        [Serializable] private sealed class EmptyRequest { }
     }
 }

@@ -43,7 +43,8 @@ public static class UiExperiencePolicy
                 legacyTouchLayout || layout.TouchWelcomeEnabled,
                 legacyTouchLayout ? 180 : Math.Clamp(layout.TouchIdleTimeoutSeconds, 30, 3600)),
             TouchElements = NormalizeElements(request.TouchElements, TouchKeys),
-            LedElements = NormalizeElements(request.LedElements, LedKeys)
+            LedElements = NormalizeElements(request.LedElements, LedKeys),
+            Welcome = NormalizeWelcome(request.Welcome)
         };
     }
 
@@ -52,6 +53,16 @@ public static class UiExperiencePolicy
         var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         ValidateElements(config.TouchElements, TouchKeys, "touchElements", errors);
         ValidateElements(config.LedElements, LedKeys, "ledElements", errors);
+        var captions = config.Welcome?.Captions;
+        if (captions is not null)
+        {
+            for (var index = 0; index < captions.Count; index++)
+            {
+                var cue = captions[index];
+                if (cue is null || cue.StartSeconds < 0 || cue.EndSeconds < cue.StartSeconds || string.IsNullOrWhiteSpace(cue.Text))
+                    errors[$"welcome.captions[{index}]"] = ["字幕时间轴必须包含非空文本，且结束时间不能早于开始时间。"];
+            }
+        }
         return errors;
     }
 
@@ -100,4 +111,14 @@ public static class UiExperiencePolicy
 
     private static string? CleanText(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static string? NormalizeColor(string? value) => !string.IsNullOrWhiteSpace(value) && HexColor.IsMatch(value) ? value : null;
+
+    private static WelcomeExperienceSettings NormalizeWelcome(WelcomeExperienceSettings? value)
+    {
+        var captions = value?.Captions?
+            .Where(cue => cue is not null && cue.StartSeconds >= 0 && cue.EndSeconds >= cue.StartSeconds && !string.IsNullOrWhiteSpace(cue.Text))
+            .OrderBy(cue => cue.StartSeconds)
+            .Select(cue => cue with { Text = cue.Text.Trim() })
+            .ToArray();
+        return new WelcomeExperienceSettings(value?.AudioEnabled ?? true, captions);
+    }
 }

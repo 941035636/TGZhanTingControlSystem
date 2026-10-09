@@ -15,6 +15,7 @@ namespace TG.Control.Touch
         public SystemReadiness CurrentReadiness { get; private set; }
         public string ActiveSessionId { get; private set; }
         public bool HasActiveSession => !string.IsNullOrWhiteSpace(ActiveSessionId);
+        public WelcomePlaybackStatus CurrentWelcome { get; private set; }
         public event Action<PublishedContent> ContentLoaded;
         public event Action<string> Error;
         public event Action<string> Status;
@@ -22,6 +23,7 @@ namespace TG.Control.Touch
         public event Action<NarrationRoute[]> RoutesLoaded;
         public event Action<NarrationRoute> RouteSaved;
         public event Action<SystemReadiness> ReadinessChanged;
+        public event Action<WelcomePlaybackStatus> WelcomeChanged;
         private int sessionMonitorGeneration;
         private bool contentRefreshPending;
         private bool routesRefreshPending;
@@ -35,6 +37,7 @@ namespace TG.Control.Touch
             StartCoroutine(CatalogRefreshLoop());
             StartCoroutine(ReadinessLoop());
             StartCoroutine(RestoreActiveSession());
+            StartCoroutine(WelcomeMonitorLoop());
         }
 
         public void RefreshContent() => RequestContent(true);
@@ -111,6 +114,24 @@ namespace TG.Control.Touch
         }
 
         public void StartAll() => StartModules(CurrentContent?.modules.Where(module => module.enabled && module.nodes != null && module.nodes.Length > 0).OrderBy(module => module.order).Select(module => module.id).ToArray());
+
+        public void RequestWelcome()
+        {
+            if (HasActiveSession) { Error?.Invoke("当前正在进行正式讲解，不能播放欢迎语音。"); return; }
+            apiClient.RequestWelcome(result =>
+            {
+                CurrentWelcome = result.status;
+                WelcomeChanged?.Invoke(CurrentWelcome);
+                if (!result.accepted) Error?.Invoke(CurrentWelcome?.message ?? "欢迎流程暂不可用。");
+            }, message => Error?.Invoke("欢迎流程启动失败：" + message));
+        }
+
+        public void AcknowledgeWelcome(string requestId)
+        {
+            apiClient.AcknowledgeWelcome(requestId);
+            CurrentWelcome = null;
+            WelcomeChanged?.Invoke(null);
+        }
 
         public void StartModules(string[] moduleIds)
         {
@@ -252,6 +273,17 @@ namespace TG.Control.Touch
                 if (!apiClient.IsConnected) continue;
                 RequestContent(false);
                 RequestRoutes(false);
+            }
+        }
+
+        private IEnumerator WelcomeMonitorLoop()
+        {
+            while (enabled)
+            {
+                var complete = false;
+                apiClient.GetWelcomeStatus(value => { CurrentWelcome = value; WelcomeChanged?.Invoke(value); complete = true; }, _ => complete = true);
+                while (!complete && enabled) yield return null;
+                yield return new WaitForSecondsRealtime(0.5f);
             }
         }
 

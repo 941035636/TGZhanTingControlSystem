@@ -31,12 +31,15 @@ namespace TG.Control.LedPlayer
             narrationAudio.loop = false;
             narrationAudio.spatialBlend = 0f;
             var controller = root.AddComponent<LedPlaybackController>();
+            var welcomeController = root.AddComponent<LedWelcomePlaybackController>();
             var overlay = root.AddComponent<LedStatusOverlay>();
             CreateVideoCanvas(root.transform, mediaPlayer);
             SetReference(adapter, "mediaPlayer", mediaPlayer);
             SetReference(controller, "apiClient", api);
             SetReference(controller, "playbackAdapterComponent", adapter);
             SetReference(controller, "narrationAudioSource", narrationAudio);
+            SetReference(welcomeController, "apiClient", api);
+            SetReference(welcomeController, "audioSource", narrationAudio);
             SetReference(overlay, "apiClient", api);
             SetReference(overlay, "playbackController", controller);
             foreach (var camera in UnityEngine.Object.FindObjectsOfType<Camera>())

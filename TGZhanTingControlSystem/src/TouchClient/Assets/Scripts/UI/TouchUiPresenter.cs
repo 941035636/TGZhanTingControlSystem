@@ -21,6 +21,7 @@ namespace TG.Control.Touch.UI
         public event Action<NarrationRoute[]> RoutesLoaded;
         public event Action<NarrationRoute> RouteSaved;
         public event Action<SystemReadiness> ReadinessChanged;
+        public event Action<WelcomePlaybackStatus> WelcomeChanged;
         public event Action<UiExperienceConfig> UiExperienceChanged;
         public event Action<string> UiExperienceLoadFailed;
         public event Action<string> Error;
@@ -50,6 +51,7 @@ namespace TG.Control.Touch.UI
             facade.RoutesLoaded += HandleRoutesLoaded;
             facade.RouteSaved += HandleRouteSaved;
             facade.ReadinessChanged += HandleReadinessChanged;
+            facade.WelcomeChanged += HandleWelcomeChanged;
             facade.Error += HandleError;
         }
 
@@ -64,6 +66,7 @@ namespace TG.Control.Touch.UI
             facade.RoutesLoaded -= HandleRoutesLoaded;
             facade.RouteSaved -= HandleRouteSaved;
             facade.ReadinessChanged -= HandleReadinessChanged;
+            facade.WelcomeChanged -= HandleWelcomeChanged;
             facade.Error -= HandleError;
         }
 
@@ -84,6 +87,7 @@ namespace TG.Control.Touch.UI
         private void HandleRoutesLoaded(NarrationRoute[] value) { State.Routes = value ?? Array.Empty<NarrationRoute>(); RoutesLoaded?.Invoke(State.Routes); }
         private void HandleRouteSaved(NarrationRoute value) { RouteSaved?.Invoke(value); }
         private void HandleReadinessChanged(SystemReadiness value) { State.Readiness = value; ReadinessChanged?.Invoke(value); }
+        private void HandleWelcomeChanged(WelcomePlaybackStatus value) { State.Welcome = value; WelcomeChanged?.Invoke(value); }
         private void HandleError(string value)
         {
             State.Status = "操作失败：" + value;

@@ -29,6 +29,7 @@ builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection(Ter
 builder.Services.AddSingleton<IContentRepository, JsonContentRepository>();
 builder.Services.AddSingleton<ICommandBroker, CommandBroker>();
 builder.Services.AddSingleton<PlaybackCoordinator>();
+builder.Services.AddSingleton<WelcomeCoordinator>();
 builder.Services.AddSingleton<ITtsService, UnconfiguredTtsService>();
 if (builder.Environment.IsDevelopment() &&
     builder.Configuration.GetValue<bool>($"{TtsProductionOptions.SectionName}:EnableDeterministicTestProvider"))
@@ -306,6 +307,13 @@ app.MapGet("/api/commands/next", async (string clientId, HttpRequest request, IC
     var command = await broker.WaitAsync(clientId, TimeSpan.FromSeconds(options.Value.LongPollSeconds), ct);
     return command is null ? Results.NoContent() : Results.Ok(command);
 });
+app.MapGet("/api/welcome/commands/next", async (string clientId, HttpRequest request, ICommandBroker broker,
+    IOptions<PlaybackOptions> options, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
+{
+    if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
+    var command = await broker.WaitWelcomeAsync(clientId, TimeSpan.FromSeconds(options.Value.LongPollSeconds), ct);
+    return command is null ? Results.NoContent() : Results.Ok(command);
+});
 app.MapGet("/api/clients/status", (HttpRequest request, AdminSessionStore sessions, ICommandBroker broker, IOptions<PlaybackOptions> options) =>
     sessions.TryValidate(request, out _)
         ? Results.Ok(broker.GetClientStatuses(TimeSpan.FromSeconds(Math.Max(10, options.Value.LongPollSeconds * 2 + 5))))
@@ -334,12 +342,39 @@ app.MapGet("/api/readiness", async (HttpRequest request, AdminSessionStore sessi
         led?.ContentVersion ?? 0, message, DateTimeOffset.UtcNow));
 });
 app.MapPost("/api/playback/start", async (HttpRequest httpRequest, StartNarrationRequest request,
-    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, WelcomeCoordinator welcome, CancellationToken ct) =>
 {
     if (!HasOperatorAccess(httpRequest, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
+    if (welcome.IsProtectingFormalPlayback)
+        return Results.Conflict(new { message = "欢迎语音正在进行，请等待欢迎流程完成后再开始讲解。" });
     try { return Results.Ok(await coordinator.StartAsync(request, ct)); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
     catch (KeyNotFoundException exception) { return Results.BadRequest(new { message = exception.Message }); }
+});
+app.MapPost("/api/welcome/request", async (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
+    WelcomeCoordinator coordinator, CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
+    var result = await coordinator.RequestAsync(ct);
+    return result.Accepted ? Results.Ok(result) : Results.Conflict(result);
+});
+app.MapGet("/api/welcome/status", (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
+    WelcomeCoordinator coordinator) =>
+    HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)
+        ? Results.Ok(coordinator.GetStatus()) : AuthenticationFailure(authenticated));
+app.MapPost("/api/welcome/acknowledge", (HttpRequest request, string? requestId, AdminSessionStore sessions,
+    IOptions<TerminalOptions> terminal, WelcomeCoordinator coordinator) =>
+{
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
+    coordinator.Acknowledge(requestId);
+    return Results.NoContent();
+});
+app.MapPost("/api/welcome/status", async (HttpRequest request, WelcomePlaybackStatusReport report,
+    IOptions<TerminalOptions> terminal, WelcomeCoordinator coordinator, CancellationToken ct) =>
+{
+    if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
+    await coordinator.ReportAsync(report, ct);
+    return Results.Accepted();
 });
 app.MapPost("/api/playback/control", async (HttpRequest httpRequest, ControlNarrationRequest request,
     AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, CancellationToken ct) =>

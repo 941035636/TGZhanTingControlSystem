@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace TG.Control.UnityContracts
 {
@@ -244,6 +244,7 @@ namespace TG.Control.UnityContracts
         public UiExperienceLayout layout;
         public UiElementOverride[] touchElements;
         public UiElementOverride[] ledElements;
+        public WelcomeExperienceSettings welcome;
     }
 
     [Serializable]
@@ -272,5 +273,77 @@ namespace TG.Control.UnityContracts
         public string assetSha256;
         public long assetSizeBytes;
         public string assetMediaType;
+    }
+
+    [Serializable]
+    public sealed class WelcomeExperienceSettings
+    {
+        public bool audioEnabled = true;
+        public WelcomeCaptionCue[] captions;
+    }
+
+    [Serializable]
+    public sealed class WelcomeCaptionCue
+    {
+        public double startSeconds;
+        public double endSeconds;
+        public string text;
+    }
+
+    public enum WelcomePlaybackState { Standby, Requested, Preparing, Playing, Completed, Failed }
+    public enum WelcomePlaybackAction { Prepare, Play, Stop }
+
+    [Serializable]
+    public sealed class WelcomeAudioAsset
+    {
+        public string assetId;
+        public string url;
+        public string sha256;
+        public long sizeBytes;
+        public string mediaType;
+        public double durationSeconds;
+    }
+
+    [Serializable]
+    public sealed class WelcomePlaybackCommand
+    {
+        public long sequence;
+        public string commandId;
+        public string requestId;
+        public WelcomePlaybackAction action;
+        public WelcomeAudioAsset audio;
+        public string executeAtUtc;
+    }
+
+    [Serializable]
+    public sealed class WelcomePlaybackStatusReport
+    {
+        public string clientId;
+        public string commandId;
+        public string requestId;
+        public WelcomePlaybackState state;
+        public double positionSeconds;
+        public double progress;
+        public string error;
+        public string reportedAtUtc;
+    }
+
+    [Serializable]
+    public sealed class WelcomePlaybackStatus
+    {
+        public string requestId;
+        public WelcomePlaybackState state;
+        public double positionSeconds;
+        public double progress;
+        public string message;
+        public WelcomeCaptionCue[] captions;
+        public string updatedAtUtc;
+    }
+
+    [Serializable]
+    public sealed class WelcomeRequestResponse
+    {
+        public WelcomePlaybackStatus status;
+        public bool accepted;
     }
 }

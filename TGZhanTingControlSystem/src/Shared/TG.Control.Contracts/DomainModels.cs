@@ -1,4 +1,4 @@
-namespace TG.Control.Contracts;
+﻿namespace TG.Control.Contracts;
 
 public enum AssetKind
 {
@@ -7,7 +7,6 @@ public enum AssetKind
     Animation,
     NarrationAudio
 }
-
 public enum FailurePolicy
 {
     Skip,
@@ -146,4 +145,5 @@ public sealed record UiExperienceConfig(
     public UiExperienceLayout? Layout { get; init; }
     public IReadOnlyList<UiElementOverride>? TouchElements { get; init; }
     public IReadOnlyList<UiElementOverride>? LedElements { get; init; }
+    public WelcomeExperienceSettings? Welcome { get; init; }
 }

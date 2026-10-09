@@ -17,6 +17,7 @@ namespace TG.Control.LedPlayer
         [SerializeField] private int assetDownloadAttempts = 3;
         [SerializeField] private float assetRetryDelaySeconds = 2f;
         public event Action<PlaybackCommand> CommandReceived;
+        public event Action<WelcomePlaybackCommand> WelcomeCommandReceived;
         public event Action<bool> ConnectionChanged;
         public event Action<ContentSyncProgress> ContentSyncChanged;
         public event Action<UiExperienceConfig> UiExperienceChanged;
@@ -41,6 +42,7 @@ namespace TG.Control.LedPlayer
         {
             running = true;
             StartCoroutine(PollLoop());
+            StartCoroutine(WelcomePollLoop());
             StartCoroutine(ContentSyncLoop());
             StartCoroutine(UiExperienceLoop());
         }
@@ -84,6 +86,13 @@ namespace TG.Control.LedPlayer
                 state = state, positionSeconds = position, error = error, reportedAtUtc = DateTimeOffset.UtcNow.ToString("O"), progress = progress
             }));
 
+        public void ReportWelcome(WelcomePlaybackCommand command, WelcomePlaybackState state, double position = 0, string error = null, double progress = 0) =>
+            StartCoroutine(Post("/api/welcome/status", new WelcomePlaybackStatusReport
+            {
+                clientId = clientId, commandId = command.commandId, requestId = command.requestId, state = state,
+                positionSeconds = position, progress = progress, error = error, reportedAtUtc = DateTimeOffset.UtcNow.ToString("O")
+            }));
+
         private IEnumerator PollLoop()
         {
             while (running)
@@ -110,6 +119,23 @@ namespace TG.Control.LedPlayer
                             CommandReceived?.Invoke(JsonUtility.FromJson<PlaybackCommand>(request.downloadHandler.text));
                         else if (request.responseCode != 204) { SetConnected(false); break; }
                     }
+                }
+            }
+        }
+
+        private IEnumerator WelcomePollLoop()
+        {
+            while (running)
+            {
+                if (!connected) { yield return new WaitForSecondsRealtime(1); continue; }
+                using (var request = UnityWebRequest.Get(BaseUrl + "/api/welcome/commands/next?clientId=" + UnityWebRequest.EscapeURL(clientId)))
+                {
+                    ApplyTerminalHeader(request);
+                    request.timeout = 25;
+                    yield return request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success && request.responseCode == 200)
+                        WelcomeCommandReceived?.Invoke(JsonUtility.FromJson<WelcomePlaybackCommand>(request.downloadHandler.text));
+                    else if (request.responseCode != 204) SetConnected(false);
                 }
             }
         }

@@ -11,11 +11,14 @@ public interface ICommandBroker
     long NextSequence();
     ValueTask PublishAsync(string clientId, PlaybackCommand command, CancellationToken cancellationToken);
     Task<PlaybackCommand?> WaitAsync(string clientId, TimeSpan timeout, CancellationToken cancellationToken);
+    ValueTask PublishWelcomeAsync(string clientId, WelcomePlaybackCommand command, CancellationToken cancellationToken);
+    Task<WelcomePlaybackCommand?> WaitWelcomeAsync(string clientId, TimeSpan timeout, CancellationToken cancellationToken);
 }
 
 public sealed class CommandBroker : ICommandBroker
 {
     private readonly ConcurrentDictionary<string, Channel<PlaybackCommand>> channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Channel<WelcomePlaybackCommand>> welcomeChannels = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ClientPresence> clients = new(StringComparer.OrdinalIgnoreCase);
     private long sequence;
 
@@ -84,6 +87,27 @@ public sealed class CommandBroker : ICommandBroker
         }
     }
 
+    public ValueTask PublishWelcomeAsync(string clientId, WelcomePlaybackCommand command, CancellationToken cancellationToken) =>
+        GetWelcomeChannel(clientId).Writer.WriteAsync(command, cancellationToken);
+
+    public async Task<WelcomePlaybackCommand?> WaitWelcomeAsync(string clientId, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        Touch(clientId);
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(timeout);
+        try
+        {
+            var command = await GetWelcomeChannel(clientId).Reader.ReadAsync(timeoutSource.Token);
+            Touch(clientId);
+            return command;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            Touch(clientId);
+            return null;
+        }
+    }
+
     private void Touch(string clientId)
     {
         if (clients.TryGetValue(clientId, out var current))
@@ -94,6 +118,9 @@ public sealed class CommandBroker : ICommandBroker
 
     private Channel<PlaybackCommand> GetChannel(string clientId) => channels.GetOrAdd(clientId, _ =>
         Channel.CreateUnbounded<PlaybackCommand>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false }));
+
+    private Channel<WelcomePlaybackCommand> GetWelcomeChannel(string clientId) => welcomeChannels.GetOrAdd(clientId, _ =>
+        Channel.CreateUnbounded<WelcomePlaybackCommand>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false }));
 
     private sealed record ClientPresence(string ClientId, ClientKind Kind, string AppVersion,
         DateTimeOffset RegisteredAtUtc, DateTimeOffset LastSeenUtc, long ContentVersion, bool Ready, string? Status,

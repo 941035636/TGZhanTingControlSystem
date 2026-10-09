@@ -78,6 +78,7 @@ namespace TG.Control.Touch
             presenter.RoutesLoaded += OnRoutesLoaded;
             presenter.RouteSaved += OnRouteSaved;
             presenter.ReadinessChanged += OnReadinessChanged;
+            presenter.WelcomeChanged += OnWelcomeChanged;
             presenter.UiExperienceChanged += ApplyUiExperience;
             presenter.UiExperienceLoadFailed += OnUiExperienceLoadFailed;
             presenter.Error += OnError;
@@ -98,8 +99,9 @@ namespace TG.Control.Touch
             appShell?.Tick(DateTime.Now);
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.touchCount > 0)
                 lastInteractionAt = Time.realtimeSinceStartup;
-            if (!welcomeEnabled || welcomeExperiencePage == null || welcomeExperiencePage.Visible ||
-                facade == null || facade.HasActiveSession) return;
+            if (!welcomeEnabled || welcomeExperiencePage == null || welcomeExperiencePage.Visible || facade == null ||
+                !connected || facade.HasActiveSession || routeDraft.IsDirty || pageState == PageState.RouteEditor ||
+                facade.CurrentWelcome?.state is WelcomePlaybackState.Requested or WelcomePlaybackState.Preparing or WelcomePlaybackState.Playing) return;
             if (Time.realtimeSinceStartup - lastInteractionAt >= idleTimeoutSeconds)
                 welcomeExperiencePage.Show();
         }
@@ -124,7 +126,11 @@ namespace TG.Control.Touch
                 moduleKioskPage.ModulesStartRequested -= StartModulesFromHome;
                 moduleKioskPage.StartAllRequested -= StartAllFromHome;
             }
-            if (welcomeExperiencePage != null) welcomeExperiencePage.Entered -= OnWelcomeEntered;
+            if (welcomeExperiencePage != null)
+            {
+                welcomeExperiencePage.Entered -= OnWelcomeEntered;
+                welcomeExperiencePage.WelcomeRequested -= OnWelcomeRequested;
+            }
             if (routeEditorPage != null)
             {
                 routeEditorPage.BackRequested -= ReturnHome;
@@ -160,6 +166,7 @@ namespace TG.Control.Touch
             presenter.RouteSaved -= OnRouteSaved;
             presenter.ReadinessChanged -= OnReadinessChanged;
             presenter.UiExperienceChanged -= ApplyUiExperience;
+            presenter.WelcomeChanged -= OnWelcomeChanged;
             presenter.UiExperienceLoadFailed -= OnUiExperienceLoadFailed;
             presenter.Error -= OnError;
             presenter.Dispose();
@@ -232,6 +239,7 @@ namespace TG.Control.Touch
             Stretch(systemStatusPageRoot.GetComponent<RectTransform>());
             welcomeExperiencePage = new WelcomeExperiencePage(this, uiFactory, theme, imageLoader, canvas.transform);
             welcomeExperiencePage.Entered += OnWelcomeEntered;
+            welcomeExperiencePage.WelcomeRequested += OnWelcomeRequested;
             lastInteractionAt = Time.realtimeSinceStartup;
             welcomeExperiencePage.Show();
             ShowPage(PageState.Home);
@@ -430,11 +438,27 @@ namespace TG.Control.Touch
             BeginStart(routeName, moduleIds, () => facade.StartModules(moduleIds));
         }
 
+        private void OnWelcomeChanged(WelcomePlaybackStatus value)
+        {
+            welcomeExperiencePage?.SetWelcomeStatus(value);
+        }
+
         private void OnWelcomeEntered()
         {
+            if (!string.IsNullOrWhiteSpace(facade?.CurrentWelcome?.requestId)) facade.AcknowledgeWelcome(facade.CurrentWelcome.requestId);
             lastInteractionAt = Time.realtimeSinceStartup;
             ShowPage(PageState.Home);
             Refresh();
+        }
+
+        private void OnWelcomeRequested()
+        {
+            if (!connected || facade == null)
+            {
+                OnError("当前无法连接展厅服务，已保留在欢迎页面。");
+                return;
+            }
+            facade.RequestWelcome();
         }
 
         private void ContinueCurrentPlayback()
