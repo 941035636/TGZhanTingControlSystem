@@ -8,6 +8,7 @@ namespace TG.Control.Touch.UI.Components
     /// <summary>Branding, local time and truthful global runtime state.</summary>
     public sealed class TopBar
     {
+        private static Sprite brandCircle;
         private readonly TouchTheme theme;
         private readonly Image root;
         private readonly Image brandMark;
@@ -33,18 +34,20 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(signalLine.rectTransform, 0, 0, 0, 0, 36, 10, 184, 12);
             signalLine.raycastTarget = false;
 
-            brandMark = factory.Image("Brand Light Mark", root.transform, theme.ShellHighlight);
-            TouchUiFactory.Anchor(brandMark.rectTransform, 0, 0, 0, 1, 36, 28, 40, -28);
+            brandMark = factory.Image("TG Brand Circle", root.transform, theme.ShellHighlight);
+            brandMark.sprite = brandCircle ?? (brandCircle = CreateBrandCircle());
+            TouchUiFactory.Anchor(brandMark.rectTransform, 0, .5f, 0, .5f, 32, -28, 88, 28);
             brandMark.raycastTarget = false;
+            var brandLetters = factory.Label("TG Brand Letters", brandMark.transform, "TG", 20,
+                FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            TouchUiFactory.Stretch(brandLetters.rectTransform);
 
-            title = factory.Label("Product Name", root.transform, "展厅自动讲解系统", 27,
+            title = factory.Label("Product Name", root.transform, "展厅自动讲解系统", 24,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(title.rectTransform, 0, .46f, .5f, 1,
-                58, 0, 0, -theme.CardSpacing / 2);
-            subtitle = factory.Label("Product Subtitle", root.transform, "智慧展陈 · 中控终端",
-                16, FontStyle.Normal, theme.TextSecondary, TextAnchor.UpperLeft);
-            TouchUiFactory.Anchor(subtitle.rectTransform, 0, 0, .5f, .5f,
-                58, theme.CardSpacing / 2, 0, 0);
+            TouchUiFactory.Anchor(title.rectTransform, 0, .5f, 0, .5f, 104, 0, 430, 31);
+            subtitle = factory.Label("Product Subtitle", root.transform, "智慧展厅 · 中控终端",
+                14, FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
+            TouchUiFactory.Anchor(subtitle.rectTransform, 0, .5f, 0, .5f, 104, -29, 430, -1);
 
             timeSurface = factory.Image("Local Time Display", root.transform, Color.clear);
             TouchUiFactory.Anchor(timeSurface.rectTransform, 1, .5f, 1, .5f, -768, -24, -574, 24);
@@ -78,10 +81,31 @@ namespace TG.Control.Touch.UI.Components
 
         public void SetBranding(string productName, string productSubtitle)
         {
-            if (!string.IsNullOrWhiteSpace(productName)) title.text = productName;
-            if (!string.IsNullOrWhiteSpace(productSubtitle))
-                subtitle.text = productSubtitle.StartsWith("TG EXHIBITION", StringComparison.OrdinalIgnoreCase)
-                    ? "智慧展陈 · 中控终端" : productSubtitle;
+            // The shared shell keeps the same independently rendered brand as the standby page.
+            title.text = "展厅自动讲解系统";
+            subtitle.text = "智慧展厅 · 中控终端";
+        }
+
+        private static Sprite CreateBrandCircle()
+        {
+            const int size = 64;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "TG Top Brand Circle",
+                filterMode = FilterMode.Bilinear,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var distance = Vector2.Distance(new Vector2(x + .5f, y + .5f),
+                    new Vector2(size / 2f, size / 2f));
+                texture.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(31f - distance)));
+            }
+            texture.Apply(false, true);
+            var sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f));
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
         }
 
         public void SetConnection(bool connected) =>

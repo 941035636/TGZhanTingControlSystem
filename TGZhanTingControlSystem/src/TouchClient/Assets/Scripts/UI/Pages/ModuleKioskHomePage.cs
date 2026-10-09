@@ -71,14 +71,19 @@ namespace TG.Control.Touch.UI.Pages
             this.imageLoader = imageLoader ?? throw new ArgumentNullException(nameof(imageLoader));
             root = factory.Rect("Module Kiosk Home Page", parent);
 
-            var pageBackground = factory.Image("Exhibition Home Bright Glass", root,
-                new Color(.965f, .982f, 1f, .93f));
+            var pageBackground = factory.Image("Exhibition Home Scene", root, Color.white);
             TouchUiFactory.Stretch(pageBackground.rectTransform);
+            var homeTexture = Resources.Load<Texture2D>("Touch/HomeFinal/Home_Light_1920x1080");
+            if (homeTexture != null)
+                pageBackground.sprite = Sprite.Create(homeTexture,
+                    new Rect(0, 0, homeTexture.width, homeTexture.height), new Vector2(.5f, .5f));
+            else
+                pageBackground.color = theme.AppBackground;
             pageBackground.raycastTarget = false;
-            var atmosphere = factory.Image("Exhibition Home Ambient Light", root,
-                new Color(.12f, .56f, 1f, .055f));
-            TouchUiFactory.Anchor(atmosphere.rectTransform, .42f, .64f, 1, 1, 0, 0, 0, 0);
-            atmosphere.raycastTarget = false;
+            var readability = factory.Image("Exhibition Home Readability Veil", root,
+                new Color(1f, 1f, 1f, .36f));
+            TouchUiFactory.Stretch(readability.rectTransform);
+            readability.raycastTarget = false;
 
             BuildHeader();
 
@@ -124,24 +129,25 @@ namespace TG.Control.Touch.UI.Pages
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(selectionTitle.rectTransform, 0, .5f, 0, .5f, 102, 3, 470, 39);
             selectionDetail = factory.Label("Selection Detail", actionBar.transform, "可选择一个或多个展区",
-                theme.Caption, FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(selectionDetail.rectTransform, 0, .5f, 0, .5f, 104, -38, 650, -3);
+                theme.Body, FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
+            TouchUiFactory.Anchor(selectionDetail.rectTransform, 0, .5f, 0, .5f, 104, -38, 610, -3);
             selectionDetail.resizeTextForBestFit = true;
-            selectionDetail.resizeTextMinSize = 12;
+            selectionDetail.resizeTextMinSize = theme.Secondary;
+            selectionDetail.resizeTextMaxSize = theme.Body;
 
             clearButton = factory.TouchButton(actionBar.transform, "清空选择", false, ClearSelection);
-            TouchUiFactory.Anchor(clearButton.GetComponent<RectTransform>(), 0, .5f, 0, .5f, 662, -31, 830, 31);
+            TouchUiFactory.Anchor(clearButton.GetComponent<RectTransform>(), 0, .5f, 0, .5f, 630, -31, 798, 31);
             ConfigureSecondaryButton(clearButton);
 
             readinessIndicator = factory.RoundedImage("Home Readiness Dot", actionBar.transform, theme.Warning);
-            TouchUiFactory.Anchor(readinessIndicator.rectTransform, 0, .5f, 0, .5f, 860, -5, 870, 5);
+            TouchUiFactory.Anchor(readinessIndicator.rectTransform, 0, .5f, 0, .5f, 816, -5, 826, 5);
             readinessIndicator.raycastTarget = false;
-            readinessText = factory.Label("Home Readiness", actionBar.transform, "正在检查系统状态…", theme.Caption,
+            readinessText = factory.Label("Home Readiness", actionBar.transform, "正在检查系统状态…", theme.Body,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(readinessText.rectTransform, 0, .5f, 0, .5f, 884, -27, 1150, 27);
+            TouchUiFactory.Anchor(readinessText.rectTransform, 0, .5f, 0, .5f, 840, -27, 1096, 27);
             readinessText.resizeTextForBestFit = true;
-            readinessText.resizeTextMinSize = 12;
-            readinessText.resizeTextMaxSize = theme.Caption;
+            readinessText.resizeTextMinSize = theme.Secondary;
+            readinessText.resizeTextMaxSize = theme.Body;
 
             startAllButton = factory.TouchButton(actionBar.transform, "全部讲解", false,
                 () => StartAllRequested?.Invoke());
@@ -172,10 +178,11 @@ namespace TG.Control.Touch.UI.Pages
             canStart = state.Connected && state.Readiness?.canStart == true && !state.HasActiveSession;
             ApplySelection();
             startAllButton.interactable = canStart && modules.Any(HasContent);
-            readinessText.text = state.HasActiveSession ? "当前已有讲解任务，请在“当前讲解”中继续操作。"
-                : !state.Connected ? "服务连接中断，正在自动重连。"
-                : state.Readiness?.canStart == true ? "系统已就绪，可以开始讲解。"
-                : state.Readiness?.message ?? "LED播放端尚未就绪，暂时无法开始讲解。";
+            readinessText.text = state.HasActiveSession ? "讲解进行中"
+                : !state.Connected ? "服务连接中断"
+                : state.Readiness == null ? "状态检查中"
+                : state.Readiness.canStart ? "系统已就绪"
+                : state.Readiness.ledOnline ? "系统暂未就绪" : "LED播放端离线";
             readinessIndicator.color = state.HasActiveSession || !state.Connected || state.Readiness?.canStart != true
                 ? theme.Warning : theme.Success;
         }
@@ -191,7 +198,7 @@ namespace TG.Control.Touch.UI.Pages
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(title.rectTransform, 0, 1, .42f, 1, 4, -84, 0, -28);
             var subtitle = factory.Label("Home Subtitle", root, "选择您想了解的展区，开启智慧讲解之旅", theme.Body,
-                FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
+                FontStyle.Normal, theme.TextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(subtitle.rectTransform, 0, 1, .62f, 1, 6, -116, 0, -82);
             var slogan = factory.Label("Home Slogan", root, "探索 · 体验 · 发现", theme.SectionTitle,
                 FontStyle.Bold, theme.PrimaryPressed, TextAnchor.MiddleRight);
@@ -384,7 +391,8 @@ namespace TG.Control.Touch.UI.Pages
             selectionTitle.text = selected.Count == 0 ? "请选择展区" : "已选择 " + selected.Count + " 个展区";
             selectionDetail.text = selected.Count == 0
                 ? "可选择一个或多个展区"
-                : string.Join(" · ", selected.Select(item => item.name));
+                : string.Join(" · ", selected.Take(2).Select(item => item.name)) +
+                  (selected.Count > 2 ? " 等 " + selected.Count + " 个展区" : string.Empty);
             clearButton.interactable = selected.Count > 0;
             startButton.interactable = canStart && selected.Count > 0 && selected.All(HasContent);
         }

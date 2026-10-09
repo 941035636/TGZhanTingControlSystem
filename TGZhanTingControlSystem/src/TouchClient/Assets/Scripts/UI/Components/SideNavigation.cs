@@ -16,6 +16,7 @@ namespace TG.Control.Touch.UI.Components
             public TouchShellSection Section;
             public Image Background;
             public Image Accent;
+            public Image Icon;
             public Text Label;
             public Image Activity;
             public Button Button;
@@ -42,11 +43,11 @@ namespace TG.Control.Touch.UI.Components
                 FontStyle.Normal, theme.ShellHighlight, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1, 28, -79, -theme.PagePadding, -57);
 
-            CreateItem(factory, TouchShellSection.ReceptionHome, "讲解首页", 0);
-            CreateItem(factory, TouchShellSection.Playback, "当前讲解", 1);
-            CreateItem(factory, TouchShellSection.SystemStatus, "系统状态", 2);
-            CreateItem(factory, TouchShellSection.Routes, "讲解路线", 3);
-            CreateItem(factory, TouchShellSection.Combination, "主题组合", 4);
+            CreateItem(factory, TouchShellSection.ReceptionHome, "讲解首页", "home", 0);
+            CreateItem(factory, TouchShellSection.Playback, "当前讲解", "microphone", 1);
+            CreateItem(factory, TouchShellSection.SystemStatus, "系统状态", "activity", 2);
+            CreateItem(factory, TouchShellSection.Routes, "讲解路线", "route", 3);
+            CreateItem(factory, TouchShellSection.Combination, "主题组合", "layers", 4);
 
             SetActive(TouchShellSection.ReceptionHome);
             SetPlaybackAvailable(false);
@@ -73,7 +74,8 @@ namespace TG.Control.Touch.UI.Components
             foreach (var item in items) Apply(item);
         }
 
-        private void CreateItem(TouchUiFactory factory, TouchShellSection section, string text, int index)
+        private void CreateItem(TouchUiFactory factory, TouchShellSection section, string text,
+            string iconName, int index)
         {
             var image = factory.RoundedImage("Navigation - " + text, root.transform,
                 Color.clear);
@@ -97,9 +99,17 @@ namespace TG.Control.Touch.UI.Components
 
             var accent = factory.Image("Selection", image.transform, theme.ShellHighlight);
             TouchUiFactory.Anchor(accent.rectTransform, 0, 0, 0, 1, 0, theme.Space12, 4, -theme.Space12);
+            var icon = factory.Image("Navigation Icon - " + iconName, image.transform, Color.white);
+            var texture = Resources.Load<Texture2D>("Touch/HomeFinal/nav_" + iconName + "_128");
+            if (texture != null)
+                icon.sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                    new Vector2(.5f, .5f));
+            TouchUiFactory.Anchor(icon.rectTransform, 0, .5f, 0, .5f, 21, -15, 51, 15);
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
             var textLabel = factory.Label("Label", image.transform, text, 22, FontStyle.Bold,
                 theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, theme.Space32, 0, -theme.Space32, 0);
+            TouchUiFactory.Anchor(textLabel.rectTransform, 0, 0, 1, 1, 64, 0, -theme.Space16, 0);
             var activity = factory.RoundedImage("Activity", image.transform, theme.Success);
             TouchUiFactory.Anchor(activity.rectTransform, 1, .5f, 1, .5f,
                 -theme.Space24, -5, -theme.Space16, 5);
@@ -109,6 +119,7 @@ namespace TG.Control.Touch.UI.Components
                 Section = section,
                 Background = image,
                 Accent = accent,
+                Icon = icon,
                 Label = textLabel,
                 Activity = activity,
                 Button = button
@@ -121,6 +132,8 @@ namespace TG.Control.Touch.UI.Components
             item.Background.color = selected ? theme.ShellPanelActive : Color.clear;
             item.Accent.gameObject.SetActive(selected);
             item.Accent.color = theme.ShellHighlight;
+            item.Icon.color = !item.Available ? theme.DisabledControlTint
+                : selected ? Color.white : new Color(.57f, .67f, .79f, 1f);
             item.Label.color = !item.Available ? theme.Disabled
                 : selected ? theme.TextPrimary : theme.TextSecondary;
             item.Activity.gameObject.SetActive(item.Section == TouchShellSection.Playback && item.Available);

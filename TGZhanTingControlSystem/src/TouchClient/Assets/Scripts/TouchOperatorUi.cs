@@ -44,7 +44,6 @@ namespace TG.Control.Touch
         private float lastInteractionAt;
 
         private Image background;
-        private Sprite shellBackdropSprite;
         private TouchAppShell appShell;
         private ReceptionHomePage receptionHomePage;
         private ModuleKioskHomePage moduleKioskPage;
@@ -752,31 +751,18 @@ namespace TG.Control.Touch
             var fallbackColor = !isKiosk &&
                 ColorUtility.TryParseHtmlString(config.touchBackgroundColor, out var configured)
                 ? configured : theme.Background;
-            // Extend the same visual behind the floating shell controls. The kiosk page
-            // keeps its own contrast layer for cards and titles; the shell no longer ends
-            // as two opaque dashboard blocks against that artwork.
-            var standbyTexture = isKiosk
-                ? Resources.Load<Texture2D>("Touch/touch-technology-background") : null;
-            if (standbyTexture != null)
-            {
-                shellBackdropSprite = shellBackdropSprite ?? Sprite.Create(standbyTexture,
-                    new Rect(0, 0, standbyTexture.width, standbyTexture.height), new Vector2(.5f, .5f), 100);
-                background.sprite = shellBackdropSprite;
-                background.type = Image.Type.Simple;
-                background.preserveAspect = false;
-                background.color = Color.white;
-            }
-            else
-            {
-                background.sprite = null;
-                background.color = fallbackColor;
-            }
-            if (string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) return;
+            // The kiosk scene belongs to the home content layer. Keep the shell neutral;
+            // the former dark tunnel must not show around the light home page.
+            background.sprite = null;
+            background.color = fallbackColor;
+            // HomeFinal is the fixed kiosk artwork; a legacy configured shell image must
+            // not bring the dark tunnel back behind the new home presentation.
+            if (isKiosk || string.IsNullOrWhiteSpace(config.touchBackgroundUrl)) return;
             imageLoader.Load(background, presenter.NormalizeAssetUrl(config.touchBackgroundUrl), success =>
             {
                 if (success) return;
-                background.sprite = standbyTexture == null ? null : shellBackdropSprite;
-                background.color = standbyTexture == null ? fallbackColor : Color.white;
+                background.sprite = null;
+                background.color = fallbackColor;
             });
         }
 
