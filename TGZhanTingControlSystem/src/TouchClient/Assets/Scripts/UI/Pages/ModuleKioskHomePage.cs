@@ -11,222 +11,155 @@ using UnityEngine.UI;
 
 namespace TG.Control.Touch.UI.Pages
 {
-    /// <summary>A complete twelve-module wall with a fixed, easy-to-find playback action.</summary>
+    /// <summary>
+    /// Light exhibition-home module gallery. It owns presentation and local selection only;
+    /// the caller remains responsible for all playback, LED readiness and session rules.
+    /// </summary>
     public sealed class ModuleKioskHomePage
     {
-        private static readonly Color ElectricCyan = TouchTheme.ParseColor("#29B4FF");
-        private static readonly Color Cobalt = TouchTheme.ParseColor("#075DDF");
-        private static readonly Color FrameBlue = TouchTheme.ParseColor("#1374D1");
-        private static Sprite standbyBackdrop;
-        private static Sprite workspaceGradient;
-        private static Sprite cardGradient;
-        private static Sprite actionGradient;
+        private static Sprite bottomShadeSprite;
 
         private sealed class ModuleCard
         {
             public ExhibitionModule Module;
             public Image Border;
-            public Image Placeholder;
             public Image Cover;
-            public Image CoverShade;
-            public Image SelectionGlow;
-            public GameObject SelectedTag;
+            public Image Placeholder;
+            public Image Shade;
+            public GameObject SelectedBadge;
+            public Text SelectedOrder;
         }
 
         private readonly TouchUiFactory factory;
         private readonly TouchTheme theme;
         private readonly TouchImageLoader imageLoader;
         private readonly List<ModuleCard> cards = new List<ModuleCard>();
+        private readonly HashSet<string> selectedModuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly RectTransform root;
         private readonly RectTransform grid;
         private readonly RectTransform gridViewport;
         private readonly GridLayoutGroup gridLayout;
-        private readonly Text pageTitle;
-        private readonly Text pageSubtitle;
-        private readonly Text moduleCount;
-        private readonly Text galleryEmptyTitle;
-        private readonly Text galleryEmptyDescription;
-        private readonly GameObject galleryEmptyState;
-        private readonly Text selectedTitle;
+        private readonly Text selectionTitle;
+        private readonly Text selectionDetail;
         private readonly Text readinessText;
         private readonly Image readinessIndicator;
+        private readonly Button clearButton;
         private readonly Button startButton;
         private readonly Button startAllButton;
+        private readonly GameObject galleryEmptyState;
+        private readonly Text galleryEmptyTitle;
+        private readonly Text galleryEmptyDescription;
         private Vector2 lastGridSize;
-        private string selectedModuleId;
         private string signature;
         private Func<string, string> resolveUrl;
+        private bool canStart;
 
         public RectTransform Root => root;
-        public event Action<ExhibitionModule> ModuleStartRequested;
+        public event Action<string[]> ModulesStartRequested;
         public event Action StartAllRequested;
 
         public ModuleKioskHomePage(TouchUiFactory factory, TouchTheme theme, TouchImageLoader imageLoader, Transform parent)
         {
-            this.factory = factory;
-            this.theme = theme;
-            this.imageLoader = imageLoader;
+            this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
+            this.theme = theme ?? throw new ArgumentNullException(nameof(theme));
+            this.imageLoader = imageLoader ?? throw new ArgumentNullException(nameof(imageLoader));
             root = factory.Rect("Module Kiosk Home Page", parent);
 
-            var stage = factory.Image("Kiosk Royal Blue Workspace", root, Color.white);
-            var standbyTexture = Resources.Load<Texture2D>("Touch/touch-technology-background");
-            if (standbyTexture != null)
-            {
-                standbyBackdrop = standbyBackdrop ?? Sprite.Create(standbyTexture,
-                    new Rect(0, 0, standbyTexture.width, standbyTexture.height), new Vector2(.5f, .5f), 100);
-                stage.sprite = standbyBackdrop;
-            }
-            else
-            {
-                stage.sprite = workspaceGradient ?? (workspaceGradient = CreateGradientSprite(
-                    "Kiosk Royal Blue Workspace Gradient", new Color(.0f, .16f, .48f),
-                    new Color(.0f, .065f, .25f), new Color(.015f, .43f, .97f)));
-            }
-            TouchUiFactory.Stretch(stage.rectTransform);
-            stage.raycastTarget = false;
-            var stageVeil = factory.Image("Kiosk Background Contrast", root,
-                new Color(.0f, .035f, .15f, .42f));
-            TouchUiFactory.Stretch(stageVeil.rectTransform);
-            stageVeil.raycastTarget = false;
+            var pageBackground = factory.Image("Exhibition Home Background", root, theme.Surface);
+            TouchUiFactory.Stretch(pageBackground.rectTransform);
+            pageBackground.raycastTarget = false;
 
-            var topBeam = factory.Image("Kiosk Top Beam", root, ElectricCyan);
-            TouchUiFactory.Anchor(topBeam.rectTransform, 0, 1, 0, 1, 28, -5, 344, -1);
-            topBeam.raycastTarget = false;
-
-            var headingGlow = factory.Image("Heading Light Wash", root,
-                new Color(.03f, .34f, .95f, .25f));
-            TouchUiFactory.Anchor(headingGlow.rectTransform, 0, 1, 1, 1, 20, -139, -20, -10);
-            headingGlow.raycastTarget = false;
-
-            var headingRightRail = factory.Image("Heading Right Light Rail", root,
-                new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .6f));
-            TouchUiFactory.Anchor(headingRightRail.rectTransform, 1, 1, 1, 1,
-                -434, -139, -28, -137);
-            headingRightRail.raycastTarget = false;
-
-            var headingMark = factory.Image("Kiosk Heading Mark", root, ElectricCyan);
-            TouchUiFactory.Anchor(headingMark.rectTransform, 0, 1, 0, 1, 28, -89, 33, -35);
-            headingMark.raycastTarget = false;
-            var modeLabel = factory.Label("Kiosk Mode Label", root, "智慧展厅  /  自助讲解", 18,
-                FontStyle.Bold, ElectricCyan, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(modeLabel.rectTransform, 0, 1, .65f, 1, 50, -45, 0, -13);
-
-            pageTitle = factory.Label("Kiosk Title", root, "选择讲解板块", 38,
+            var headingAccent = factory.Image("Home Title Accent", root, theme.Primary);
+            TouchUiFactory.Anchor(headingAccent.rectTransform, 0, 1, 0, 1, 8, -38, 12, -8);
+            headingAccent.raycastTarget = false;
+            var eyebrow = factory.Label("Home Eyebrow", root, "探索 · 体验 · 发现", theme.Caption,
+                FontStyle.Bold, theme.Primary, TextAnchor.MiddleLeft);
+            TouchUiFactory.Anchor(eyebrow.rectTransform, 0, 1, .38f, 1, 24, -34, 0, -8);
+            var title = factory.Label("Home Title", root, "展厅讲解", theme.Display,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(pageTitle.rectTransform, 0, 1, .72f, 1, 50, -99, 0, -48);
-            pageTitle.resizeTextForBestFit = true;
-            pageTitle.resizeTextMinSize = 28;
-            pageTitle.resizeTextMaxSize = 38;
-            pageSubtitle = factory.Label("Kiosk Subtitle", root,
-                "轻触一张图片选择板块，随后点击下方按钮开始讲解", 19,
+            TouchUiFactory.Anchor(title.rectTransform, 0, 1, .52f, 1, 24, -94, 0, -32);
+            title.resizeTextForBestFit = true;
+            title.resizeTextMinSize = theme.PageTitle;
+            title.resizeTextMaxSize = theme.Display;
+            var subtitle = factory.Label("Home Subtitle", root, "选择您想了解的展区，开启智慧讲解之旅", theme.Body,
                 FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(pageSubtitle.rectTransform, 0, 1, .78f, 1, 50, -130, 0, -99);
+            TouchUiFactory.Anchor(subtitle.rectTransform, 0, 1, .7f, 1, 26, -119, 0, -91);
 
-            var countSurface = factory.RoundedImage("Module Count Surface", root,
-                new Color(.015f, .21f, .52f, .95f));
-            TouchUiFactory.Anchor(countSurface.rectTransform, 1, 1, 1, 1, -280, -97, -28, -45);
-            var countDot = factory.RoundedImage("Module Count Dot", countSurface.transform, ElectricCyan);
-            TouchUiFactory.Anchor(countDot.rectTransform, 0, .5f, 0, .5f, 22, -5, 32, 5);
-            countDot.raycastTarget = false;
-            moduleCount = factory.Label("Module Count", countSurface.transform, "正在载入板块", 18,
-                FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Stretch(moduleCount.rectTransform, 48, 0, -16, 0);
-
-            var galleryFrame = factory.RoundedImage("Module Gallery", root,
-                new Color(.002f, .105f, .34f, .82f));
-            TouchUiFactory.Anchor(galleryFrame.rectTransform, 0, 0, 1, 1, 20, 140, -20, -145);
-            var galleryEdge = factory.Image("Gallery Edge", galleryFrame.transform,
-                new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .8f));
-            TouchUiFactory.Anchor(galleryEdge.rectTransform, 0, 1, 1, 1, 18, -3, -18, 0);
-            galleryEdge.raycastTarget = false;
-            grid = factory.ScrollGrid(galleryFrame.transform, "Module Wall", 4,
-                new Vector2(360, 190), new Vector2(14, 14));
+            var gallery = factory.Image("Module Photography Gallery", root, Color.clear);
+            TouchUiFactory.Anchor(gallery.rectTransform, 0, 0, 1, 1, 8, 132, -8, -132);
+            grid = factory.ScrollGrid(gallery.transform, "Module Photography Grid", 4,
+                new Vector2(theme.ModuleGridCellSize.x, theme.ModuleGridCellSize.y),
+                new Vector2(theme.CardSpacing, theme.CardSpacing));
             gridViewport = grid.parent.GetComponent<RectTransform>();
-            TouchUiFactory.Anchor(gridViewport, 0, 0, 1, 1, 14, 14, -14, -14);
+            TouchUiFactory.Stretch(gridViewport);
             gridLayout = grid.GetComponent<GridLayoutGroup>();
             gridLayout.padding = new RectOffset(0, 0, 0, 0);
 
-            galleryEmptyState = factory.Rect("Module Gallery Empty State", galleryFrame.transform).gameObject;
-            TouchUiFactory.Stretch(galleryEmptyState.GetComponent<RectTransform>(), 14, 14, -14, -14);
-            var emptyGlow = factory.RoundedImage("Module Gallery Empty Glow", galleryEmptyState.transform,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .10f));
-            TouchUiFactory.Anchor(emptyGlow.rectTransform, .5f, .5f, .5f, .5f, -104, -54, 104, 54);
-            emptyGlow.raycastTarget = false;
+            galleryEmptyState = factory.Rect("Module Gallery Empty State", gallery.transform).gameObject;
+            TouchUiFactory.Stretch(galleryEmptyState.GetComponent<RectTransform>());
+            var emptySymbol = factory.RoundedImage("Module Gallery Empty Symbol", galleryEmptyState.transform,
+                theme.PrimarySoft);
+            TouchUiFactory.Anchor(emptySymbol.rectTransform, .5f, .5f, .5f, .5f, -52, 15, 52, 119);
+            emptySymbol.raycastTarget = false;
+            var emptySymbolText = factory.Label("Module Gallery Empty Symbol Text", emptySymbol.transform, "展", 36,
+                FontStyle.Bold, theme.Primary, TextAnchor.MiddleCenter);
+            TouchUiFactory.Stretch(emptySymbolText.rectTransform);
             galleryEmptyTitle = factory.Label("Module Gallery Empty Title", galleryEmptyState.transform,
-                "正在连接展厅内容", 30, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleCenter);
-            TouchUiFactory.Anchor(galleryEmptyTitle.rectTransform, .18f, .5f, .82f, .5f, 0, -12, 0, 38);
+                "正在连接展厅内容", theme.PageTitle, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleCenter);
+            TouchUiFactory.Anchor(galleryEmptyTitle.rectTransform, .14f, .5f, .86f, .5f, 0, -30, 0, 12);
             galleryEmptyDescription = factory.Label("Module Gallery Empty Description", galleryEmptyState.transform,
-                "连接完成后将在这里展示可讲解板块", 19, FontStyle.Normal, theme.TextSecondary,
+                "连接完成后将在这里展示可讲解展区", theme.Body, FontStyle.Normal, theme.TextSecondary,
                 TextAnchor.MiddleCenter);
-            TouchUiFactory.Anchor(galleryEmptyDescription.rectTransform, .18f, .5f, .82f, .5f, 0, -53, 0, -13);
+            TouchUiFactory.Anchor(galleryEmptyDescription.rectTransform, .14f, .5f, .86f, .5f, 0, -66, 0, -26);
             galleryEmptyState.SetActive(false);
 
-            var actionBar = factory.RoundedImage("Kiosk Playback Action Bar", root,
-                new Color(.01f, .15f, .43f, .96f));
-            TouchUiFactory.Anchor(actionBar.rectTransform, 0, 0, 1, 0, 20, 16, -20, 124);
-            var actionLight = factory.Image("Playback Action Blue Light", actionBar.transform, Color.white);
-            actionLight.sprite = actionGradient ?? (actionGradient = CreateGradientSprite(
-                "Playback Action Gradient", new Color(.01f, .25f, .64f),
-                new Color(.0f, .10f, .32f), new Color(.03f, .48f, 1f)));
-            TouchUiFactory.Stretch(actionLight.rectTransform, 3, 3, -3, -3);
-            actionLight.raycastTarget = false;
-            var actionLine = factory.Image("Kiosk Action Line", actionBar.transform,
-                ElectricCyan);
-            TouchUiFactory.Anchor(actionLine.rectTransform, 0, 1, 1, 1, 22, -3, -22, 0);
-            actionLine.raycastTarget = false;
+            var actionBarBorder = factory.RoundedImage("Home Selection Bar Border", root, theme.Border);
+            TouchUiFactory.Anchor(actionBarBorder.rectTransform, 0, 0, 1, 0, 8, 8, -8, 116);
+            var actionBar = factory.RoundedImage("Home Selection Bar", actionBarBorder.transform, theme.Surface);
+            TouchUiFactory.Stretch(actionBar.rectTransform, 1, 1, -1, -1);
+            var selectionIcon = factory.RoundedImage("Selection Count Icon", actionBar.transform, theme.Primary);
+            TouchUiFactory.Anchor(selectionIcon.rectTransform, 0, .5f, 0, .5f, 22, -27, 76, 27);
+            selectionIcon.raycastTarget = false;
+            var selectionIconLabel = factory.Label("Selection Count Icon Label", selectionIcon.transform, "✓", 30,
+                FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            TouchUiFactory.Stretch(selectionIconLabel.rectTransform);
+            selectionTitle = factory.Label("Selection Count", actionBar.transform, "请选择展区", theme.SectionTitle,
+                FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
+            TouchUiFactory.Anchor(selectionTitle.rectTransform, 0, .5f, 0, .5f, 96, 2, 450, 38);
+            selectionDetail = factory.Label("Selection Detail", actionBar.transform, "可选择一个或多个展区", theme.Caption,
+                FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
+            TouchUiFactory.Anchor(selectionDetail.rectTransform, 0, .5f, 0, .5f, 98, -38, 620, -4);
 
-            var actionMarker = factory.Image("Action Left Signal", actionBar.transform, ElectricCyan);
-            TouchUiFactory.Anchor(actionMarker.rectTransform, 0, 0, 0, 1, 3, 18, 8, -18);
-            actionMarker.raycastTarget = false;
+            var divider = factory.Image("Selection Bar Divider", actionBar.transform, theme.Border);
+            TouchUiFactory.Anchor(divider.rectTransform, 0, .5f, 0, .5f, 646, -28, 648, 28);
+            divider.raycastTarget = false;
+            clearButton = factory.TouchButton(actionBar.transform, "清空选择", false, ClearSelection);
+            TouchUiFactory.Anchor(clearButton.GetComponent<RectTransform>(), 0, .5f, 0, .5f, 672, -31, 838, 31);
+            ConfigureSecondaryButton(clearButton);
 
-            var selectedCaption = factory.Label("Selected Caption", actionBar.transform,
-                "当前选择", 16, FontStyle.Bold, ElectricCyan, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(selectedCaption.rectTransform, 0, 0, 0, 1, 28, 65, 150, -14);
-            selectedTitle = factory.Label("Selected Module", actionBar.transform,
-                "请选择讲解板块", 30, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(selectedTitle.rectTransform, 0, 0, 0, 1, 28, 13, 560, -40);
-            selectedTitle.resizeTextForBestFit = true;
-            selectedTitle.resizeTextMinSize = 20;
-            selectedTitle.resizeTextMaxSize = 30;
-
-            var statusDivider = factory.Image("Playback Status Divider", actionBar.transform,
-                new Color(theme.Border.r, theme.Border.g, theme.Border.b, .7f));
-            TouchUiFactory.Anchor(statusDivider.rectTransform, 0, 0, 0, 1, 580, 22, 582, -22);
-            statusDivider.raycastTarget = false;
-            readinessIndicator = factory.RoundedImage("Playback Readiness Dot", actionBar.transform, theme.Warning);
-            TouchUiFactory.Anchor(readinessIndicator.rectTransform, 0, .5f, 0, .5f, 602, -6, 614, 6);
+            readinessIndicator = factory.RoundedImage("Home Readiness Dot", actionBar.transform, theme.Warning);
+            TouchUiFactory.Anchor(readinessIndicator.rectTransform, 0, .5f, 0, .5f, 870, -5, 880, 5);
             readinessIndicator.raycastTarget = false;
-            readinessText = factory.Label("Kiosk Readiness", actionBar.transform,
-                "正在检查系统状态…", 18, FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(readinessText.rectTransform, 0, 0, 1, 1, 626, 16, -606, -16);
+            readinessText = factory.Label("Home Readiness", actionBar.transform, "正在检查系统状态…", theme.Caption,
+                FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
+            TouchUiFactory.Anchor(readinessText.rectTransform, 0, .5f, 0, .5f, 892, -27, 1110, 27);
             readinessText.resizeTextForBestFit = true;
-            readinessText.resizeTextMinSize = 14;
-            readinessText.resizeTextMaxSize = 18;
+            readinessText.resizeTextMinSize = 12;
+            readinessText.resizeTextMaxSize = theme.Caption;
 
-            startButton = factory.TouchButton(actionBar.transform, "开始讲解", true, StartSelected);
-            TouchUiFactory.Anchor(startButton.GetComponent<RectTransform>(), 1, 0, 1, 1,
-                -594, 18, -314, -18);
-            startButton.GetComponent<Image>().color = Cobalt;
-            startAllButton = factory.TouchButton(actionBar.transform, "全部讲解", false,
-                () => StartAllRequested?.Invoke());
-            TouchUiFactory.Anchor(startAllButton.GetComponent<RectTransform>(), 1, 0, 1, 1,
-                -298, 18, -18, -18);
-            startAllButton.GetComponent<Image>().color = new Color(.015f, .23f, .58f, 1);
+            startAllButton = factory.TouchButton(actionBar.transform, "全部讲解", false, () => StartAllRequested?.Invoke());
+            TouchUiFactory.Anchor(startAllButton.GetComponent<RectTransform>(), 1, .5f, 1, .5f, -514, -38, -286, 38);
+            ConfigureSecondaryButton(startAllButton);
+            startButton = factory.TouchButton(actionBar.transform, "开始讲解  →", true, StartSelected);
+            TouchUiFactory.Anchor(startButton.GetComponent<RectTransform>(), 1, .5f, 1, .5f, -266, -38, -22, 38);
         }
 
         public void Render(TouchUiState state, Func<string, string> urlResolver)
         {
             if (state == null) return;
             resolveUrl = urlResolver;
-            var titleOverride = Find(state.UiExperience?.touchElements, "home.kiosk.title");
-            var subtitleOverride = Find(state.UiExperience?.touchElements, "home.kiosk.subtitle");
-            pageTitle.text = string.IsNullOrWhiteSpace(titleOverride?.text) ? "选择讲解板块" : titleOverride.text;
-            pageSubtitle.text = string.IsNullOrWhiteSpace(subtitleOverride?.text)
-                ? "轻触一张图片选择板块，随后点击下方按钮开始讲解" : subtitleOverride.text;
-
             var modules = state.Content?.modules?.Where(item => item != null && item.enabled)
                 .OrderBy(item => item.order).ToArray() ?? Array.Empty<ExhibitionModule>();
-            moduleCount.text = modules.Length + " 个讲解板块";
             UpdateGridLayout();
             UpdateGalleryEmptyState(state, modules.Length);
             var newSignature = BuildSignature(state, modules);
@@ -235,18 +168,17 @@ namespace TG.Control.Touch.UI.Pages
                 signature = newSignature;
                 Rebuild(modules);
             }
-            if (modules.Length > 0 && !modules.Any(item => item.id == selectedModuleId))
-                selectedModuleId = modules[0].id;
+            selectedModuleIds.RemoveWhere(id => !modules.Any(module => string.Equals(module.id, id,
+                StringComparison.OrdinalIgnoreCase)));
+            canStart = state.Connected && state.Readiness?.canStart == true && !state.HasActiveSession;
             ApplySelection();
-
-            var canStart = state.Connected && state.Readiness?.canStart == true && !state.HasActiveSession;
-            startButton.interactable = canStart && modules.Any(item => item.id == selectedModuleId && HasContent(item));
             startAllButton.interactable = canStart && modules.Any(HasContent);
-            readinessText.text = state.HasActiveSession ? "讲解正在进行，可在“当前讲解”中操作。"
-                : !state.Connected ? "服务器正在连接，请稍候。"
+            readinessText.text = state.HasActiveSession ? "当前已有讲解任务，请在“当前讲解”中继续操作。"
+                : !state.Connected ? "服务连接中断，正在自动重连。"
                 : state.Readiness?.canStart == true ? "系统已就绪，可以开始讲解。"
-                : state.Readiness?.message ?? "LED大屏尚未就绪。";
-            readinessIndicator.color = canStart ? theme.Success : theme.Warning;
+                : state.Readiness?.message ?? "LED播放端尚未就绪，暂时无法开始讲解。";
+            readinessIndicator.color = state.HasActiveSession || !state.Connected || state.Readiness?.canStart != true
+                ? theme.Warning : theme.Success;
         }
 
         public void RefreshTheme() => ApplySelection();
@@ -259,38 +191,34 @@ namespace TG.Control.Touch.UI.Pages
                 Canvas.ForceUpdateCanvases();
                 size = gridViewport.rect.size;
             }
-            if (size.x < 1 || size.y < 1) return;
-            if (Vector2.Distance(size, lastGridSize) < .5f) return;
+            if (size.x < 1 || size.y < 1 || Vector2.Distance(size, lastGridSize) < .5f) return;
             lastGridSize = size;
-            var columns = size.x >= 1220 ? 4 : 3;
-            const float gap = 14;
+            var columns = size.x >= 1240 ? 4 : size.x >= 820 ? 3 : 2;
+            var gap = theme.CardSpacing;
             gridLayout.constraintCount = columns;
-            gridLayout.cellSize = new Vector2(
-                (size.x - (columns - 1) * gap) / columns,
-                Mathf.Max(172, (size.y - 2 * gap) / 3));
+            gridLayout.cellSize = new Vector2((size.x - (columns - 1) * gap) / columns,
+                Mathf.Max(136, (size.y - 2 * gap) / 3));
         }
 
-        private void Rebuild(ExhibitionModule[] modules)
+        private void Rebuild(IEnumerable<ExhibitionModule> modules)
         {
             cards.Clear();
             TouchUiFactory.Clear(grid);
+            var displayOrder = 0;
             foreach (var module in modules)
             {
-                var border = factory.RoundedImage("Module - " + module.name, grid, FrameBlue);
-                var frame = factory.RoundedImage("Photo Card", border.transform,
-                    new Color(.005f, .13f, .42f, 1));
-                TouchUiFactory.Stretch(frame.rectTransform, 3, 3, -3, -3);
+                displayOrder++;
+                var border = factory.RoundedImage("Module Photo Card - " + module.name, grid, theme.Border);
+                var frame = factory.RoundedImage("Module Photo Frame", border.transform, theme.SurfaceSoft);
+                TouchUiFactory.Stretch(frame.rectTransform, 1, 1, -1, -1);
                 frame.raycastTarget = false;
                 var mask = frame.gameObject.AddComponent<Mask>();
                 mask.showMaskGraphic = true;
 
-                var placeholder = factory.Image("Technology Placeholder", frame.transform, Color.white);
-                placeholder.sprite = cardGradient ?? (cardGradient = CreateGradientSprite(
-                    "Kiosk Card Gradient", new Color(.005f, .26f, .70f),
-                    new Color(.0f, .12f, .42f), new Color(.025f, .52f, 1f)));
+                var placeholder = factory.Image("Module Cover Placeholder", frame.transform, theme.PrimarySoft);
                 TouchUiFactory.Stretch(placeholder.rectTransform);
                 placeholder.raycastTarget = false;
-                BuildPlaceholderVisual(placeholder.transform);
+                BuildPlaceholder(placeholder.transform);
 
                 var cover = factory.Image("Module Cover", frame.transform, Color.clear);
                 TouchUiFactory.Stretch(cover.rectTransform);
@@ -299,184 +227,179 @@ namespace TG.Control.Touch.UI.Pages
                 crop.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
                 crop.aspectRatio = 16f / 9f;
 
-                var shade = factory.Image("Photo Contrast Veil", frame.transform,
-                    new Color(.004f, .025f, .07f, .16f));
+                var shade = factory.Image("Module Cover Bottom Contrast", frame.transform, Color.white);
+                shade.sprite = bottomShadeSprite ?? (bottomShadeSprite = CreateBottomShadeSprite());
                 TouchUiFactory.Stretch(shade.rectTransform);
                 shade.raycastTarget = false;
-                if (!string.IsNullOrWhiteSpace(module.coverUrl))
-                {
-                    imageLoader.Load(cover, resolveUrl?.Invoke(module.coverUrl) ?? module.coverUrl, success =>
-                    {
-                        if (placeholder != null) placeholder.gameObject.SetActive(!success);
-                        if (cover != null && success && cover.sprite != null)
-                            crop.aspectRatio = (float)cover.sprite.rect.width / cover.sprite.rect.height;
-                        if (shade != null) shade.color = new Color(.004f, .025f, .07f, success ? .18f : .06f);
-                    });
-                }
 
-                var titleBand = factory.Image("Readable Title Band", frame.transform,
-                    new Color(.0f, .045f, .17f, .94f));
-                TouchUiFactory.Anchor(titleBand.rectTransform, 0, 0, 1, 0, 0, 0, 0, 68);
-                titleBand.raycastTarget = false;
-                var titleSeparator = factory.Image("Title Band Edge", frame.transform,
-                    new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .74f));
-                TouchUiFactory.Anchor(titleSeparator.rectTransform, 0, 0, 1, 0, 0, 68, 0, 70);
-                titleSeparator.raycastTarget = false;
-                var title = factory.Label("Module Title", frame.transform, module.name, 25,
-                    FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-                TouchUiFactory.Anchor(title.rectTransform, 0, 0, 1, 0, 22, 8, -18, 64);
+                var index = factory.Label("Module Order", frame.transform, displayOrder.ToString("00"), theme.SectionTitle,
+                    FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
+                TouchUiFactory.Anchor(index.rectTransform, 0, 1, 0, 1, 22, -50, 90, -14);
+                AddShadow(index, new Color(0f, 0f, 0f, .45f));
+                var title = factory.Label("Module Title", frame.transform, module.name, theme.CardTitle,
+                    FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+                TouchUiFactory.Anchor(title.rectTransform, 0, 0, 1, 0, 22, 22, -86, 68);
                 title.resizeTextForBestFit = true;
-                title.resizeTextMinSize = 20;
-                title.resizeTextMaxSize = 25;
-                var shadow = title.gameObject.AddComponent<Shadow>();
-                shadow.effectColor = new Color(0, 0, 0, .85f);
-                shadow.effectDistance = new Vector2(1, -2);
+                title.resizeTextMinSize = Mathf.Max(16, theme.CardTitle - 5);
+                title.resizeTextMaxSize = theme.CardTitle;
+                AddShadow(title, new Color(0f, 0f, 0f, .75f));
 
-                AddCornerBracket(frame.transform, "Upper Left", 14, -14, false, false);
-                AddCornerBracket(frame.transform, "Upper Right", -14, -14, true, false);
-                AddCornerBracket(frame.transform, "Lower Left", 14, 82, false, true);
-                AddCornerBracket(frame.transform, "Lower Right", -14, 82, true, true);
+                var selectedBadge = factory.RoundedImage("Module Selected Badge", frame.transform, theme.Primary);
+                TouchUiFactory.Anchor(selectedBadge.rectTransform, 1, 1, 1, 1, -58, -58, -16, -16);
+                selectedBadge.raycastTarget = false;
+                var badgeLabel = factory.Label("Module Selected Badge Label", selectedBadge.transform, "✓", 24,
+                    FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+                TouchUiFactory.Stretch(badgeLabel.rectTransform);
+                selectedBadge.gameObject.SetActive(false);
 
-                var selectionGlow = factory.Image("Selected Card Light Rail", frame.transform, ElectricCyan);
-                TouchUiFactory.Anchor(selectionGlow.rectTransform, 0, 0, 0, 1, 0, 70, 7, -2);
-                selectionGlow.raycastTarget = false;
-                selectionGlow.gameObject.SetActive(false);
-                var selectedTag = factory.RoundedImage("Selected Tag", frame.transform,
-                    new Color(.01f, .40f, .82f, .97f));
-                TouchUiFactory.Anchor(selectedTag.rectTransform, 1, 1, 1, 1, -100, -48, -15, -15);
-                selectedTag.raycastTarget = false;
-                var selectedTagText = factory.Label("Selected Tag Text", selectedTag.transform, "已选择", 16,
-                    FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleCenter);
-                TouchUiFactory.Stretch(selectedTagText.rectTransform);
-                selectedTag.gameObject.SetActive(false);
+                var selectionOrder = factory.Label("Module Selection Order", frame.transform, string.Empty, theme.Caption,
+                    FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+                TouchUiFactory.Anchor(selectionOrder.rectTransform, 1, 0, 1, 0, -56, 18, -16, 44);
+                selectionOrder.gameObject.SetActive(false);
 
                 var button = border.gameObject.AddComponent<Button>();
                 button.targetGraphic = border;
+                var colors = button.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = Color.Lerp(Color.white, theme.Primary, .08f);
+                colors.pressedColor = Color.Lerp(Color.white, theme.Primary, .18f);
+                colors.disabledColor = theme.DisabledControlTint;
+                colors.colorMultiplier = 1;
+                colors.fadeDuration = .08f;
+                button.colors = colors;
                 var captured = module;
-                button.onClick.AddListener(() => { selectedModuleId = captured.id; ApplySelection(); });
+                button.onClick.AddListener(() => ToggleSelection(captured.id));
                 cards.Add(new ModuleCard
                 {
                     Module = module,
                     Border = border,
-                    Placeholder = placeholder,
                     Cover = cover,
-                    CoverShade = shade,
-                    SelectionGlow = selectionGlow,
-                    SelectedTag = selectedTag.gameObject
+                    Placeholder = placeholder,
+                    Shade = shade,
+                    SelectedBadge = selectedBadge.gameObject,
+                    SelectedOrder = selectionOrder
                 });
+                LoadCover(module, cover, placeholder, shade, crop);
             }
             Canvas.ForceUpdateCanvases();
             var scroll = gridViewport.GetComponent<ScrollRect>();
             if (scroll != null) scroll.verticalNormalizedPosition = 1;
         }
 
+        private void LoadCover(ExhibitionModule module, Image cover, Image placeholder, Image shade,
+            AspectRatioFitter crop)
+        {
+            if (string.IsNullOrWhiteSpace(module.coverUrl)) return;
+            var url = resolveUrl?.Invoke(module.coverUrl) ?? module.coverUrl;
+            imageLoader.Load(cover, url, success =>
+            {
+                if (placeholder != null) placeholder.gameObject.SetActive(!success);
+                if (cover != null && success && cover.sprite != null)
+                    crop.aspectRatio = cover.sprite.rect.width / cover.sprite.rect.height;
+                if (shade != null && !success) shade.color = new Color(1f, 1f, 1f, .45f);
+            });
+        }
+
+        private void ToggleSelection(string moduleId)
+        {
+            if (string.IsNullOrWhiteSpace(moduleId)) return;
+            if (!selectedModuleIds.Add(moduleId)) selectedModuleIds.Remove(moduleId);
+            ApplySelection();
+        }
+
+        private void ClearSelection()
+        {
+            if (selectedModuleIds.Count == 0) return;
+            selectedModuleIds.Clear();
+            ApplySelection();
+        }
+
         private void ApplySelection()
         {
-            ExhibitionModule selected = null;
-            foreach (var card in cards)
+            var selected = SelectedModules();
+            for (var index = 0; index < cards.Count; index++)
             {
-                var active = string.Equals(card.Module.id, selectedModuleId, StringComparison.OrdinalIgnoreCase);
-                card.Border.color = active ? ElectricCyan : FrameBlue;
-                card.SelectionGlow.gameObject.SetActive(active);
-                card.SelectedTag.SetActive(active);
-                if (active) selected = card.Module;
+                var card = cards[index];
+                var selectedIndex = selected.FindIndex(module => string.Equals(module.id, card.Module.id,
+                    StringComparison.OrdinalIgnoreCase));
+                var isSelected = selectedIndex >= 0;
+                card.Border.color = isSelected ? theme.Primary : theme.Border;
+                card.SelectedBadge.SetActive(isSelected);
+                card.SelectedOrder.gameObject.SetActive(isSelected);
+                card.SelectedOrder.text = isSelected ? (selectedIndex + 1).ToString("00") : string.Empty;
             }
-            selectedTitle.text = selected?.name ?? "请选择讲解板块";
+            selectionTitle.text = selected.Count == 0 ? "请选择展区" : "已选择 " + selected.Count + " 个展区";
+            selectionDetail.text = selected.Count == 0 ? "可选择一个或多个展区" : string.Join(" · ", selected.Select(item => item.name));
+            clearButton.interactable = selected.Count > 0;
+            startButton.interactable = canStart && selected.Count > 0 && selected.All(HasContent);
         }
+
+        private List<ExhibitionModule> SelectedModules() => cards
+            .Where(card => selectedModuleIds.Contains(card.Module.id))
+            .Select(card => card.Module).ToList();
 
         private void StartSelected()
         {
-            var selected = cards.FirstOrDefault(card => string.Equals(card.Module.id, selectedModuleId,
-                StringComparison.OrdinalIgnoreCase))?.Module;
-            if (selected != null && startButton.interactable) ModuleStartRequested?.Invoke(selected);
+            var moduleIds = SelectedModules().Where(HasContent).Select(module => module.id).ToArray();
+            if (moduleIds.Length > 0 && startButton.interactable) ModulesStartRequested?.Invoke(moduleIds);
         }
 
         private static bool HasContent(ExhibitionModule module) => module?.nodes != null && module.nodes.Any(node =>
             node != null && (!string.IsNullOrWhiteSpace(node.ttsAudioUrl) ||
                              node.assets?.Any(asset => asset != null && !string.IsNullOrWhiteSpace(asset.url) &&
-                                                               (asset.kind == 0 || asset.kind == 2)) == true));
+                                 (asset.kind == 0 || asset.kind == 2)) == true));
 
-        private void BuildPlaceholderVisual(Transform parent)
+        private void BuildPlaceholder(Transform parent)
         {
-            var aperture = factory.RoundedImage("Royal Blue Aperture", parent,
-                new Color(.025f, .51f, 1f, .34f));
-            TouchUiFactory.Anchor(aperture.rectTransform, .29f, .34f, .71f, .94f, 0, 0, 0, 0);
-            aperture.raycastTarget = false;
-            var apertureCore = factory.RoundedImage("Aperture Core", parent,
-                new Color(.005f, .20f, .63f, .75f));
-            TouchUiFactory.Anchor(apertureCore.rectTransform, .31f, .34f, .69f, .91f, 0, 0, 0, 0);
-            apertureCore.raycastTarget = false;
-            for (var index = 0; index < 6; index++)
-            {
-                var x = .13f + index * .145f;
-                var beam = factory.Image("Data Column " + index, parent,
-                    new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b,
-                        index == 2 || index == 3 ? .34f : .19f));
-                TouchUiFactory.Anchor(beam.rectTransform, x, .41f, x, .89f, 0, 0, 2, 0);
-                beam.raycastTarget = false;
-            }
-            var horizonGlow = factory.Image("Horizon Glow", parent,
-                new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .33f));
-            TouchUiFactory.Anchor(horizonGlow.rectTransform, .08f, .36f, .92f, .36f, 0, 0, 0, 3);
-            horizonGlow.raycastTarget = false;
-            var horizon = factory.Image("Horizon Core", parent,
-                new Color(.63f, .96f, 1f, .66f));
-            TouchUiFactory.Anchor(horizon.rectTransform, .22f, .37f, .78f, .37f, 0, 0, 0, 1);
-            horizon.raycastTarget = false;
+            var panel = factory.RoundedImage("Module Placeholder Center", parent, new Color(theme.Primary.r, theme.Primary.g,
+                theme.Primary.b, .12f));
+            TouchUiFactory.Anchor(panel.rectTransform, .5f, .5f, .5f, .5f, -52, -38, 52, 66);
+            panel.raycastTarget = false;
+            var symbol = factory.Label("Module Placeholder Symbol", panel.transform, "展", 34, FontStyle.Bold,
+                theme.Primary, TextAnchor.MiddleCenter);
+            TouchUiFactory.Stretch(symbol.rectTransform);
+            var line = factory.Image("Module Placeholder Line", parent, new Color(theme.Primary.r, theme.Primary.g,
+                theme.Primary.b, .42f));
+            TouchUiFactory.Anchor(line.rectTransform, .25f, .5f, .75f, .5f, 0, -60, 0, -58);
+            line.raycastTarget = false;
         }
 
-        private void AddCornerBracket(Transform parent, string name, float x, float y,
-            bool right, bool lower)
+        private static void AddShadow(Graphic graphic, Color color)
         {
-            var edge = new Color(ElectricCyan.r, ElectricCyan.g, ElectricCyan.b, .9f);
-            var horizontal = factory.Image(name + " Horizontal", parent, edge);
-            var vertical = factory.Image(name + " Vertical", parent, edge);
-            var anchorX = right ? 1 : 0;
-            var anchorY = lower ? 0 : 1;
-            var horizontalMinX = right ? x - 40 : x;
-            var horizontalMaxX = right ? x : x + 40;
-            TouchUiFactory.Anchor(horizontal.rectTransform, anchorX, anchorY, anchorX, anchorY,
-                horizontalMinX, y, horizontalMaxX, y + 2);
-            var verticalMinX = right ? x - 2 : x;
-            var verticalMaxX = right ? x : x + 2;
-            TouchUiFactory.Anchor(vertical.rectTransform, anchorX, anchorY, anchorX, anchorY,
-                verticalMinX, lower ? y : y - 15, verticalMaxX, lower ? y + 15 : y);
-            horizontal.raycastTarget = false;
-            vertical.raycastTarget = false;
+            var shadow = graphic.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = color;
+            shadow.effectDistance = new Vector2(0, -2);
         }
 
-        private static Sprite CreateGradientSprite(string name, Color upperLeft, Color lowerRight, Color glow)
+        private static Sprite CreateBottomShadeSprite()
         {
-            const int width = 256;
-            const int height = 128;
-            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            var texture = new Texture2D(2, 128, TextureFormat.RGBA32, false)
             {
-                name = name,
+                name = "TG Module Photo Bottom Shade",
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
                 hideFlags = HideFlags.HideAndDontSave
             };
-            var pixels = new Color[width * height];
-            for (var y = 0; y < height; y++)
-            for (var x = 0; x < width; x++)
+            for (var y = 0; y < texture.height; y++)
             {
-                var u = x / (float)(width - 1);
-                var v = y / (float)(height - 1);
-                var color = Color.Lerp(lowerRight, upperLeft, .6f * v + .4f * (1 - u));
-                // Match the welcome screen's electric-blue horizon instead of the
-                // previous teal-tinted upper-left spotlight.
-                var dx = (u - .5f) * 1.05f;
-                var dy = (v - .24f) * 1.2f;
-                var light = Mathf.Clamp01(1 - (dx * dx + dy * dy) * 3.1f);
-                pixels[y * width + x] = Color.Lerp(color, glow, light * .38f);
+                var alpha = Mathf.SmoothStep(.78f, 0f, y / (float)(texture.height - 1));
+                var color = new Color(.015f, .035f, .09f, alpha);
+                texture.SetPixel(0, y, color);
+                texture.SetPixel(1, y, color);
             }
-            texture.SetPixels(pixels);
             texture.Apply(false, true);
-            var sprite = Sprite.Create(texture, new Rect(0, 0, width, height),
-                new Vector2(.5f, .5f), 100);
-            sprite.name = name;
+            var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f));
             sprite.hideFlags = HideFlags.HideAndDontSave;
             return sprite;
+        }
+
+        private void ConfigureSecondaryButton(Button button)
+        {
+            var image = button.GetComponent<Image>();
+            image.color = theme.Surface;
+            var border = button.gameObject.AddComponent<Outline>();
+            border.effectColor = theme.BorderStrong;
+            border.effectDistance = new Vector2(1, -1);
         }
 
         private void UpdateGalleryEmptyState(TouchUiState state, int count)
@@ -484,14 +407,11 @@ namespace TG.Control.Touch.UI.Pages
             galleryEmptyState.SetActive(count == 0);
             if (count > 0) return;
             var connected = state?.Connected == true;
-            galleryEmptyTitle.text = connected ? "暂未发布可讲解板块" : "正在连接展厅内容";
+            galleryEmptyTitle.text = connected ? "暂未发布可讲解展区" : "正在连接展厅内容";
             galleryEmptyDescription.text = connected
                 ? "请在管理端发布内容后重新进入此页"
-                : "连接完成后将在这里展示可讲解板块";
+                : "连接完成后将在这里展示可讲解展区";
         }
-
-        private static UiElementOverride Find(UiElementOverride[] items, string key) => items?.FirstOrDefault(item =>
-            item != null && string.Equals(item.key, key, StringComparison.OrdinalIgnoreCase));
 
         private static string BuildSignature(TouchUiState state, IEnumerable<ExhibitionModule> modules)
         {

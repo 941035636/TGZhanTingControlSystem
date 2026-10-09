@@ -45,16 +45,15 @@ namespace TG.Control.Touch.UI
             TouchUiFactory.Stretch(veil.rectTransform);
             veil.raycastTarget = false;
             ambientAccent = factory.Image("Ambient Accent", canvas,
-                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .03f));
+                new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .035f));
             TouchUiFactory.Anchor(ambientAccent.rectTransform, 1, 1, 1, 1, -520, -4, 0, 0);
             ambientAccent.raycastTarget = false;
 
-            // Leave the shell open around the floating controls. Full-width opaque
-            // chrome made the header and navigation read like an admin dashboard.
-            chromeHeader = factory.Image("Shell Chrome Header", canvas, Color.clear);
+            // A quiet white shell deliberately leaves visual priority to the exhibition content.
+            chromeHeader = factory.Image("Shell Chrome Header", canvas, theme.HeaderBackground);
             TouchUiFactory.Anchor(chromeHeader.rectTransform, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
             chromeHeader.raycastTarget = false;
-            chromeNavigation = factory.Image("Shell Chrome Navigation", canvas, Color.clear);
+            chromeNavigation = factory.Image("Shell Chrome Navigation", canvas, theme.NavigationBackground);
             TouchUiFactory.Anchor(chromeNavigation.rectTransform, 0, 0, 0, 1, 0, 0,
                 theme.SideNavigationWidth, -theme.TopBarHeight);
             chromeNavigation.raycastTarget = false;
@@ -114,9 +113,9 @@ namespace TG.Control.Touch.UI
 
         public void RefreshTheme()
         {
-            ambientAccent.color = new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .03f);
-            chromeHeader.color = Color.clear;
-            chromeNavigation.color = Color.clear;
+            ambientAccent.color = new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .035f);
+            chromeHeader.color = theme.HeaderBackground;
+            chromeNavigation.color = theme.NavigationBackground;
             topBar.RefreshTheme();
             navigation.RefreshTheme();
             contentHost.RefreshTheme(theme);

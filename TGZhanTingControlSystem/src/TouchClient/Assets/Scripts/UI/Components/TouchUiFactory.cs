@@ -70,7 +70,7 @@ namespace TG.Control.Touch.UI.Components
             colors.disabledColor = theme.Disabled;
             button.colors = colors;
             var label = Label("Label", image.transform, text, theme.ButtonText, FontStyle.Bold,
-                theme.TextPrimary, TextAnchor.MiddleCenter);
+                primary ? Color.white : theme.TextPrimary, TextAnchor.MiddleCenter);
             Stretch(label.rectTransform, 6, 3, -6, -3);
             return button;
         }
@@ -96,7 +96,7 @@ namespace TG.Control.Touch.UI.Components
             colors.fadeDuration = .08f;
             button.colors = colors;
             var label = Label("Label", image.transform, text, theme.ButtonText, FontStyle.Bold,
-                theme.TextPrimary, TextAnchor.MiddleCenter);
+                primary ? Color.white : theme.TextPrimary, TextAnchor.MiddleCenter);
             Stretch(label.rectTransform, 10, 4, -10, -4);
             return button;
         }

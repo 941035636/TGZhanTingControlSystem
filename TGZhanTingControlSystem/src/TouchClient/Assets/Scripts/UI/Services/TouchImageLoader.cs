@@ -11,13 +11,14 @@ namespace TG.Control.Touch.UI.Services
     /// Shared runtime image cache for configurable hero and module covers.
     /// It never knows about TouchApiClient and deduplicates concurrent downloads.
     /// </summary>
-    public sealed class TouchImageLoader
+    public sealed class TouchImageLoader : IDisposable
     {
         private const float FailureRetrySeconds = 30;
         private readonly MonoBehaviour coroutineHost;
         private readonly Dictionary<string, Sprite> cache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, List<Action<Sprite>>> pending = new Dictionary<string, List<Action<Sprite>>>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, float> failedAt = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        private bool disposed;
 
         public TouchImageLoader(MonoBehaviour coroutineHost)
         {
@@ -26,6 +27,11 @@ namespace TG.Control.Touch.UI.Services
 
         public void Load(Image target, string url, Action<bool> completed = null)
         {
+            if (disposed)
+            {
+                completed?.Invoke(false);
+                return;
+            }
             if (target == null || string.IsNullOrWhiteSpace(url))
             {
                 completed?.Invoke(false);
@@ -83,10 +89,33 @@ namespace TG.Control.Touch.UI.Services
                 }
             }
 
+            if (disposed)
+            {
+                if (sprite != null) DestroySprite(sprite);
+                yield break;
+            }
             if (sprite == null) failedAt[url] = Time.realtimeSinceStartup;
             if (!pending.TryGetValue(url, out var callbacks)) yield break;
             pending.Remove(url);
             foreach (var callback in callbacks) callback?.Invoke(sprite);
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            pending.Clear();
+            failedAt.Clear();
+            foreach (var sprite in cache.Values) DestroySprite(sprite);
+            cache.Clear();
+        }
+
+        private static void DestroySprite(Sprite sprite)
+        {
+            if (sprite == null) return;
+            var texture = sprite.texture;
+            UnityEngine.Object.Destroy(sprite);
+            if (texture != null) UnityEngine.Object.Destroy(texture);
         }
 
         private static void Apply(Image target, Sprite sprite)

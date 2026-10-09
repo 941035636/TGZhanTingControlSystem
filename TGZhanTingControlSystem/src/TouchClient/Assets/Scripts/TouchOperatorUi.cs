@@ -121,7 +121,7 @@ namespace TG.Control.Touch
             }
             if (moduleKioskPage != null)
             {
-                moduleKioskPage.ModuleStartRequested -= StartModuleFromHome;
+                moduleKioskPage.ModulesStartRequested -= StartModulesFromHome;
                 moduleKioskPage.StartAllRequested -= StartAllFromHome;
             }
             if (welcomeExperiencePage != null) welcomeExperiencePage.Entered -= OnWelcomeEntered;
@@ -150,6 +150,7 @@ namespace TG.Control.Touch
             }
             if (systemStatusPageView != null)
                 systemStatusPageView.ViewPlaybackRequested -= ContinueCurrentPlayback;
+            imageLoader?.Dispose();
             if (presenter == null) return;
             presenter.ConnectionChanged -= OnConnectionChanged;
             presenter.ContentLoaded -= OnContentLoaded;
@@ -197,7 +198,7 @@ namespace TG.Control.Touch
             legacyHomePage = receptionHomePage.Root.gameObject;
             legacyHomePage.SetActive(false);
             moduleKioskPage = new ModuleKioskHomePage(uiFactory, theme, imageLoader, body);
-            moduleKioskPage.ModuleStartRequested += StartModuleFromHome;
+            moduleKioskPage.ModulesStartRequested += StartModulesFromHome;
             moduleKioskPage.StartAllRequested += StartAllFromHome;
             homePage = moduleKioskPage.Root.gameObject;
             routeEditorPage = new RouteEditorPage(uiFactory, theme, imageLoader, body);
@@ -420,11 +421,13 @@ namespace TG.Control.Touch
             BeginStart("全部主题讲解", moduleIds, facade.StartAll);
         }
 
-        private void StartModuleFromHome(ExhibitionModule module)
+        private void StartModulesFromHome(string[] moduleIds)
         {
-            if (module == null) return;
-            var moduleIds = new[] { module.id };
-            BeginStart(module.name, moduleIds, () => facade.StartModules(moduleIds));
+            if (moduleIds == null || moduleIds.Length == 0) return;
+            var selectedModules = content?.modules?.Where(module => module != null &&
+                moduleIds.Contains(module.id)).OrderBy(module => module.order).ToArray() ?? Array.Empty<ExhibitionModule>();
+            var routeName = selectedModules.Length == 1 ? selectedModules[0].name : "临时组合讲解";
+            BeginStart(routeName, moduleIds, () => facade.StartModules(moduleIds));
         }
 
         private void OnWelcomeEntered()

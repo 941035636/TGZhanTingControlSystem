@@ -7,50 +7,46 @@ namespace TG.Control.Touch.UI.Theme
     {
         private static readonly string[] FontFamilies = { "Microsoft YaHei UI", "Microsoft YaHei", "Arial" };
 
-        // Core product surfaces. Configurable server colors never replace these structural colors.
-        public Color AppBackground { get; } = ParseColor("#00184C");
-        public Color Surface { get; } = ParseColor("#0C2948");
-        public Color SurfaceElevated { get; } = ParseColor("#12385B");
-        // Top bar and navigation form one continuous product shell, so they intentionally
-        // share the same opaque structural blue instead of appearing as separate panels.
-        public Color HeaderBackground { get; } = ParseColor("#001D59");
-        public Color NavigationBackground { get; } = ParseColor("#001D59");
-        public Color ShellPanel { get; } = ParseColor("#073777");
-        public Color ShellPanelActive { get; } = ParseColor("#0755BC");
-        public Color ShellHighlight { get; } = ParseColor("#2CAEFF");
-        public Color ShellBorder { get; } = ParseColor("#197BD8");
+        // Light exhibition shell. Configurable server colors never replace these structural tokens.
+        public Color AppBackground { get; } = ParseColor("#F5F8FC");
+        public Color Surface { get; } = ParseColor("#FFFFFF");
+        public Color SurfaceElevated { get; } = ParseColor("#FFFFFF");
+        public Color HeaderBackground { get; } = ParseColor("#FFFFFF");
+        public Color NavigationBackground { get; } = ParseColor("#FFFFFF");
+        public Color ShellPanel { get; } = ParseColor("#F7FAFE");
+        public Color ShellPanelActive { get; } = ParseColor("#EAF3FF");
+        public Color ShellHighlight { get; } = ParseColor("#1677FF");
+        public Color ShellBorder { get; } = ParseColor("#E3EAF3");
         // Product structure always uses the fixed brand blue. Server configuration must not recolor
         // navigation, semantic states or every primary action.
         public Color Primary { get; } = ParseColor("#1677FF");
         public Color PrimaryHover { get; } = ParseColor("#3291FF");
         public Color PrimaryPressed { get; } = ParseColor("#0E60D0");
-        public Color PrimaryMuted { get; } = ParseColor("#123F70");
-        public Color PrimarySoft { get; } = ParseColor("#0D3159");
-        public Color SurfaceSoft { get; } = ParseColor("#0C2542");
-        public Color SurfaceGlass { get; } = ParseColor("#123B62");
-        public Color TextPrimary { get; } = ParseColor("#F4F8FF");
-        public Color TextSecondary { get; } = ParseColor("#AFC1D6");
-        public Color TextMuted { get; } = ParseColor("#758AA3");
-        public Color Success { get; } = ParseColor("#2ED7A2");
-        public Color Warning { get; } = ParseColor("#F0B45A");
-        public Color Error { get; } = ParseColor("#F05D6C");
-        public Color Border { get; } = ParseColor("#205B87");
-        public Color BorderStrong { get; } = ParseColor("#2D83B5");
+        public Color PrimaryMuted { get; } = ParseColor("#DCEBFF");
+        public Color PrimarySoft { get; } = ParseColor("#EAF3FF");
+        public Color SurfaceSoft { get; } = ParseColor("#F7FAFE");
+        public Color SurfaceGlass { get; } = ParseColor("#FFFFFF");
+        public Color TextPrimary { get; } = ParseColor("#17345C");
+        public Color TextSecondary { get; } = ParseColor("#64748B");
+        public Color TextMuted { get; } = ParseColor("#94A3B8");
+        public Color Success { get; } = ParseColor("#18A874");
+        public Color Warning { get; } = ParseColor("#E8A23A");
+        public Color Error { get; } = ParseColor("#E5484D");
+        public Color Border { get; } = ParseColor("#E3EAF3");
+        public Color BorderStrong { get; } = ParseColor("#B9D6FF");
         public Color ConfigurableAccent { get; private set; } = ParseColor("#36A4FF");
-        public Color SecondaryButton { get; } = ParseColor("#143453");
+        public Color SecondaryButton { get; } = ParseColor("#FFFFFF");
         public Color PrimaryHighlight => PrimaryHover;
-        public Color SecondaryHighlight { get; } = ParseColor("#1A456E");
-        public Color SecondaryPressed { get; } = ParseColor("#0E2A46");
-        public Color Disabled { get; } = ParseColor("#4C6075");
-        public Color DisabledSurface { get; } = ParseColor("#13283D");
-        public Color DisabledControlTint { get; } = new Color(.52f, .58f, .66f, .62f);
+        public Color SecondaryHighlight { get; } = ParseColor("#EAF3FF");
+        public Color SecondaryPressed { get; } = ParseColor("#DCEBFF");
+        public Color Disabled { get; } = ParseColor("#94A3B8");
+        public Color DisabledSurface { get; } = ParseColor("#EEF2F7");
+        public Color DisabledControlTint { get; } = new Color(.58f, .64f, .72f, .62f);
         public Color NeutralTint { get; } = Color.white;
-        public Color InputBackground { get; } = ParseColor("#0D2744");
+        public Color InputBackground { get; } = ParseColor("#FFFFFF");
         public Color Divider => Border;
-        // The app backdrop is a supplied exhibition visual, not decorative wallpaper.
-        // Keep only a trace veil so it remains clear behind the transparent home layout.
-        public Color BackdropVeil { get; } = new Color(.015f, .055f, .105f, .18f);
-        public Color HeroOverlay => new Color(AppBackground.r, AppBackground.g, AppBackground.b, .76f);
+        public Color BackdropVeil { get; } = new Color(.96f, .98f, 1f, .72f);
+        public Color HeroOverlay => new Color(1f, 1f, 1f, .58f);
 
         // Typography scale for a fixed 55-inch, 1920x1080 touch terminal.
         public int Display { get; } = 40;
@@ -109,7 +105,7 @@ namespace TG.Control.Touch.UI.Theme
         public void SetConfigurableAccent(Color color)
         {
             Color.RGBToHSV(color, out var hue, out var saturation, out var value);
-            // Keep the configured hue while guaranteeing readable small accents on the navy UI.
+            // Keep the configured hue while guaranteeing readable small accents on the light UI.
             ConfigurableAccent = Color.HSVToRGB(hue, Mathf.Min(saturation, .78f), Mathf.Max(value, .72f));
             ConfigurableAccent = new Color(ConfigurableAccent.r, ConfigurableAccent.g, ConfigurableAccent.b, 1);
         }

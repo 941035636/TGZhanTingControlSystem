@@ -35,19 +35,12 @@ namespace TG.Control.Touch.UI.Components
             this.theme = theme;
             root = factory.Image("Side Navigation", parent, Color.clear);
             root.raycastTarget = false;
-            var signal = factory.Image("Navigation Signal", root.transform,
-                theme.ShellHighlight);
-            TouchUiFactory.Anchor(signal.rectTransform, 0, 1, 0, 1, 28, -34, 64, -31);
-            signal.raycastTarget = false;
-
             var heading = factory.Label("Navigation Heading", root.transform, "展厅讲解", 23,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(heading.rectTransform, 0, 1, 1, 1,
-                28, -74, -theme.PagePadding, -38);
+            TouchUiFactory.Anchor(heading.rectTransform, 0, 1, 1, 1, 28, -54, -theme.PagePadding, -22);
             var caption = factory.Label("Navigation Caption", root.transform, "讲解导航", 14,
                 FontStyle.Normal, theme.ShellHighlight, TextAnchor.MiddleLeft);
-            TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1,
-                28, -98, -theme.PagePadding, -76);
+            TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1, 28, -79, -theme.PagePadding, -57);
 
             CreateItem(factory, TouchShellSection.ReceptionHome, "讲解首页", 0);
             CreateItem(factory, TouchShellSection.Playback, "当前讲解", 1);
@@ -84,7 +77,7 @@ namespace TG.Control.Touch.UI.Components
         {
             var image = factory.RoundedImage("Navigation - " + text, root.transform,
                 Color.clear);
-            var top = -(120 + index * (theme.NavigationItemHeight + theme.Space8));
+            var top = -(98 + index * (theme.NavigationItemHeight + theme.Space12));
             TouchUiFactory.Anchor(image.rectTransform, 0, 1, 1, 1,
                 theme.Space12, top - theme.NavigationItemHeight, -theme.Space12, top);
             var button = image.gameObject.AddComponent<Button>();
@@ -125,9 +118,7 @@ namespace TG.Control.Touch.UI.Components
         private void Apply(Item item)
         {
             var selected = item.Section == active;
-            item.Background.color = selected
-                ? new Color(.02f, .26f, .65f, .84f)
-                : Color.clear;
+            item.Background.color = selected ? theme.ShellPanelActive : Color.clear;
             item.Accent.gameObject.SetActive(selected);
             item.Accent.color = theme.ShellHighlight;
             item.Label.color = !item.Available ? theme.Disabled

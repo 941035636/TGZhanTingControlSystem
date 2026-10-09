@@ -20,7 +20,7 @@ namespace TG.Control.Touch.UI.Components
         public StatusBadge(TouchUiFactory factory, TouchTheme theme, Transform parent, string name)
         {
             this.theme = theme;
-            background = factory.RoundedImage(name, parent, new Color(.01f, .13f, .34f, .68f));
+            background = factory.RoundedImage(name, parent, theme.PrimarySoft);
             var layout = background.gameObject.AddComponent<LayoutElement>();
             layout.preferredHeight = theme.StatusBadgeHeight;
             layout.minWidth = 168;
@@ -39,8 +39,10 @@ namespace TG.Control.Touch.UI.Components
             label.text = text ?? string.Empty;
             var stateColor = ToneColor(tone);
             indicator.color = stateColor;
-            // A quiet translucent capsule; only the dot carries semantic state color.
-            background.color = new Color(.01f, .13f, .34f, .68f);
+            // A quiet light capsule; only the dot carries semantic state color.
+            background.color = tone == StatusTone.Error ? new Color(theme.Error.r, theme.Error.g, theme.Error.b, .09f)
+                : tone == StatusTone.Warning ? new Color(theme.Warning.r, theme.Warning.g, theme.Warning.b, .12f)
+                : theme.PrimarySoft;
         }
 
         public void RefreshTheme() => Set(label.text, tone);

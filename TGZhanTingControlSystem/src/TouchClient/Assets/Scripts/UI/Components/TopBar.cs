@@ -29,9 +29,8 @@ namespace TG.Control.Touch.UI.Components
             this.theme = theme;
             root = factory.Image("Top Bar", parent, Color.clear);
             root.raycastTarget = false;
-            var signalLine = factory.Image("Top Bar Signal Line", root.transform,
-                new Color(theme.ShellHighlight.r, theme.ShellHighlight.g, theme.ShellHighlight.b, .78f));
-            TouchUiFactory.Anchor(signalLine.rectTransform, 0, 0, 0, 0, 36, 10, 316, 12);
+            var signalLine = factory.Image("Top Bar Signal Line", root.transform, theme.Primary);
+            TouchUiFactory.Anchor(signalLine.rectTransform, 0, 0, 0, 0, 36, 10, 184, 12);
             signalLine.raycastTarget = false;
 
             brandMark = factory.Image("Brand Light Mark", root.transform, theme.ShellHighlight);
@@ -71,7 +70,7 @@ namespace TG.Control.Touch.UI.Components
                 () => ExitRequested?.Invoke());
             TouchUiFactory.Anchor(exitButton.GetComponent<RectTransform>(), 1, .5f, 1, .5f,
                 -138, -22, -theme.PagePadding, 22);
-            exitButton.GetComponent<Image>().color = new Color(.015f, .16f, .38f, .8f);
+            exitButton.GetComponent<Image>().color = theme.Surface;
             connectionBadge.Set("服务连接中", StatusTone.Warning);
             readinessBadge.Set("状态检查中", StatusTone.Neutral);
             Tick(DateTime.Now, true);
@@ -104,7 +103,7 @@ namespace TG.Control.Touch.UI.Components
             root.color = Color.clear;
             brandMark.color = theme.ShellHighlight;
             timeSurface.color = Color.clear;
-            exitButton.GetComponent<Image>().color = new Color(.015f, .16f, .38f, .8f);
+            exitButton.GetComponent<Image>().color = theme.Surface;
             connectionBadge.RefreshTheme();
             readinessBadge.RefreshTheme();
         }
