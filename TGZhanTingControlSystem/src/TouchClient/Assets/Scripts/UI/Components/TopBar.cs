@@ -11,15 +11,18 @@ namespace TG.Control.Touch.UI.Components
         private static Sprite brandCircle;
         private readonly TouchTheme theme;
         private readonly Image root;
+        private readonly Image signalLine;
         private readonly Image brandMark;
         private readonly Text title;
         private readonly Text subtitle;
         private readonly Text dateLabel;
         private readonly Text timeLabel;
         private readonly Image timeSurface;
+        private readonly Image statusDivider;
         private readonly StatusBadge connectionBadge;
         private readonly StatusBadge readinessBadge;
         private readonly Button exitButton;
+        private bool homeDarkMode;
         private int renderedSecond = -1;
 
         public RectTransform Root => root.rectTransform;
@@ -30,7 +33,7 @@ namespace TG.Control.Touch.UI.Components
             this.theme = theme;
             root = factory.Image("Top Bar", parent, Color.clear);
             root.raycastTarget = false;
-            var signalLine = factory.Image("Top Bar Signal Line", root.transform, theme.Primary);
+            signalLine = factory.Image("Top Bar Signal Line", root.transform, theme.Primary);
             TouchUiFactory.Anchor(signalLine.rectTransform, 0, 0, 0, 0, 36, 10, 184, 12);
             signalLine.raycastTarget = false;
 
@@ -59,7 +62,7 @@ namespace TG.Control.Touch.UI.Components
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(timeLabel.rectTransform, 0, 0, 1, .54f, 0, 0, 0, 0);
 
-            var statusDivider = factory.Image("Top Bar Status Divider", root.transform,
+            statusDivider = factory.Image("Top Bar Status Divider", root.transform,
                 new Color(theme.ShellBorder.r, theme.ShellBorder.g, theme.ShellBorder.b, .5f));
             TouchUiFactory.Anchor(statusDivider.rectTransform, 1, .5f, 1, .5f,
                 -565, -22, -563, 22);
@@ -125,11 +128,30 @@ namespace TG.Control.Touch.UI.Components
         public void RefreshTheme()
         {
             root.color = Color.clear;
-            brandMark.color = theme.ShellHighlight;
+            signalLine.color = homeDarkMode ? theme.HomeDarkAccent : theme.Primary;
+            brandMark.color = homeDarkMode ? theme.HomeDarkAccent : theme.ShellHighlight;
+            title.color = homeDarkMode ? theme.HomeDarkTextPrimary : theme.TextPrimary;
+            subtitle.color = homeDarkMode ? theme.HomeDarkTextSecondary : theme.TextSecondary;
+            dateLabel.color = homeDarkMode ? theme.HomeDarkTextSecondary : theme.TextSecondary;
+            timeLabel.color = homeDarkMode ? theme.HomeDarkTextPrimary : theme.TextPrimary;
             timeSurface.color = Color.clear;
-            exitButton.GetComponent<Image>().color = theme.Surface;
+            statusDivider.color = homeDarkMode
+                ? new Color(theme.HomeDarkBorder.r, theme.HomeDarkBorder.g, theme.HomeDarkBorder.b, .38f)
+                : new Color(theme.ShellBorder.r, theme.ShellBorder.g, theme.ShellBorder.b, .5f);
+            exitButton.GetComponent<Image>().color = homeDarkMode ? theme.HomeDarkGlass : theme.Surface;
+            var exitLabel = exitButton.GetComponentInChildren<Text>();
+            if (exitLabel != null) exitLabel.color = homeDarkMode ? theme.HomeDarkTextPrimary : theme.TextPrimary;
             connectionBadge.RefreshTheme();
             readinessBadge.RefreshTheme();
+        }
+
+        public void SetHomeDarkMode(bool enabled)
+        {
+            if (homeDarkMode == enabled) return;
+            homeDarkMode = enabled;
+            connectionBadge.SetDarkMode(enabled);
+            readinessBadge.SetDarkMode(enabled);
+            RefreshTheme();
         }
     }
 }

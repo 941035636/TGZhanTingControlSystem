@@ -20,10 +20,17 @@ namespace TG.Control.Touch.UI
         private SideNavigation navigation;
         private ContentHost contentHost;
         private Image background;
+        private Image homeDarkBackground;
+        private Image veil;
         private Image ambientAccent;
         private Image chromeHeader;
         private Image chromeNavigation;
+        private Sprite chromeHeaderDefaultSprite;
+        private Sprite chromeNavigationDefaultSprite;
+        private Image.Type chromeHeaderDefaultType;
+        private Image.Type chromeNavigationDefaultType;
         private GameObject exitConfirmation;
+        private bool homeDarkMode;
 
         public Image Background => background;
         public RectTransform ContentRoot => contentHost.ContentRoot;
@@ -46,7 +53,15 @@ namespace TG.Control.Touch.UI
             TouchUiFactory.Stretch(background.rectTransform);
             background.raycastTarget = false;
 
-            var veil = factory.Image("App Background Veil", shellRoot, theme.BackdropVeil);
+            homeDarkBackground = factory.Image("Home Hall Background", shellRoot, Color.white);
+            TouchUiFactory.Stretch(homeDarkBackground.rectTransform);
+            homeDarkBackground.type = Image.Type.Simple;
+            homeDarkBackground.preserveAspect = true;
+            homeDarkBackground.raycastTarget = false;
+            homeDarkBackground.sprite = HomeDarkVisualAssets.HallBackground;
+            homeDarkBackground.gameObject.SetActive(false);
+
+            veil = factory.Image("App Background Veil", shellRoot, theme.BackdropVeil);
             TouchUiFactory.Stretch(veil.rectTransform);
             veil.raycastTarget = false;
             ambientAccent = factory.Image("Ambient Accent", shellRoot,
@@ -58,10 +73,14 @@ namespace TG.Control.Touch.UI
             chromeHeader = factory.Image("Shell Chrome Header", shellRoot, theme.HeaderBackground);
             TouchUiFactory.Anchor(chromeHeader.rectTransform, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
             chromeHeader.raycastTarget = false;
+            chromeHeaderDefaultSprite = chromeHeader.sprite;
+            chromeHeaderDefaultType = chromeHeader.type;
             chromeNavigation = factory.Image("Shell Chrome Navigation", shellRoot, theme.NavigationBackground);
             TouchUiFactory.Anchor(chromeNavigation.rectTransform, 0, 0, 0, 1, 0, 0,
                 theme.SideNavigationWidth, -theme.TopBarHeight);
             chromeNavigation.raycastTarget = false;
+            chromeNavigationDefaultSprite = chromeNavigation.sprite;
+            chromeNavigationDefaultType = chromeNavigation.type;
 
             topBar = new TopBar(factory, theme, shellRoot);
             TouchUiFactory.Anchor(topBar.Root, 0, 1, 1, 1, 0, -theme.TopBarHeight, 0, 0);
@@ -78,6 +97,7 @@ namespace TG.Control.Touch.UI
 
             topBar.ExitRequested += ShowExitConfirmation;
             BuildExitConfirmation(shellRoot);
+            ApplyVisualMode();
         }
 
         /// <summary>
@@ -93,6 +113,12 @@ namespace TG.Control.Touch.UI
         public void SetBranding(string title, string subtitle) => topBar.SetBranding(title, subtitle);
         public void SetActiveSection(TouchShellSection section) => navigation.SetActive(section);
         public void Tick(DateTime now) => topBar.Tick(now);
+
+        public void SetHomeDarkMode(bool enabled)
+        {
+            homeDarkMode = enabled;
+            ApplyVisualMode();
+        }
 
         public void SetGlobalState(bool connected, SystemReadiness readiness, bool hasActiveSession)
         {
@@ -128,12 +154,41 @@ namespace TG.Control.Touch.UI
 
         public void RefreshTheme()
         {
-            ambientAccent.color = new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .035f);
-            chromeHeader.color = theme.HeaderBackground;
-            chromeNavigation.color = theme.NavigationBackground;
+            ApplyVisualMode();
             topBar.RefreshTheme();
             navigation.RefreshTheme();
             contentHost.RefreshTheme(theme);
+        }
+
+        private void ApplyVisualMode()
+        {
+            if (background == null) return;
+            background.color = homeDarkMode ? theme.HomeDarkBackground : theme.AppBackground;
+            if (homeDarkBackground != null)
+                homeDarkBackground.gameObject.SetActive(homeDarkMode && homeDarkBackground.sprite != null);
+            veil.color = homeDarkMode ? theme.HomeDarkBackdropVeil : theme.BackdropVeil;
+            ambientAccent.color = homeDarkMode
+                ? new Color(theme.HomeDarkAccent.r, theme.HomeDarkAccent.g, theme.HomeDarkAccent.b, .08f)
+                : new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .035f);
+            if (homeDarkMode)
+            {
+                HomeDarkVisualAssets.ApplySliced(chromeHeader, HomeDarkVisualAssets.TitleGlass,
+                    theme.HomeGlassChromeTint);
+                HomeDarkVisualAssets.ApplySliced(chromeNavigation, HomeDarkVisualAssets.SidebarGlass,
+                    theme.HomeGlassChromeTint);
+            }
+            else
+            {
+                chromeHeader.sprite = chromeHeaderDefaultSprite;
+                chromeHeader.type = chromeHeaderDefaultType;
+                chromeHeader.color = theme.HeaderBackground;
+                chromeNavigation.sprite = chromeNavigationDefaultSprite;
+                chromeNavigation.type = chromeNavigationDefaultType;
+                chromeNavigation.color = theme.NavigationBackground;
+            }
+            topBar?.SetHomeDarkMode(homeDarkMode);
+            navigation?.SetHomeDarkMode(homeDarkMode);
+            contentHost?.SetHomeDarkMode(homeDarkMode, theme);
         }
 
         private void BuildExitConfirmation(Transform canvas)

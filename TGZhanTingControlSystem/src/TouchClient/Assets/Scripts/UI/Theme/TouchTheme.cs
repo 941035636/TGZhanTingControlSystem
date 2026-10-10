@@ -48,6 +48,26 @@ namespace TG.Control.Touch.UI.Theme
         public Color BackdropVeil { get; } = new Color(.96f, .98f, 1f, .72f);
         public Color HeroOverlay => new Color(1f, 1f, 1f, .58f);
 
+        // Phase UI-11 home-only dark visual mode. These tokens do not replace the light product
+        // system used by RouteEditor, Playback and SystemStatus.
+        public Color HomeDarkBackground { get; } = ParseColor("#03132B");
+        public Color HomeDarkHeader { get; } = new Color(.018f, .075f, .16f, .90f);
+        public Color HomeDarkNavigation { get; } = new Color(.015f, .070f, .15f, .88f);
+        public Color HomeDarkSurface { get; } = new Color(.018f, .095f, .21f, .74f);
+        public Color HomeDarkSurfaceElevated { get; } = new Color(.025f, .12f, .27f, .88f);
+        public Color HomeDarkGlass { get; } = new Color(.025f, .13f, .29f, .76f);
+        public Color HomeDarkBorder { get; } = new Color(.08f, .55f, 1f, .72f);
+        public Color HomeDarkBorderSoft { get; } = new Color(.22f, .64f, 1f, .46f);
+        public Color HomeDarkAccent { get; } = ParseColor("#20A8FF");
+        public Color HomeDarkTextPrimary { get; } = ParseColor("#F4FAFF");
+        public Color HomeDarkTextSecondary { get; } = ParseColor("#B8D3F2");
+        public Color HomeDarkTextMuted { get; } = ParseColor("#7F9FC7");
+        public Color HomeDarkBackdropVeil { get; } = new Color(.004f, .025f, .075f, .18f);
+        public Color HomeGlassContentTint { get; } = new Color(1f, 1f, 1f, .72f);
+        public Color HomeGlassTitleTint { get; } = new Color(1f, 1f, 1f, .76f);
+        public Color HomeGlassBottomTint { get; } = new Color(1f, 1f, 1f, .82f);
+        public Color HomeGlassChromeTint { get; } = new Color(1f, 1f, 1f, .78f);
+
         // Typography scale for a fixed 55-inch, 1920x1080 touch terminal.
         public int Display { get; } = 40;
         public int PageTitle { get; } = 28;

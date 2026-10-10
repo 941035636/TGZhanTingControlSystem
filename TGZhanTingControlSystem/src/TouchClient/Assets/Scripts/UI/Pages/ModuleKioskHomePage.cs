@@ -12,7 +12,7 @@ using UnityEngine.UI;
 namespace TG.Control.Touch.UI.Pages
 {
     /// <summary>
-    /// Bright 12-module reception gallery. It owns presentation and local selection only;
+    /// Dark technology-style 12-module reception gallery. It owns presentation and local selection only;
     /// all readiness, session and playback decisions stay in the existing facade path.
     /// </summary>
     public sealed class ModuleKioskHomePage
@@ -71,19 +71,7 @@ namespace TG.Control.Touch.UI.Pages
             this.imageLoader = imageLoader ?? throw new ArgumentNullException(nameof(imageLoader));
             root = factory.Rect("Module Kiosk Home Page", parent);
 
-            var pageBackground = factory.Image("Exhibition Home Scene", root, Color.white);
-            TouchUiFactory.Stretch(pageBackground.rectTransform);
-            var homeTexture = Resources.Load<Texture2D>("Touch/HomeFinal/Home_Light_1920x1080");
-            if (homeTexture != null)
-                pageBackground.sprite = Sprite.Create(homeTexture,
-                    new Rect(0, 0, homeTexture.width, homeTexture.height), new Vector2(.5f, .5f));
-            else
-                pageBackground.color = theme.AppBackground;
-            pageBackground.raycastTarget = false;
-            var readability = factory.Image("Exhibition Home Readability Veil", root,
-                new Color(1f, 1f, 1f, .36f));
-            TouchUiFactory.Stretch(readability.rectTransform);
-            readability.raycastTarget = false;
+            BuildHomeBackground();
 
             BuildHeader();
 
@@ -98,38 +86,46 @@ namespace TG.Control.Touch.UI.Pages
             gridLayout.padding = new RectOffset(0, 0, 0, 0);
 
             galleryEmptyState = factory.RoundedImage("Module Gallery Empty State", gallery.transform,
-                new Color(1f, 1f, 1f, .88f)).gameObject;
+                theme.HomeDarkSurfaceElevated).gameObject;
             TouchUiFactory.Stretch(galleryEmptyState.GetComponent<RectTransform>(), 0, 22, 0, -22);
-            var emptyLine = factory.Image("Module Gallery Empty Accent", galleryEmptyState.transform, theme.Primary);
+            var emptyLine = factory.Image("Module Gallery Empty Accent", galleryEmptyState.transform,
+                theme.HomeDarkAccent);
             TouchUiFactory.Anchor(emptyLine.rectTransform, .5f, .5f, .5f, .5f, -72, 39, 72, 43);
             emptyLine.raycastTarget = false;
             galleryEmptyTitle = factory.Label("Module Gallery Empty Title", galleryEmptyState.transform,
-                "正在连接展厅内容", theme.PageTitle, FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleCenter);
+                "正在连接展厅内容", theme.PageTitle, FontStyle.Bold, theme.HomeDarkTextPrimary,
+                TextAnchor.MiddleCenter);
             TouchUiFactory.Anchor(galleryEmptyTitle.rectTransform, .14f, .5f, .86f, .5f, 0, -12, 0, 32);
             galleryEmptyDescription = factory.Label("Module Gallery Empty Description", galleryEmptyState.transform,
-                "连接完成后将在这里展示可讲解展区", theme.Body, FontStyle.Normal, theme.TextSecondary,
+                "连接完成后将在这里展示可讲解展区", theme.Body, FontStyle.Normal, theme.HomeDarkTextSecondary,
                 TextAnchor.MiddleCenter);
             TouchUiFactory.Anchor(galleryEmptyDescription.rectTransform, .14f, .5f, .86f, .5f, 0, -58, 0, -16);
             galleryEmptyState.SetActive(false);
 
             var actionBarBorder = factory.RoundedImage("Home Selection Bar Border", root,
-                new Color(.64f, .78f, .96f, .8f));
+                theme.HomeDarkBorder);
             TouchUiFactory.Anchor(actionBarBorder.rectTransform, 0, 0, 1, 0, 0, 0, 0, 108);
+            HomeDarkVisualAssets.ApplySliced(actionBarBorder, HomeDarkVisualAssets.BottomGlass,
+                theme.HomeGlassBottomTint);
+            actionBarBorder.raycastTarget = false;
             var actionBar = factory.RoundedImage("Home Selection Bar", actionBarBorder.transform,
-                new Color(1f, 1f, 1f, .96f));
+                Color.clear);
             TouchUiFactory.Stretch(actionBar.rectTransform, 1, 1, -1, -1);
+            actionBar.raycastTarget = false;
 
-            var selectionIcon = factory.RoundedImage("Selection Count Icon", actionBar.transform, theme.Primary);
+            var selectionIcon = factory.RoundedImage("Selection Count Icon", actionBar.transform,
+                theme.HomeDarkAccent);
             TouchUiFactory.Anchor(selectionIcon.rectTransform, 0, .5f, 0, .5f, 24, -29, 82, 29);
             selectionIcon.raycastTarget = false;
             var selectionIconLabel = factory.Label("Selection Count Icon Label", selectionIcon.transform, "✓", 30,
                 FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
             TouchUiFactory.Stretch(selectionIconLabel.rectTransform);
             selectionTitle = factory.Label("Selection Count", actionBar.transform, "请选择展区", theme.SectionTitle,
-                FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
+                FontStyle.Bold, theme.HomeDarkTextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(selectionTitle.rectTransform, 0, .5f, 0, .5f, 102, 3, 470, 39);
             selectionDetail = factory.Label("Selection Detail", actionBar.transform, "可选择一个或多个展区",
                 theme.Body, FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
+            selectionDetail.color = theme.HomeDarkTextSecondary;
             TouchUiFactory.Anchor(selectionDetail.rectTransform, 0, .5f, 0, .5f, 104, -38, 610, -3);
             selectionDetail.resizeTextForBestFit = true;
             selectionDetail.resizeTextMinSize = theme.Secondary;
@@ -143,7 +139,7 @@ namespace TG.Control.Touch.UI.Pages
             TouchUiFactory.Anchor(readinessIndicator.rectTransform, 0, .5f, 0, .5f, 816, -5, 826, 5);
             readinessIndicator.raycastTarget = false;
             readinessText = factory.Label("Home Readiness", actionBar.transform, "正在检查系统状态…", theme.Body,
-                FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleLeft);
+                FontStyle.Normal, theme.HomeDarkTextSecondary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(readinessText.rectTransform, 0, .5f, 0, .5f, 840, -27, 1096, 27);
             readinessText.resizeTextForBestFit = true;
             readinessText.resizeTextMinSize = theme.Secondary;
@@ -157,6 +153,10 @@ namespace TG.Control.Touch.UI.Pages
             startButton = factory.TouchButton(actionBar.transform, "开始讲解  →", true, StartSelected);
             TouchUiFactory.Anchor(startButton.GetComponent<RectTransform>(), 1, .5f, 1, .5f,
                 -258, -38, -18, 38);
+            var startOutline = startButton.gameObject.AddComponent<Outline>();
+            startOutline.effectColor = new Color(theme.HomeDarkAccent.r, theme.HomeDarkAccent.g,
+                theme.HomeDarkAccent.b, .62f);
+            startOutline.effectDistance = new Vector2(2, -2);
         }
 
         public void Render(TouchUiState state, Func<string, string> urlResolver)
@@ -191,24 +191,47 @@ namespace TG.Control.Touch.UI.Pages
 
         private void BuildHeader()
         {
+            var headerBorder = factory.RoundedImage("Home Header Panel Border", root,
+                theme.HomeDarkBorderSoft);
+            TouchUiFactory.Anchor(headerBorder.rectTransform, 0, 1, 1, 1, 0, -126, 0, 0);
+            HomeDarkVisualAssets.ApplySliced(headerBorder, HomeDarkVisualAssets.TitleGlass,
+                theme.HomeGlassTitleTint);
+            headerBorder.raycastTarget = false;
+            var headerSurface = factory.RoundedImage("Home Header Panel Surface", headerBorder.transform,
+                Color.clear);
+            TouchUiFactory.Stretch(headerSurface.rectTransform, 1, 1, -1, -1);
+            headerSurface.raycastTarget = false;
+
             var eyebrow = factory.Label("Home Eyebrow", root, "智慧讲解  ·  12 MODULES", theme.Caption,
-                FontStyle.Bold, theme.Primary, TextAnchor.MiddleLeft);
+                FontStyle.Bold, theme.HomeDarkAccent, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(eyebrow.rectTransform, 0, 1, .42f, 1, 6, -30, 0, -4);
             var title = factory.Label("Home Title", root, "展厅讲解", theme.Display,
-                FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
+                FontStyle.Bold, theme.HomeDarkTextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(title.rectTransform, 0, 1, .42f, 1, 4, -84, 0, -28);
             var subtitle = factory.Label("Home Subtitle", root, "选择您想了解的展区，开启智慧讲解之旅", theme.Body,
-                FontStyle.Normal, theme.TextPrimary, TextAnchor.MiddleLeft);
+                FontStyle.Normal, theme.HomeDarkTextSecondary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(subtitle.rectTransform, 0, 1, .62f, 1, 6, -116, 0, -82);
             var slogan = factory.Label("Home Slogan", root, "探索 · 体验 · 发现", theme.SectionTitle,
-                FontStyle.Bold, theme.PrimaryPressed, TextAnchor.MiddleRight);
+                FontStyle.Bold, theme.HomeDarkAccent, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(slogan.rectTransform, .62f, 1, 1, 1, 0, -67, -8, -25);
             var sloganDetail = factory.Label("Home Slogan Detail", root, "科技引领未来", theme.Secondary,
-                FontStyle.Normal, theme.TextSecondary, TextAnchor.MiddleRight);
+                FontStyle.Normal, theme.HomeDarkTextSecondary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(sloganDetail.rectTransform, .68f, 1, 1, 1, 0, -100, -10, -66);
-            var underline = factory.Image("Home Title Underline", root, theme.Primary);
+            var underline = factory.Image("Home Title Underline", root, theme.HomeDarkAccent);
             TouchUiFactory.Anchor(underline.rectTransform, 0, 1, 0, 1, 4, -122, 126, -118);
             underline.raycastTarget = false;
+        }
+
+        private void BuildHomeBackground()
+        {
+            // The 16:9 hall scene is owned by the home-only AppShell visual mode so it continues
+            // under the top bar and navigation. Keep the local veil almost transparent: the authored
+            // glass panels provide readability while the dome, windows and floor remain visible.
+            var atmosphere = factory.Image("Home Content Atmosphere", root,
+                new Color(.004f, .028f, .085f, .04f));
+            TouchUiFactory.Stretch(atmosphere.rectTransform);
+            atmosphere.raycastTarget = false;
+            atmosphere.transform.SetAsFirstSibling();
         }
 
         private void UpdateGridLayout()
@@ -237,15 +260,16 @@ namespace TG.Control.Touch.UI.Pages
             {
                 displayOrder++;
                 var border = factory.RoundedImage("Module Photography Card - " + module.name, grid,
-                    new Color(.72f, .82f, .94f, 1));
-                var frame = factory.RoundedImage("Module Photography Frame", border.transform, theme.SurfaceSoft);
+                    theme.HomeDarkBorderSoft);
+                var frame = factory.RoundedImage("Module Photography Frame", border.transform,
+                    theme.HomeDarkSurfaceElevated);
                 TouchUiFactory.Stretch(frame.rectTransform, 3, 3, -3, -3);
                 frame.raycastTarget = false;
                 var mask = frame.gameObject.AddComponent<Mask>();
                 mask.showMaskGraphic = true;
 
                 var placeholder = factory.Image("Module Visual Missing", frame.transform,
-                    new Color(.91f, .95f, 1f, 1));
+                    theme.HomeDarkSurfaceElevated);
                 TouchUiFactory.Stretch(placeholder.rectTransform);
                 placeholder.raycastTarget = false;
                 BuildMissingAssetState(placeholder.transform);
@@ -274,7 +298,8 @@ namespace TG.Control.Touch.UI.Pages
                 dataTitle.resizeTextMaxSize = theme.CardTitle;
                 AddShadow(dataTitle, new Color(0, 0, 0, .78f));
 
-                var selectedBadge = factory.RoundedImage("Module Selected Order", frame.transform, theme.Primary);
+                var selectedBadge = factory.RoundedImage("Module Selected Order", frame.transform,
+                    theme.HomeDarkAccent);
                 TouchUiFactory.Anchor(selectedBadge.rectTransform, 1, 1, 1, 1, -64, -64, -16, -16);
                 selectedBadge.raycastTarget = false;
                 var selectedOrder = factory.Label("Module Selected Order Text", selectedBadge.transform, string.Empty,
@@ -384,7 +409,7 @@ namespace TG.Control.Touch.UI.Pages
                 var selectedIndex = selected.FindIndex(module => string.Equals(module.id, card.Module.id,
                     StringComparison.OrdinalIgnoreCase));
                 var isSelected = selectedIndex >= 0;
-                card.Border.color = isSelected ? theme.Primary : new Color(.72f, .82f, .94f, 1);
+                card.Border.color = isSelected ? theme.HomeDarkAccent : theme.HomeDarkBorderSoft;
                 card.SelectedBadge.SetActive(isSelected);
                 card.SelectedOrder.text = isSelected ? (selectedIndex + 1).ToString("00") : string.Empty;
             }
@@ -414,12 +439,12 @@ namespace TG.Control.Touch.UI.Pages
 
         private void BuildMissingAssetState(Transform parent)
         {
-            var accent = factory.Image("Missing Visual Accent", parent, new Color(theme.Primary.r, theme.Primary.g,
-                theme.Primary.b, .55f));
+            var accent = factory.Image("Missing Visual Accent", parent, new Color(theme.HomeDarkAccent.r,
+                theme.HomeDarkAccent.g, theme.HomeDarkAccent.b, .72f));
             TouchUiFactory.Anchor(accent.rectTransform, .28f, .5f, .72f, .5f, 0, 20, 0, 23);
             accent.raycastTarget = false;
             var label = factory.Label("Missing Visual Message", parent, "视觉素材待补充", theme.Secondary,
-                FontStyle.Bold, theme.TextSecondary, TextAnchor.MiddleCenter);
+                FontStyle.Bold, theme.HomeDarkTextSecondary, TextAnchor.MiddleCenter);
             TouchUiFactory.Anchor(label.rectTransform, .12f, .5f, .88f, .5f, 0, -28, 0, 14);
         }
 
@@ -455,9 +480,18 @@ namespace TG.Control.Touch.UI.Pages
         private void ConfigureSecondaryButton(Button button)
         {
             var image = button.GetComponent<Image>();
-            image.color = theme.Surface;
+            image.color = theme.HomeDarkGlass;
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1f, 1f, 1f, .88f);
+            colors.pressedColor = new Color(.70f, .84f, 1f, .82f);
+            colors.disabledColor = new Color(.42f, .52f, .68f, .55f);
+            colors.fadeDuration = .08f;
+            button.colors = colors;
+            var label = button.GetComponentInChildren<Text>();
+            if (label != null) label.color = theme.HomeDarkTextPrimary;
             var border = button.gameObject.AddComponent<Outline>();
-            border.effectColor = theme.BorderStrong;
+            border.effectColor = theme.HomeDarkBorderSoft;
             border.effectDistance = new Vector2(1, -1);
         }
 

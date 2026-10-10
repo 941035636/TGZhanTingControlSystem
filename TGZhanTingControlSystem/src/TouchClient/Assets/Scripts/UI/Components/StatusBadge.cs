@@ -14,6 +14,7 @@ namespace TG.Control.Touch.UI.Components
         private readonly Image indicator;
         private readonly Text label;
         private StatusTone tone;
+        private bool darkMode;
 
         public RectTransform Root => background.rectTransform;
 
@@ -39,6 +40,16 @@ namespace TG.Control.Touch.UI.Components
             label.text = text ?? string.Empty;
             var stateColor = ToneColor(tone);
             indicator.color = stateColor;
+            label.color = darkMode ? theme.HomeDarkTextPrimary : theme.TextPrimary;
+            if (darkMode)
+            {
+                background.color = tone == StatusTone.Error
+                    ? new Color(theme.Error.r, theme.Error.g, theme.Error.b, .18f)
+                    : tone == StatusTone.Warning
+                        ? new Color(theme.Warning.r, theme.Warning.g, theme.Warning.b, .18f)
+                        : theme.HomeDarkGlass;
+                return;
+            }
             // A quiet light capsule; only the dot carries semantic state color.
             background.color = tone == StatusTone.Error ? new Color(theme.Error.r, theme.Error.g, theme.Error.b, .09f)
                 : tone == StatusTone.Warning ? new Color(theme.Warning.r, theme.Warning.g, theme.Warning.b, .12f)
@@ -46,6 +57,13 @@ namespace TG.Control.Touch.UI.Components
         }
 
         public void RefreshTheme() => Set(label.text, tone);
+
+        public void SetDarkMode(bool enabled)
+        {
+            if (darkMode == enabled) return;
+            darkMode = enabled;
+            RefreshTheme();
+        }
 
         private Color ToneColor(StatusTone value)
         {

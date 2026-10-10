@@ -619,6 +619,7 @@ namespace TG.Control.Touch
             if (state != PageState.Playback) confirmStop = false;
             if (appShell != null)
             {
+                appShell.SetHomeDarkMode(state == PageState.Home && useModuleKiosk);
                 var section = state == PageState.Playback ? TouchShellSection.Playback
                     : state == PageState.RouteEditor
                         ? (routeDraft.IsTemporary ? TouchShellSection.Combination : TouchShellSection.Routes)
