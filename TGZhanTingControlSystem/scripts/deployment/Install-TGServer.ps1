@@ -164,9 +164,9 @@ $terminalKey = if (-not [string]::IsNullOrWhiteSpace($requestedTerminalKey)) {
 } elseif ($firstInstall) {
     New-RandomSecret 32
 } else { '' }
-# V1 deployment uses the customer-approved fixed administrator credential.
-# Keep the value in the installer-generated server config so first-install
-# credentials are deterministic across the three-machine deployment package.
+# The field deployment uses the fixed administrator credential requested for
+# this product. Keep the password hash in server.site.json; this clear value is
+# only used while creating the PBKDF2 hash and the first-install handoff note.
 $adminPassword = 'tg001'
 
 if ($serverUri.Scheme -eq 'https') {

@@ -43,7 +43,6 @@ Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 Source: "{#SourceRoot}\Server\*"; DestDir: "{app}\Server"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\TouchClient\*"; DestDir: "{app}\TouchClient"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\LedPlayer\*"; DestDir: "{app}\LedPlayer"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#SourceRoot}\TtsWorker\*"; DestDir: "{app}\TtsWorker"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\Launcher\*"; DestDir: "{app}\Launcher"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\Tools\*"; DestDir: "{app}\Tools"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\ThirdParty\*"; DestDir: "{app}\ThirdParty"; Flags: ignoreversion recursesubdirs createallsubdirs

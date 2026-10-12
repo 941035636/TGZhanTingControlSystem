@@ -125,7 +125,10 @@ if ($existingConfigFiles) {
 }
 
 $terminalKey = New-RandomSecret 32
-$adminPassword = New-RandomSecret 18
+# The field deployment uses the fixed administrator credential requested for
+# this product. Keep the password hash in server.site.json; this clear value is
+# only used while creating the PBKDF2 hash and the first-install handoff note.
+$adminPassword = 'tg001'
 $certificate = Ensure-HttpsCertificate
 $certificateFindSubject = Get-CertificateFindSubject $CertificateSubject
 $serverBaseUrl = "https://${ServerHostName}:$ServerPort"

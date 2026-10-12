@@ -94,17 +94,6 @@ if ([string]::IsNullOrWhiteSpace($ExistingUnityBuildRoot)) {
 Copy-Directory (Join-Path $unityOutput 'TouchClient') (Join-Path $touchPackage 'TouchClient')
 Copy-Directory (Join-Path $unityOutput 'LedPlayer') (Join-Path $ledPackage 'LedPlayer')
 
-if ($IncludeMeloTts -and [string]::IsNullOrWhiteSpace($MeloTtsBundleSource)) {
-    $meloDestination = Join-Path $serverPackage 'TtsWorker\MeloTtsLocal'
-    & (Join-Path $repoRoot 'scripts\Build-MeloTtsWindowsBundle.ps1') -DestinationRoot $meloDestination
-    if ($LASTEXITCODE -ne 0) { throw 'MeloTTS offline bundle build failed.' }
-} elseif ($IncludeMeloTts) {
-    $resolvedMeloSource = if ([IO.Path]::IsPathRooted($MeloTtsBundleSource)) {
-        [IO.Path]::GetFullPath($MeloTtsBundleSource)
-    } else { [IO.Path]::GetFullPath((Join-Path $repoRoot $MeloTtsBundleSource)) }
-    Copy-Directory $resolvedMeloSource (Join-Path $serverPackage 'TtsWorker\MeloTtsLocal')
-}
-
 foreach ($package in @($serverPackage,$touchPackage,$ledPackage)) {
     Copy-Directory (Join-Path $repoRoot 'scripts\deployment') (Join-Path $package 'Tools')
     Copy-Directory (Join-Path $repoRoot 'ThirdParty') (Join-Path $package 'ThirdParty')

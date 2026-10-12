@@ -7,7 +7,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $install = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
 $serverRoot = (Join-Path $install 'Server').TrimEnd('\') + '\'
-$workerRoot = (Join-Path $install 'TtsWorker').TrimEnd('\') + '\'
 
 function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -21,8 +20,7 @@ function Get-TGOwnedProcesses {
     @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
         $path = [string]$_.ExecutablePath
         -not [string]::IsNullOrWhiteSpace($path) -and
-        ($path.StartsWith($serverRoot, [StringComparison]::OrdinalIgnoreCase) -or
-         $path.StartsWith($workerRoot, [StringComparison]::OrdinalIgnoreCase))
+        $path.StartsWith($serverRoot, [StringComparison]::OrdinalIgnoreCase)
     })
 }
 
@@ -48,8 +46,7 @@ if ($null -ne $service -and $service.Status -ne 'Stopped') {
     try { $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) } catch { }
 }
 
-# The Server normally terminates the worker tree itself. This targeted fallback handles an
-# interrupted upgrade or an older build that left its embedded Python process orphaned.
+# The Server is the only managed process in the deployment package.
 for ($attempt = 0; $attempt -lt 40; $attempt++) {
     $owned = Get-TGOwnedProcesses
     if ($owned.Count -eq 0) { break }
@@ -61,14 +58,7 @@ for ($attempt = 0; $attempt -lt 40; $attempt++) {
 
 $remaining = Get-TGOwnedProcesses
 if ($remaining.Count -gt 0) {
-    throw 'The previous Server or MeloTTS worker process could not be stopped before upgrade.'
+    throw 'The previous Server process could not be stopped before upgrade.'
 }
 
-$lockProbe = Join-Path $workerRoot 'MeloTtsLocal\runtime\libcrypto-1_1.dll'
-if (-not (Test-Path -LiteralPath $lockProbe -PathType Leaf)) { exit 0 }
-for ($attempt = 0; $attempt -lt 40; $attempt++) {
-    if (Test-FileUnlocked $lockProbe) { exit 0 }
-    Start-Sleep -Milliseconds 250
-}
-
-throw "The previous MeloTTS runtime is still locked: $lockProbe"
+exit 0

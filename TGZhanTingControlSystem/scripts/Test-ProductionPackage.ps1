@@ -33,7 +33,7 @@ $required = @(
     'LedPlayer\LedPlayer_Data\Plugins\x86_64\Audio360.dll',
     'Launcher\TG.Control.Launcher.exe',
     'Tools\Install-TGExhibition.ps1', 'Tools\Uninstall-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1', 'Tools\New-AdminAccount.ps1',
-    'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt'
+    'ThirdParty\NOTICE.md', 'ThirdParty\InnoSetup-LICENSE.txt'
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) })
 if ($missing.Count -gt 0) { throw "Package required files are missing:`n$($missing -join "`n")" }
