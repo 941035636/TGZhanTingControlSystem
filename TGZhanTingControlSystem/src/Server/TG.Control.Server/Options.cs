@@ -40,8 +40,8 @@ public sealed class TtsProductionOptions
 public sealed class MeloTtsLocalOptions
 {
     public const string SectionName = "MeloTtsLocal";
-    public bool Enabled { get; init; } = true;
-    public bool AutoStartWorker { get; init; } = true;
+    public bool Enabled { get; init; } = false;
+    public bool AutoStartWorker { get; init; } = false;
     public string BaseAddress { get; init; } = "http://127.0.0.1:5091";
     public string PythonExecutablePath { get; init; } = "TtsWorker/MeloTtsLocal/runtime/python.exe";
     public string WorkerScriptPath { get; init; } = "TtsWorker/MeloTtsLocal/worker.py";

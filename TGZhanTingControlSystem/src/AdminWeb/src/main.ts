@@ -26,6 +26,7 @@ let editingNodeId: string | null = null
 let clientStatuses: ClientRuntimeStatus[] = []
 let playbackSessions: PlaybackSessionStatus[] = []
 let uiConfig: UiExperienceConfig | null = null
+let activeUiEditorDraft: UiExperienceConfig | null = null
 let routes: NarrationRoute[] = []
 let readiness: SystemReadiness | null = null
 let versions: ContentVersionSummary[] = []
@@ -118,11 +119,11 @@ async function loadDashboard(): Promise<void> {
   root.innerHTML = '<main class="loading">正在读取正式内容版本…</main>'
   try {
     draftConflict = ''
-    const [published, serverDraft, providers, clients, sessions, ui, routeResult, ready, history, events] = await Promise.all([
-      api.getContent(), api.getDraft(), api.ttsProviders().catch(() => []), api.clientStatuses(), api.playbackSessions(), api.getUi(), api.routes(), api.readiness(), api.contentVersions(), api.operations()
+    const [published, serverDraft, clients, sessions, ui, routeResult, ready, history, events] = await Promise.all([
+      api.getContent(), api.getDraft(), api.clientStatuses(), api.playbackSessions(), api.getUi(), api.routes(), api.readiness(), api.contentVersions(), api.operations()
     ])
     const restored = restoreDraft(published, serverDraft)
-    content = restored.content; ttsProviders = providers; clientStatuses = clients; playbackSessions = sessions; uiConfig = ui
+    content = restored.content; ttsProviders = []; clientStatuses = clients; playbackSessions = sessions; uiConfig = ui
     draftBaseVersion = serverDraft.baseContentVersion; draftRevision = serverDraft.revision; draftStatuses = serverDraft.narrationAudioStatuses; publishReadiness = serverDraft.publishReadiness
     routes = routeResult.routes ?? []; readiness = ready; versions = history; operationEvents = events; dirty = restored.dirty
     draftMutationSequence = restored.needsSync ? 1 : 0; draftSyncedSequence = 0; renderDashboard()
@@ -142,7 +143,7 @@ function renderDashboard(): void {
   root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => button.addEventListener('click',()=>{activeView=normalizeAdminWorkspaceView(button.dataset.view as AdminWorkspaceView);renderDashboard()}))
   if(activeView==='content'){
     root.querySelector('#add')?.addEventListener('click', addModule)
-    root.querySelector('#edit-ui')?.addEventListener('click', openUiEditor)
+    root.querySelector('#edit-ui')?.addEventListener('click', () => openUiEditor())
     root.querySelectorAll<HTMLElement>('[data-module]').forEach(bindCard)
   }
   if(activeView==='routes') bindRouteManagement()
@@ -264,7 +265,7 @@ function renderNodeEditor(): void {
   modal.addEventListener('click', event => { if (event.target === modal) closeNodeEditor() })
   modal.querySelector('#add-node')?.addEventListener('click', () => addNode(module))
   modal.querySelectorAll<HTMLElement>('[data-node-id]').forEach(button => button.addEventListener('click', () => { editingNodeId=button.dataset.nodeId!; renderNodeEditor() }))
-  if (node) { initializeTtsController(module, node, modal); bindNodeForm(module, node, modal) }
+  if (node) { bindNodeForm(module, node, modal) }
 }
 
 function nodeForm(node: NarrationNode): string {
@@ -275,6 +276,15 @@ function nodeForm(node: NarrationNode): string {
 }
 
 function ttsPanel(node: NarrationNode): string {
+  const adopted = node.narrationAudio
+  const currentAudioUrl = adopted?.asset.url ?? node.ttsAudioUrl
+  const currentAudio = currentAudioUrl
+    ? `<article class="tts-current-audio"><div><span class="tts-card-label">当前已绑定讲解音频</span><strong>${escapeHtml(displayAssetName(adopted?.asset.name ?? currentAudioUrl.split('/').pop(), 3))}</strong><p>${adopted ? `完整资产 · ${formatSize(adopted.asset.sizeBytes)}` : '历史音频'}</p></div><a href="${escapeHtml(resolveAssetUrl(currentAudioUrl))}" target="_blank" rel="noreferrer">打开音频</a><button id="remove-audio" class="danger-text">移除</button></article>`
+    : '<div class="tts-current-empty">当前尚未绑定讲解音频</div>'
+  return `<div class="tts-heading"><div><strong>讲解音频</strong><p>当前不使用自动语音合成。需要语音时，请上传人工录制的讲解音频。</p></div><span class="status-pill">手工上传</span></div>${currentAudio}<div class="tts-manual-upload"><div><strong>上传讲解音频</strong><p>音频会进入不可变素材体系，并随内容版本发布到播放端。</p></div><label class="upload-audio">选择音频<input id="audio-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac"/></label></div>`
+}
+
+function legacyTtsPanel(node: NarrationNode): string {
   const status = draftStatuses.find(item => item.moduleId === editingModuleId && item.nodeId === node.id)
   const statusValue = status?.status ?? (node.narrationAudio ? 5 : node.ttsAudioUrl ? 6 : 0)
   const availableProviders = ttsProviders.filter(item => item.available && item.voices.length > 0)
@@ -394,6 +404,12 @@ function initializeTtsController(module: ExhibitionModule, node: NarrationNode, 
   void ttsController.loadProviders()
 }
 
+// Automatic TTS generation is disabled for the current product deployment.
+// Keep the legacy workflow code available for data compatibility without
+// allowing it to become an unused-build error or an active UI path.
+void legacyTtsPanel
+void initializeTtsController
+
 function refreshTtsWorkspace(module: ExhibitionModule, node: NarrationNode, modal: HTMLElement): void {
   if (!document.body.contains(modal) || editingModuleId !== module.id || editingNodeId !== node.id) return
   const workspace = modal.querySelector<HTMLElement>('#tts-workspace')
@@ -510,9 +526,16 @@ async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement,
 function addNode(module: ExhibitionModule): void { const order=Math.max(0,...module.nodes.map(item=>item.order))+1; const node:NarrationNode={id:crypto.randomUUID(),name:`讲解节点 ${order}`,order,narrationText:'',ttsAudioUrl:null,assets:[],failurePolicy:0,audioMixPolicy:0,videoVolume:0.25,narrationVolume:1,ttsConfiguration:null,narrationAudio:null}; module.nodes.push(node);editingNodeId=node.id;markDirty();renderNodeEditor() }
 function closeNodeEditor(): void { disposeNodeRuntime(); document.querySelector('#node-modal')?.remove(); editingModuleId=null;editingNodeId=null;renderDashboard() }
 
-function openUiEditor(): void {
+function cloneUiConfig(source: UiExperienceConfig): UiExperienceConfig {
+  return JSON.parse(JSON.stringify(source)) as UiExperienceConfig
+}
+
+function openUiEditor(existingDraft?: UiExperienceConfig): void {
   if (!uiConfig) return
-  const config = uiConfig
+  // Edit a detached draft. Failed publish/cancel must never mutate the last
+  // server snapshot kept in the dashboard.
+  const config = existingDraft ? cloneUiConfig(existingDraft) : cloneUiConfig(uiConfig)
+  activeUiEditorDraft = config
   const modal = document.createElement('div'); modal.id='ui-modal'; modal.className='modal-backdrop'
   modal.innerHTML=`<section class="ui-editor-modal"><header class="editor-header"><div><p class="eyebrow">终端外观</p><h2>终端界面设置</h2></div><button id="close-ui" class="icon-button">×</button></header><div class="ui-editor-body">
     <section class="ui-config-card"><div class="ui-config-title"><div><strong>触控中控端</strong><p>标题、配色和背景图发布后由中控端自动获取。</p></div><span>触控界面 · 1920×1080</span></div><div class="ui-fields"><label>主标题<input id="touch-title" value="${escapeHtml(config.touchTitle)}"/></label><label>副标题<input id="touch-subtitle" value="${escapeHtml(config.touchSubtitle)}"/></label><div class="field-row colors"><label>背景颜色<input id="touch-bg-color" type="color" value="${escapeHtml(config.touchBackgroundColor)}"/></label><label>强调颜色<input id="touch-accent" type="color" value="${escapeHtml(config.touchAccentColor)}"/></label></div><div class="media-setting"><div><strong>背景图</strong><p>${config.touchBackgroundUrl?'已设置背景图':'未设置，使用纯色背景'}</p></div><label class="upload-button">上传替换<input id="touch-background-file" type="file" accept="image/*"/></label><button id="clear-touch-background">移除</button></div></div></section>
@@ -520,6 +543,10 @@ function openUiEditor(): void {
     <section class="ui-config-card"><div class="ui-config-title"><div><strong>大屏待机界面</strong><p>支持纯色、1920×1080 图片或无停顿循环视频；每段讲解结束后自动返回。</p></div><span>大屏界面 · 1920×1080</span></div><div class="ui-fields"><label>主标题<input id="led-title" value="${escapeHtml(config.ledTitle)}"/></label><label>提示文字<input id="led-subtitle" value="${escapeHtml(config.ledSubtitle)}"/></label><div class="field-row colors"><label>背景颜色<input id="led-bg-color" type="color" value="${escapeHtml(config.ledBackgroundColor)}"/></label><div class="visibility-options"><label class="check-field"><input id="led-show-branding" type="checkbox" ${config.ledShowBranding?'checked':''}/>叠加标题文字</label><label class="check-field"><input id="led-show-status" type="checkbox" ${config.ledShowStatus?'checked':''}/>显示在线状态</label></div></div><div class="media-setting"><div><strong>待机素材</strong><p>${config.ledIdleMediaUrl?`${config.ledIdleMediaKind==='video'?'循环视频':'背景图片'} · 已设置`:'仅接受 1920×1080，未设置时使用纯色待机页'}</p></div><label class="upload-button">上传图片<input id="led-image-file" type="file" accept="image/*"/></label><label class="upload-button">上传视频<input id="led-video-file" type="file" accept="video/*,.mov,.mkv,.webm"/></label><button id="clear-led-media">移除</button></div></div></section>
     <div id="ui-upload-progress" class="upload-progress"><span></span></div><footer class="editor-footer"><span>界面配置独立发布，不会修改讲解内容版本。</span><button id="cancel-ui">取消</button><button id="save-ui" class="primary">发布界面配置</button></footer></div></section>`
   document.body.appendChild(modal)
+  const overview = document.createElement('div')
+  overview.className = 'ui-editor-overview'
+  overview.innerHTML = `<div><strong>终端界面配置</strong><span>只有点击“发布界面配置”后才会写入服务器并同步终端</span></div><div class="ui-editor-version"><b>服务器版本 v${config.version}</b><button id="reload-ui" type="button">重新读取服务器配置</button></div>`
+  modal.querySelector('.ui-editor-body')?.prepend(overview)
   config.layout ??= { touchTemplate: 'module-kiosk', ledTemplate: 'idle-media', touchShowHero: true, touchShowStatusPanel: true, touchShowQuickActions: true, ledShowBranding: config.ledShowBranding, ledShowStatus: config.ledShowStatus, touchWelcomeEnabled: true, touchIdleTimeoutSeconds: 180 }
   config.layout.touchWelcomeEnabled ??= true
   config.layout.touchIdleTimeoutSeconds ||= 180
@@ -593,29 +620,42 @@ function openUiEditor(): void {
   advanced.querySelector('.ui-fields')?.appendChild(assetRow)
   modal.querySelector<HTMLInputElement>('#touch-logo-file')?.addEventListener('change', event => uploadUiElementAsset(event.target as HTMLInputElement, 'home.hero.logo', true, modal))
   modal.querySelector<HTMLInputElement>('#led-logo-file')?.addEventListener('change', event => uploadUiElementAsset(event.target as HTMLInputElement, 'idle.logo', false, modal))
-  modal.querySelector<HTMLInputElement>('#welcome-logo-file')?.addEventListener('change', event => { syncAdvanced(); void uploadUiElementAsset(event.target as HTMLInputElement, 'welcome.logo', true, modal, 1, '欢迎页标志图') })
-  modal.querySelector<HTMLInputElement>('#welcome-background-file')?.addEventListener('change', event => { syncAdvanced(); void uploadUiElementAsset(event.target as HTMLInputElement, 'welcome.background', true, modal, 1, '欢迎页背景图') })
-  modal.querySelector<HTMLInputElement>('#welcome-audio-file')?.addEventListener('change', event => { syncAdvanced(); void uploadUiElementAsset(event.target as HTMLInputElement, 'welcome.audio', true, modal, 3, '欢迎词音频') })
-  const clearWelcomeAsset = (key: string) => { syncAdvanced(); const item=config.touchElements?.find(value=>value.key===key); if(item){item.assetUrl=null;item.assetId=null;item.assetSha256=null;item.assetSizeBytes=0;item.assetMediaType=null} modal.remove();openUiEditor() }
+  modal.querySelector<HTMLInputElement>('#welcome-logo-file')?.addEventListener('change', event => { read(); syncAdvanced(); void uploadUiElementAsset(event.target as HTMLInputElement, 'welcome.logo', true, modal, 1, '欢迎页标志图') })
+  modal.querySelector<HTMLInputElement>('#welcome-background-file')?.addEventListener('change', event => { read(); syncAdvanced(); void uploadUiElementAsset(event.target as HTMLInputElement, 'welcome.background', true, modal, 1, '欢迎页背景图') })
+  modal.querySelector<HTMLInputElement>('#welcome-audio-file')?.addEventListener('change', event => { read(); syncAdvanced(); void uploadUiElementAsset(event.target as HTMLInputElement, 'welcome.audio', true, modal, 3, '欢迎词音频') })
+  const clearWelcomeAsset = (key: string) => { read(); syncAdvanced(); const item=config.touchElements?.find(value=>value.key===key); if(item){item.assetUrl=null;item.assetId=null;item.assetSha256=null;item.assetSizeBytes=0;item.assetMediaType=null} modal.remove();openUiEditor(config) }
   modal.querySelector('#clear-welcome-logo')?.addEventListener('click', () => clearWelcomeAsset('welcome.logo'))
   modal.querySelector('#clear-welcome-background')?.addEventListener('click', () => clearWelcomeAsset('welcome.background'))
   modal.querySelector('#clear-welcome-audio')?.addEventListener('click', () => clearWelcomeAsset('welcome.audio'))
   modal.querySelector('#save-ui')?.addEventListener('click', syncAdvanced, true)
+  modal.querySelector('#reload-ui')?.addEventListener('click', async () => {
+    const button = modal.querySelector<HTMLButtonElement>('#reload-ui')
+    if (button) button.disabled = true
+    try {
+      uiConfig = await api.getUi()
+      modal.remove()
+      openUiEditor()
+      showToast('已重新读取服务器配置，未发布的修改已丢弃。')
+    } catch (error) {
+      if (button) button.disabled = false
+      showToast(error instanceof Error ? error.message : '读取服务器配置失败')
+    }
+  })
   const read=()=>{config.touchTitle=modal.querySelector<HTMLInputElement>('#touch-title')!.value;config.touchSubtitle=modal.querySelector<HTMLInputElement>('#touch-subtitle')!.value;config.touchBackgroundColor=modal.querySelector<HTMLInputElement>('#touch-bg-color')!.value;config.touchAccentColor=modal.querySelector<HTMLInputElement>('#touch-accent')!.value;config.ledTitle=modal.querySelector<HTMLInputElement>('#led-title')!.value;config.ledSubtitle=modal.querySelector<HTMLInputElement>('#led-subtitle')!.value;config.ledBackgroundColor=modal.querySelector<HTMLInputElement>('#led-bg-color')!.value;config.ledShowBranding=modal.querySelector<HTMLInputElement>('#led-show-branding')!.checked;config.ledShowStatus=modal.querySelector<HTMLInputElement>('#led-show-status')!.checked}
-  const close=()=>modal.remove()
+  const close=()=>{if(activeUiEditorDraft===config)activeUiEditorDraft=null;modal.remove()}
   modal.querySelector('#close-ui')?.addEventListener('click',close);modal.querySelector('#cancel-ui')?.addEventListener('click',close)
-  modal.querySelector('#clear-touch-background')?.addEventListener('click',()=>{config.touchBackgroundUrl=null;openUiEditor();modal.remove()})
-  modal.querySelector('#clear-led-media')?.addEventListener('click',()=>{config.ledIdleMediaUrl=null;config.ledIdleMediaKind='none';openUiEditor();modal.remove()})
-  modal.querySelector<HTMLInputElement>('#touch-background-file')?.addEventListener('change',event=>uploadUiAsset(event.target as HTMLInputElement,1,'touch',modal))
-  modal.querySelector<HTMLInputElement>('#led-image-file')?.addEventListener('change',event=>uploadUiAsset(event.target as HTMLInputElement,1,'led-image',modal))
-  modal.querySelector<HTMLInputElement>('#led-video-file')?.addEventListener('change',event=>uploadUiAsset(event.target as HTMLInputElement,0,'led-video',modal))
+  modal.querySelector('#clear-touch-background')?.addEventListener('click',()=>{read();syncAdvanced();config.touchBackgroundUrl=null;modal.remove();openUiEditor(config)})
+  modal.querySelector('#clear-led-media')?.addEventListener('click',()=>{read();syncAdvanced();config.ledIdleMediaUrl=null;config.ledIdleMediaKind='none';modal.remove();openUiEditor(config)})
+  modal.querySelector<HTMLInputElement>('#touch-background-file')?.addEventListener('change',event=>void uploadUiAsset(event.target as HTMLInputElement,1,'touch',modal))
+  modal.querySelector<HTMLInputElement>('#led-image-file')?.addEventListener('change',event=>void uploadUiAsset(event.target as HTMLInputElement,1,'led-image',modal))
+  modal.querySelector<HTMLInputElement>('#led-video-file')?.addEventListener('change',event=>void uploadUiAsset(event.target as HTMLInputElement,0,'led-video',modal))
   modal.querySelector('#save-ui')?.addEventListener('click',async()=>{read();const button=modal.querySelector<HTMLButtonElement>('#save-ui')!;button.disabled=true;button.textContent='正在发布…';try{uiConfig=await api.publishUi(config);close();showToast(`界面配置${formatVersion(uiConfig.version)}发布成功，终端将在 10 秒内更新。`)}catch(error){button.disabled=false;button.textContent='发布界面配置';showToast(error instanceof Error?error.message:'界面配置发布失败')}})
 }
 
 async function uploadUiAsset(input:HTMLInputElement,kind:AssetKind,target:'touch'|'led-image'|'led-video'|'touch-logo'|'led-logo',modal:HTMLElement):Promise<void>{
-  const file=input.files?.[0];if(!file||!uiConfig)return
+  const file=input.files?.[0];const config=activeUiEditorDraft;if(!file||!config)return
   const progress=modal.querySelector<HTMLElement>('#ui-upload-progress')!;progress.classList.add('visible')
-  try{if(target==='led-image'||target==='led-video')await validateLedIdleMediaFile(file,target==='led-video');const asset=await api.uploadAsset(file,kind,0,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`});if(target==='touch')uiConfig.touchBackgroundUrl=asset.url;else{uiConfig.ledIdleMediaUrl=asset.url;uiConfig.ledIdleMediaKind=target==='led-video'?'video':'image'};modal.remove();openUiEditor();showToast('界面素材上传成功，请点击“发布界面配置”。')}catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'界面素材上传失败')}
+  try{if(target==='led-image'||target==='led-video')await validateLedIdleMediaFile(file,target==='led-video');const asset=await api.uploadAsset(file,kind,0,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`});if(target==='touch')config.touchBackgroundUrl=asset.url;else{config.ledIdleMediaUrl=asset.url;config.ledIdleMediaKind=target==='led-video'?'video':'image'};modal.remove();openUiEditor(config);showToast('界面素材已加入当前草稿，请点击发布界面配置后保存。')}catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'界面素材上传失败')}
 }
 
 async function validateLedIdleMediaFile(file: File, video: boolean): Promise<void> {
@@ -643,7 +683,7 @@ async function validateLedIdleMediaFile(file: File, video: boolean): Promise<voi
   }
 }
 async function uploadUiElementAsset(input: HTMLInputElement, key: string, touch: boolean, modal: HTMLElement, kind: AssetKind = 1, label = '界面素材'): Promise<void> {
-  const file = input.files?.[0]; if (!file || !uiConfig) return
+  const file = input.files?.[0]; const config = activeUiEditorDraft; if (!file || !config) return
   if (key === 'welcome.audio' && !/\.(mp3|wav)$/i.test(file.name)) {
     showToast('欢迎词仅支持MP3或WAV格式，请转换后重新上传。')
     input.value = ''
@@ -652,11 +692,11 @@ async function uploadUiElementAsset(input: HTMLInputElement, key: string, touch:
   const progress = modal.querySelector<HTMLElement>('#ui-upload-progress'); progress?.classList.add('visible')
   try {
     const asset = await api.uploadAsset(file, kind, 0, percent => { const bar = progress?.querySelector<HTMLElement>('span'); if (bar) bar.style.width = `${percent}%` })
-    const items = touch ? (uiConfig.touchElements ??= []) : (uiConfig.ledElements ??= [])
+    const items = touch ? (config.touchElements ??= []) : (config.ledElements ??= [])
     const existing = items.find(item => item.key === key)
     const value: UiElementOverride = { key, text: existing?.text ?? null, assetUrl: asset.url, color: existing?.color ?? null, visible: true, assetId: asset.id, assetSha256: asset.sha256, assetSizeBytes: asset.sizeBytes, assetMediaType: asset.mediaType ?? null }
     if (existing) Object.assign(existing, value); else items.push(value)
-    modal.remove(); openUiEditor(); showToast(`${label}上传成功，请点击“发布界面配置”。`)
+    modal.remove(); openUiEditor(config); showToast(`${label}已加入当前草稿，请点击发布界面配置后保存。`)
   } catch (error) { progress?.classList.remove('visible'); showToast(error instanceof Error ? error.message : '界面素材上传失败') }
 }
 

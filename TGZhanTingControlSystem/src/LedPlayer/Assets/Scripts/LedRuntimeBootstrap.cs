@@ -31,6 +31,7 @@ namespace TG.Control.LedPlayer
             narrationAudio.loop = false;
             narrationAudio.spatialBlend = 0f;
             var controller = root.AddComponent<LedPlaybackController>();
+            var legacyUdp = root.AddComponent<LegacyUdpPlaybackBridge>();
             var welcomeController = root.AddComponent<LedWelcomePlaybackController>();
             var overlay = root.AddComponent<LedStatusOverlay>();
             CreateVideoCanvas(root.transform, mediaPlayer);
@@ -38,6 +39,7 @@ namespace TG.Control.LedPlayer
             SetReference(controller, "apiClient", api);
             SetReference(controller, "playbackAdapterComponent", adapter);
             SetReference(controller, "narrationAudioSource", narrationAudio);
+            SetReference(legacyUdp, "playbackController", controller);
             SetReference(welcomeController, "apiClient", api);
             SetReference(welcomeController, "audioSource", narrationAudio);
             SetReference(overlay, "apiClient", api);

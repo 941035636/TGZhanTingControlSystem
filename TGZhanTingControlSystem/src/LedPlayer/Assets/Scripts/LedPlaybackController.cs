@@ -31,6 +31,16 @@ namespace TG.Control.LedPlayer
         private IMediaPlaybackAdapter PlaybackAdapter => playbackAdapterComponent as IMediaPlaybackAdapter;
         public event Action<bool> PlaybackActiveChanged;
 
+        /// <summary>
+        /// Compatibility entry point for the legacy Android UDP controller. The adapter
+        /// supplies a synthetic command envelope, while playback still goes through the
+        /// same AVPro/cache/reporting path as a normal command.
+        /// </summary>
+        public void HandleLegacyCommand(PlaybackCommand command)
+        {
+            HandleCommand(command);
+        }
+
         private void OnEnable()
         {
             if (apiClient != null) apiClient.CommandReceived += HandleCommand;
