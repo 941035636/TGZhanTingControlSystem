@@ -96,7 +96,14 @@ namespace TG.Control.LedPlayer
         private static void ApplySiteConfiguration(LedApiClient api)
         {
             var path = ResolveConfigurationPath();
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+#if UNITY_EDITOR
+                SetValue(api, "serverBaseUrl", "http://127.0.0.1:5080");
+                SetValue(api, "terminalApiKey", "TG-DEVELOPMENT-ONLY");
+#endif
+                return;
+            }
             try
             {
                 var config = JsonUtility.FromJson<LedSiteConfiguration>(File.ReadAllText(path));
@@ -112,6 +119,12 @@ namespace TG.Control.LedPlayer
             {
                 Debug.LogError("LedPlayer现场配置加载失败：" + exception.Message);
             }
+#if UNITY_EDITOR
+            // Editor smoke tests use the Development Server. Installed
+            // Windows builds continue to use the site enrollment key.
+            SetValue(api, "serverBaseUrl", "http://127.0.0.1:5080");
+            SetValue(api, "terminalApiKey", "TG-DEVELOPMENT-ONLY");
+#endif
         }
 
         private static string ResolveConfigurationPath()
