@@ -23,6 +23,11 @@ namespace TG.Control.LedPlayer
             ApplySiteConfiguration(api);
             Application.runInBackground = true;
             var mediaPlayer = root.AddComponent<MediaPlayer>();
+            // Runtime playback is URL/path driven by the Server.  AVPro defaults
+            // to MediaSource.Reference + AutoOpen, which makes a newly-created
+            // player call OpenMedia() before a command has supplied a path and
+            // logs "No MediaReference specified" in the Editor.
+            mediaPlayer.AutoOpen = false;
             mediaPlayer.AutoStart = false;
             mediaPlayer.Loop = false;
             var adapter = root.AddComponent<AvProMediaPlaybackAdapter>();

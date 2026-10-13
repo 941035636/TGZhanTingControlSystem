@@ -134,6 +134,10 @@ namespace TG.Control.LedPlayer
             for (var i = 0; i < idleMediaPlayers.Length; i++)
             {
                 var player = gameObject.AddComponent<MediaPlayer>();
+                // Idle media is opened explicitly after the persisted/site
+                // configuration is known; never let AVPro auto-open its empty
+                // default MediaReference during startup.
+                player.AutoOpen = false;
                 player.AutoStart = false;
                 // A second pre-opened player takes over just before the end. This avoids
                 // the decoder seek/rebuffer pause that can be visible with native looping.
