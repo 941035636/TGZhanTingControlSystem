@@ -20,6 +20,7 @@ namespace TG.Control.LedPlayer
         [SerializeField] private float initialVideoRecoveryDelaySeconds = 0.65f;
         [SerializeField] private float recoveryPauseSeconds = 0.08f;
         [SerializeField] private float firstVideoFrameTimeoutSeconds = 8f;
+        [SerializeField] private float maximumTrustedScheduleOffsetSeconds = 0.5f;
 
         private readonly LedContentCache contentCache = LedContentCache.Shared;
         private int playbackGeneration;
@@ -223,13 +224,29 @@ namespace TG.Control.LedPlayer
                 yield break;
             }
 
-            while (DateTimeOffset.UtcNow < executeAt)
+            // executeAtUtc is produced by the Server, while UtcNow below belongs to the
+            // LED computer. Field machines are not guaranteed to have synchronized clocks.
+            // Converting a small trusted delta to Unity's monotonic clock preserves the
+            // intended ~250 ms coordinated start without allowing a two-minute wall-clock
+            // skew to freeze the first frame or seek far into the video.
+            var scheduleOffsetSeconds = (executeAt - DateTimeOffset.UtcNow).TotalSeconds;
+            var trustedScheduleWindow = Math.Max(0.1, maximumTrustedScheduleOffsetSeconds);
+            var scheduleTrusted = Math.Abs(scheduleOffsetSeconds) <= trustedScheduleWindow;
+            if (!scheduleTrusted)
+            {
+                Debug.LogWarning($"[LED Player] 检测到Server与LED计划时间偏差 {scheduleOffsetSeconds:0.000} 秒，" +
+                                 $"超过可信窗口 {trustedScheduleWindow:0.000} 秒；忽略绝对时间并立即从请求位置播放。");
+                scheduleOffsetSeconds = 0;
+            }
+
+            var waitUntil = Time.realtimeSinceStartup + Math.Max(0, scheduleOffsetSeconds);
+            while (Time.realtimeSinceStartup < waitUntil)
             {
                 if (generation != playbackGeneration) yield break;
                 yield return null;
             }
 
-            var lateBySeconds = Math.Max(0, (DateTimeOffset.UtcNow - executeAt).TotalSeconds);
+            var lateBySeconds = scheduleTrusted ? Math.Max(0, -scheduleOffsetSeconds) : 0;
             var startPosition = command.positionSeconds + lateBySeconds;
             var startRequestedAt = Time.realtimeSinceStartup;
             var diagnostics = PlaybackAdapter as IVideoPlaybackDiagnostics;

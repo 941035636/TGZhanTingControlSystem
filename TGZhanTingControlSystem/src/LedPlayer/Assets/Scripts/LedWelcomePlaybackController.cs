@@ -16,6 +16,7 @@ namespace TG.Control.LedPlayer
         private WelcomePlaybackCommand prepared;
         private AudioClip clip;
         private string playStartingRequestId;
+        [SerializeField] private float maximumTrustedScheduleOffsetSeconds = 0.5f;
 
         private void OnEnable()
         {
@@ -134,7 +135,21 @@ namespace TG.Control.LedPlayer
         private IEnumerator Play(WelcomePlaybackCommand command, int activeGeneration)
         {
             if (!DateTimeOffset.TryParse(command.executeAtUtc, out var executeAt)) { apiClient.ReportWelcome(command, WelcomePlaybackState.Failed, error: "欢迎播放时间无效"); yield break; }
-            while (DateTimeOffset.UtcNow < executeAt) { if (activeGeneration != generation) yield break; yield return null; }
+            // The planned UTC time comes from the Server, but UtcNow belongs to the LED
+            // computer. Use only a small, trusted scheduling delta and convert it to
+            // Unity's monotonic clock. A field-machine clock skew must never keep the
+            // welcome flow in Preparing for minutes.
+            var scheduleOffsetSeconds = (executeAt - DateTimeOffset.UtcNow).TotalSeconds;
+            var trustedScheduleWindow = Math.Max(0.1, maximumTrustedScheduleOffsetSeconds);
+            if (Math.Abs(scheduleOffsetSeconds) > trustedScheduleWindow)
+            {
+                Debug.LogWarning($"Welcome detected Server/LED clock offset {scheduleOffsetSeconds:0.000}s; " +
+                                 $"outside trusted window {trustedScheduleWindow:0.000}s, starting immediately.");
+                scheduleOffsetSeconds = 0;
+            }
+
+            var waitUntil = Time.realtimeSinceStartup + Math.Max(0, scheduleOffsetSeconds);
+            while (Time.realtimeSinceStartup < waitUntil) { if (activeGeneration != generation) yield break; yield return null; }
             audioSource.time = 0; audioSource.Play();
             yield return null;
             if (activeGeneration != generation) yield break;

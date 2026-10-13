@@ -22,6 +22,7 @@ namespace TG.Control.LedPlayer
         [SerializeField] private bool enabledByDefault = true;
         private UdpClient socket;
         private float legacyVideoVolume = 1f;
+        private bool legacyPlaybackPaused;
         private bool listening;
 
         public bool IsListening => listening;
@@ -104,9 +105,12 @@ namespace TG.Control.LedPlayer
             switch (command)
             {
                 case "VideoPause":
-                    Send(PlaybackAction.Pause);
+                    legacyPlaybackPaused = !legacyPlaybackPaused;
+                    Send(legacyPlaybackPaused ? PlaybackAction.Pause : PlaybackAction.Resume);
+                    Debug.Log($"[LED Legacy UDP] VideoPause切换为{(legacyPlaybackPaused ? "暂停" : "继续")}。");
                     break;
                 case "CloseVideo":
+                    legacyPlaybackPaused = false;
                     Send(PlaybackAction.Stop);
                     break;
                 case "VoiceStart":
@@ -140,6 +144,7 @@ namespace TG.Control.LedPlayer
                 return;
             }
 
+            legacyPlaybackPaused = false;
             Send(PlaybackAction.PlayVideo, 0, new Uri(path).AbsoluteUri);
         }
 
