@@ -50,6 +50,15 @@ Test-Package 'Led' @(
     'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideo.dll',
     'Tools\Install-TGTerminal.ps1','Tools\templates\led.site-install.json')
 
+$serverTtsWorker = Join-Path $root 'Server\Server\TtsWorker'
+if (Test-Path -LiteralPath $serverTtsWorker) {
+    throw "Server production package contains the disabled local TTS worker: $serverTtsWorker"
+}
+$bundledPython = Get-ChildItem -LiteralPath (Join-Path $root 'Server') -File -Recurse -Filter 'python.exe' -ErrorAction SilentlyContinue
+if ($bundledPython) {
+    throw "Server production package contains a Python runtime even though local TTS is disabled: $($bundledPython.FullName -join ', ')"
+}
+
 $forbiddenPatterns = @('F:\WorkSpace','C:\Users\A','TG-DEVELOPMENT-ONLY')
 $textFiles = Get-ChildItem -LiteralPath $root -File -Recurse |
     Where-Object { $_.Extension -in @('.json','.config','.xml','.txt','.md','.ps1','.py') }
