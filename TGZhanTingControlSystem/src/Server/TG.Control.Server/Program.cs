@@ -34,7 +34,9 @@ builder.Services.AddSingleton<ITtsService, UnconfiguredTtsService>();
 if (builder.Environment.IsDevelopment() &&
     builder.Configuration.GetValue<bool>($"{TtsProductionOptions.SectionName}:EnableDeterministicTestProvider"))
     builder.Services.AddSingleton<ITtsProvider, DeterministicTestTtsProvider>();
-if (builder.Configuration.GetValue<bool>($"{MeloTtsLocalOptions.SectionName}:Enabled", true))
+// Local MeloTTS is an optional legacy capability. Product deployments use
+// uploaded welcome audio and must start without a Python/model bundle.
+if (builder.Configuration.GetValue<bool>($"{MeloTtsLocalOptions.SectionName}:Enabled", false))
 {
     builder.Services.AddHttpClient(MeloTtsLocalProvider.HttpClientName)
         .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false });
@@ -132,7 +134,11 @@ app.MapPost("/api/ui/publish", async (HttpRequest request, UiExperienceConfig co
         if (assetError is not null) validation[$"uiElement.{element.Key}"] = [$"界面元素素材：{assetError}"];
     }
     if (validation.Count > 0) return Results.ValidationProblem(validation);
-    return Results.Ok(await repository.SaveAsync(config, username, ct));
+    try { return Results.Ok(await repository.SaveAsync(config, username, ct)); }
+    catch (UiExperienceConflictException exception)
+    {
+        return Results.Conflict(new { message = exception.Message, currentVersion = exception.CurrentVersion });
+    }
 });
 app.MapGet("/api/content/manifest", async (IContentRepository repository, CancellationToken ct) =>
 {

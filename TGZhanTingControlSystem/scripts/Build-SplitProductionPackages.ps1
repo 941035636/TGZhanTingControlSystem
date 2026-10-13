@@ -6,7 +6,8 @@ param(
     [string]$ExistingUnityBuildRoot,
     [string]$MeloTtsBundleSource,
     [string]$InnoCompiler,
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$IncludeMeloTts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -93,11 +94,11 @@ if ([string]::IsNullOrWhiteSpace($ExistingUnityBuildRoot)) {
 Copy-Directory (Join-Path $unityOutput 'TouchClient') (Join-Path $touchPackage 'TouchClient')
 Copy-Directory (Join-Path $unityOutput 'LedPlayer') (Join-Path $ledPackage 'LedPlayer')
 
-if ([string]::IsNullOrWhiteSpace($MeloTtsBundleSource)) {
+if ($IncludeMeloTts -and [string]::IsNullOrWhiteSpace($MeloTtsBundleSource)) {
     $meloDestination = Join-Path $serverPackage 'TtsWorker\MeloTtsLocal'
     & (Join-Path $repoRoot 'scripts\Build-MeloTtsWindowsBundle.ps1') -DestinationRoot $meloDestination
     if ($LASTEXITCODE -ne 0) { throw 'MeloTTS offline bundle build failed.' }
-} else {
+} elseif ($IncludeMeloTts) {
     $resolvedMeloSource = if ([IO.Path]::IsPathRooted($MeloTtsBundleSource)) {
         [IO.Path]::GetFullPath($MeloTtsBundleSource)
     } else { [IO.Path]::GetFullPath((Join-Path $repoRoot $MeloTtsBundleSource)) }
@@ -111,9 +112,6 @@ foreach ($package in @($serverPackage,$touchPackage,$ledPackage)) {
 
 Assert-Files $serverPackage @(
     'Server\TG.Control.Server.exe','Server\AdminWeb\index.html',
-    'TtsWorker\MeloTtsLocal\worker.py','TtsWorker\MeloTtsLocal\runtime\python.exe',
-    'TtsWorker\MeloTtsLocal\models\MeloTTS-Chinese\checkpoint.pth',
-    'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\pytorch_model.bin',
     'Tools\Install-TGServer.ps1','Tools\Uninstall-TGExhibition.ps1','ThirdParty\NOTICE.md')
 Assert-Files $touchPackage @(
     'TouchClient\TouchClient.exe','TouchClient\TouchClient_Data\globalgamemanagers',

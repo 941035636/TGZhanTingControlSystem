@@ -6,7 +6,8 @@ param(
     [string]$ExistingUnityBuildRoot,
     [string]$MeloTtsBundleSource,
     [string]$InnoCompiler,
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$IncludeMeloTts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -89,11 +90,11 @@ if ([string]::IsNullOrWhiteSpace($ExistingUnityBuildRoot)) {
 Copy-Directory (Join-Path $unityOutput 'TouchClient') (Join-Path $packageRoot 'TouchClient')
 Copy-Directory (Join-Path $unityOutput 'LedPlayer') (Join-Path $packageRoot 'LedPlayer')
 
-if ([string]::IsNullOrWhiteSpace($MeloTtsBundleSource)) {
+if ($IncludeMeloTts -and [string]::IsNullOrWhiteSpace($MeloTtsBundleSource)) {
     $meloDestination = Join-Path $packageRoot 'TtsWorker\MeloTtsLocal'
     & (Join-Path $repoRoot 'scripts\Build-MeloTtsWindowsBundle.ps1') -DestinationRoot $meloDestination
     if ($LASTEXITCODE -ne 0) { throw 'MeloTTS offline bundle build failed.' }
-} else {
+} elseif ($IncludeMeloTts) {
     Copy-Directory ([IO.Path]::GetFullPath($MeloTtsBundleSource)) (Join-Path $packageRoot 'TtsWorker\MeloTtsLocal')
 }
 
@@ -106,10 +107,7 @@ $requiredFiles = @(
     'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideo.dll',
     'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideoWinRT.dll',
     'LedPlayer\LedPlayer_Data\Plugins\x86_64\Audio360.dll',
-    'Launcher\TG.Control.Launcher.exe', 'TtsWorker\MeloTtsLocal\worker.py',
-    'TtsWorker\MeloTtsLocal\runtime\python.exe',
-    'TtsWorker\MeloTtsLocal\models\MeloTTS-Chinese\checkpoint.pth',
-    'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\pytorch_model.bin',
+    'Launcher\TG.Control.Launcher.exe',
     'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt',
     'Tools\Install-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1', 'Tools\New-AdminAccount.ps1'
 )

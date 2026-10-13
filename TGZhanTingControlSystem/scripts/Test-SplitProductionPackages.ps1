@@ -39,7 +39,7 @@ function Test-Package([string]$packageName, [string[]]$required) {
 }
 
 Test-Package 'Server' @(
-    'Server\TG.Control.Server.exe','Server\AdminWeb\index.html','TtsWorker\MeloTtsLocal\worker.py',
+    'Server\TG.Control.Server.exe','Server\AdminWeb\index.html',
     'Tools\Install-TGServer.ps1','Tools\Stop-TGServerForUpgrade.ps1',
     'Tools\templates\server.site-install.json')
 Test-Package 'Touch' @(

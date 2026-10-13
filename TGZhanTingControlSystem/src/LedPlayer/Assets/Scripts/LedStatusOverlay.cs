@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using TG.Control.UnityContracts;
 using RenderHeads.Media.AVProVideo;
 using UnityEngine;
@@ -44,6 +45,7 @@ namespace TG.Control.LedPlayer
             font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei UI", "Microsoft YaHei", "Arial" }, 32);
             BuildUi();
             CreateIdleVideoPlayer();
+            TryApplyPersistedConfig();
         }
 
         private void Start()
@@ -101,14 +103,6 @@ namespace TG.Control.LedPlayer
                 display.gameObject.SetActive(false);
                 idleVideos[i] = display;
             }
-            var veil = Image("Readability Veil", idleRoot.transform, new Color(.01f, .035f, .10f, .42f));
-            Stretch(veil.rectTransform);
-
-            var horizon = Image("Technology Horizon", idleRoot.transform, new Color(.18f, .66f, 1f, .16f));
-            Anchor(horizon.rectTransform, .16f, .31f, .84f, .31f, 0, 0, 0, 2);
-            var topLine = Image("Technology Top Line", idleRoot.transform, new Color(.18f, .66f, 1f, .28f));
-            Anchor(topLine.rectTransform, .32f, .73f, .68f, .73f, 0, 0, 0, 2);
-
             brand = Label("Brand", idleRoot.transform, "TG", 70, FontStyle.Bold, Hex("#43B8FF"), TextAnchor.MiddleCenter);
             Anchor(brand.rectTransform, .35f, .60f, .65f, .72f, 0, 0, 0, 0);
             brandLogo = Image("Brand Logo", idleRoot.transform, Color.white);
@@ -126,6 +120,13 @@ namespace TG.Control.LedPlayer
             Anchor(connectionPill.rectTransform, 0, 1, 0, 1, 48, -94, 408, -42);
             connectionText = Label("Connection Label", connectionPill.transform, "● LED 播放端连接中", 19, FontStyle.Normal, Color.white, TextAnchor.MiddleCenter);
             Stretch(connectionText.rectTransform, 10, 2, -10, -2);
+            // The production LED idle surface is media-only. Keep legacy objects
+            // allocated for schema compatibility, but never show them by default.
+            brand.gameObject.SetActive(false);
+            title.gameObject.SetActive(false);
+            subtitle.gameObject.SetActive(false);
+            statusText.gameObject.SetActive(false);
+            connectionPill.gameObject.SetActive(false);
         }
 
         private void CreateIdleVideoPlayer()
@@ -182,23 +183,56 @@ namespace TG.Control.LedPlayer
             if (config == null) return;
             var titleOverride = FindOverride(config.ledElements, "idle.title");
             var subtitleOverride = FindOverride(config.ledElements, "idle.subtitle");
-            if (!string.IsNullOrWhiteSpace(titleOverride?.text)) title.text = titleOverride.text;
-            else if (!string.IsNullOrWhiteSpace(config.ledTitle)) title.text = config.ledTitle;
-            if (!string.IsNullOrWhiteSpace(subtitleOverride?.text)) subtitle.text = subtitleOverride.text;
-            else if (!string.IsNullOrWhiteSpace(config.ledSubtitle)) subtitle.text = config.ledSubtitle;
+            if (title != null && !string.IsNullOrWhiteSpace(titleOverride?.text)) title.text = titleOverride.text;
+            else if (title != null && !string.IsNullOrWhiteSpace(config.ledTitle)) title.text = config.ledTitle;
+            if (subtitle != null && !string.IsNullOrWhiteSpace(subtitleOverride?.text)) subtitle.text = subtitleOverride.text;
+            else if (subtitle != null && !string.IsNullOrWhiteSpace(config.ledSubtitle)) subtitle.text = config.ledSubtitle;
             if (ColorUtility.TryParseHtmlString(config.ledBackgroundColor, out var color)) solidBackground.color = color;
-            var showBranding = config.layout == null ? config.ledShowBranding : config.layout.ledShowBranding && config.ledShowBranding;
-            var showStatus = config.layout == null ? config.ledShowStatus : config.layout.ledShowStatus && config.ledShowStatus;
-            brand.gameObject.SetActive(showBranding);
-            title.gameObject.SetActive(showBranding);
-            subtitle.gameObject.SetActive(showBranding);
-            statusText.gameObject.SetActive(showBranding);
-            connectionPill.gameObject.SetActive(showStatus);
+            // Production idle mode is media-only. Keep the legacy configuration fields
+            // for compatibility, but do not overlay text or status badges over customer media.
+            var showBranding = false;
+            var showStatus = false;
+            if (brand != null) brand.gameObject.SetActive(showBranding);
+            if (title != null) title.gameObject.SetActive(showBranding);
+            if (subtitle != null) subtitle.gameObject.SetActive(showBranding);
+            if (statusText != null) statusText.gameObject.SetActive(showBranding);
+            if (connectionPill != null) connectionPill.gameObject.SetActive(showStatus);
             var logo = FindOverride(config.ledElements, "idle.logo");
-            brand.gameObject.SetActive(showBranding && string.IsNullOrWhiteSpace(logo?.assetUrl));
-            brandLogo.gameObject.SetActive(false);
+            if (brand != null) brand.gameObject.SetActive(showBranding && string.IsNullOrWhiteSpace(logo?.assetUrl));
+            if (brandLogo != null) brandLogo.gameObject.SetActive(false);
             if (showBranding && !string.IsNullOrWhiteSpace(logo?.assetUrl)) StartCoroutine(LoadBrandLogo(apiClient.NormalizeUrl(logo.assetUrl)));
             LoadIdleMedia(config.ledIdleMediaKind, config.ledIdleMediaUrl);
+            PersistConfig(config);
+        }
+
+        private string PersistedConfigPath => Path.Combine(Application.persistentDataPath, "led-ui-experience.json");
+
+        private void TryApplyPersistedConfig()
+        {
+            try
+            {
+                if (!File.Exists(PersistedConfigPath)) return;
+                var config = JsonUtility.FromJson<UiExperienceConfig>(File.ReadAllText(PersistedConfigPath));
+                if (config == null) return;
+                Debug.Log($"LED已加载本地待机界面配置：版本 V{config.version}");
+                ApplyConfig(config);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("LED本地待机界面配置读取失败，将等待服务端配置：" + exception.Message);
+            }
+        }
+
+        private void PersistConfig(UiExperienceConfig config)
+        {
+            try
+            {
+                File.WriteAllText(PersistedConfigPath, JsonUtility.ToJson(config));
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("LED本地待机界面配置保存失败：" + exception.Message);
+            }
         }
 
         private IEnumerator LoadBrandLogo(string url)

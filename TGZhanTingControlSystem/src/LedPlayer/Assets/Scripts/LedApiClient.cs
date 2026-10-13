@@ -168,7 +168,11 @@ namespace TG.Control.LedPlayer
                     yield return request.SendWebRequest();
                     if (request.result == UnityWebRequest.Result.Success && request.responseCode == 200)
                         WelcomeCommandReceived?.Invoke(JsonUtility.FromJson<WelcomePlaybackCommand>(request.downloadHandler.text));
-                    else if (request.responseCode != 204) SetConnected(false);
+                    else if (request.responseCode != 204)
+                    {
+                        Debug.LogWarning("LED欢迎指令轮询失败：" + request.responseCode + " " + request.error);
+                        SetConnected(false);
+                    }
                 }
             }
         }
@@ -336,6 +340,7 @@ namespace TG.Control.LedPlayer
                             UiExperienceChanged?.Invoke(config);
                         }
                     }
+                    else Debug.LogWarning("LED待机界面配置获取失败：" + request.responseCode + " " + request.error);
                 }
                 yield return new WaitForSecondsRealtime(10);
             }

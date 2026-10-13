@@ -164,7 +164,10 @@ $terminalKey = if (-not [string]::IsNullOrWhiteSpace($requestedTerminalKey)) {
 } elseif ($firstInstall) {
     New-RandomSecret 32
 } else { '' }
-$adminPassword = New-RandomSecret 18
+# V1 deployment uses the customer-approved fixed administrator credential.
+# Keep the value in the installer-generated server config so first-install
+# credentials are deterministic across the three-machine deployment package.
+$adminPassword = 'tg001'
 
 if ($serverUri.Scheme -eq 'https') {
     $certificate = Ensure-HttpsCertificate $certificateSubject $serverHostName
@@ -189,7 +192,7 @@ if ($firstInstall) {
             MinAudioSizeBytes = 45; MaxAudioSizeBytes = 104857600
         }
         MeloTtsLocal = @{
-            Enabled = $true; AutoStartWorker = $true; BaseAddress = 'http://127.0.0.1:5091'
+            Enabled = $false; AutoStartWorker = $false; BaseAddress = 'http://127.0.0.1:5091'
             PythonExecutablePath = (Join-Path $install 'TtsWorker\MeloTtsLocal\runtime\python.exe')
             WorkerScriptPath = (Join-Path $install 'TtsWorker\MeloTtsLocal\worker.py')
             MeloTtsSourcePath = (Join-Path $install 'TtsWorker\MeloTtsLocal\vendor\MeloTTS')
@@ -213,6 +216,10 @@ if ($firstInstall) {
         Set-ConfigProperty $effectiveConfig 'Kestrel' ([pscustomobject]@{ Certificates = [pscustomobject]@{ Default = [pscustomobject]@{
             Subject = $certificateFindSubject; Store = 'My'; Location = 'LocalMachine'; AllowInvalid = $true
         } } })
+    }
+    if ($null -ne $effectiveConfig.MeloTtsLocal) {
+        Set-ConfigProperty $effectiveConfig.MeloTtsLocal 'Enabled' $false
+        Set-ConfigProperty $effectiveConfig.MeloTtsLocal 'AutoStartWorker' $false
     }
     if (-not [string]::IsNullOrWhiteSpace($terminalKey)) {
         Set-ConfigProperty $effectiveConfig.Terminal 'ApiKey' (Protect-MachineSecret $terminalKey)

@@ -151,7 +151,7 @@ $serverConfig = [ordered]@{
         MinAudioSizeBytes = 45; MaxAudioSizeBytes = 104857600
     }
     MeloTtsLocal = @{
-        Enabled = $true; AutoStartWorker = $true; BaseAddress = 'http://127.0.0.1:5091'
+        Enabled = $false; AutoStartWorker = $false; BaseAddress = 'http://127.0.0.1:5091'
         PythonExecutablePath = (Join-Path $install 'TtsWorker\MeloTtsLocal\runtime\python.exe')
         WorkerScriptPath = (Join-Path $install 'TtsWorker\MeloTtsLocal\worker.py')
         MeloTtsSourcePath = (Join-Path $install 'TtsWorker\MeloTtsLocal\vendor\MeloTTS')
@@ -171,6 +171,10 @@ if (-not $serverCreated) {
     Set-ConfigProperty $effectiveServerConfig 'Kestrel' ([pscustomobject]@{ Certificates = [pscustomobject]@{ Default = [pscustomobject]@{
         Subject = $certificateFindSubject; Store = 'My'; Location = 'LocalMachine'; AllowInvalid = $true
     } } })
+    if ($null -ne $effectiveServerConfig.MeloTtsLocal) {
+        Set-ConfigProperty $effectiveServerConfig.MeloTtsLocal 'Enabled' $false
+        Set-ConfigProperty $effectiveServerConfig.MeloTtsLocal 'AutoStartWorker' $false
+    }
     $existingTerminalKey = [string]$effectiveServerConfig.Terminal.ApiKey
     if (-not $existingTerminalKey.StartsWith('dpapi-local-machine:', [StringComparison]::Ordinal)) {
         Set-ConfigProperty $effectiveServerConfig.Terminal 'ApiKey' (Protect-MachineSecret $existingTerminalKey)

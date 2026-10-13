@@ -15,6 +15,7 @@ namespace TG.Control.LedPlayer
         private int generation;
         private WelcomePlaybackCommand prepared;
         private AudioClip clip;
+        private string playStartingRequestId;
 
         private void OnEnable()
         {
@@ -36,9 +37,26 @@ namespace TG.Control.LedPlayer
         }
         private void HandleWelcome(WelcomePlaybackCommand command)
         {
-            if (apiClient == null || audioSource == null) return;
+            if (apiClient == null) return;
+            if (audioSource == null)
+            {
+                apiClient.ReportWelcome(command, WelcomePlaybackState.Failed, error: "LED音频输出组件未初始化");
+                return;
+            }
             if (command.action == WelcomePlaybackAction.Stop) { Cancel(true); return; }
-            if (command.action == WelcomePlaybackAction.Prepare) { Cancel(true); StartCoroutine(Prepare(command, ++generation, false)); }
+            if (command.action == WelcomePlaybackAction.Prepare)
+            {
+                // Play delivery is retried by the server. Do not throw away a decoded
+                // clip when a duplicate Prepare arrives during that retry window.
+                if (prepared != null && prepared.requestId == command.requestId && clip != null)
+                {
+                    Debug.Log($"Welcome duplicate Prepare acknowledged request={command.requestId}");
+                    apiClient.ReportWelcome(command, WelcomePlaybackState.Preparing, progress: 1);
+                    return;
+                }
+                Cancel(true);
+                StartCoroutine(Prepare(command, ++generation, false));
+            }
             else if (command.action == WelcomePlaybackAction.Play && prepared != null && prepared.requestId == command.requestId)
             {
                 if (audioSource.isPlaying)
@@ -47,7 +65,11 @@ namespace TG.Control.LedPlayer
                     apiClient.ReportWelcome(command, WelcomePlaybackState.Playing, audioSource.time,
                         progress: audioSource.time / duration);
                 }
-                else StartCoroutine(Play(command, generation));
+                else if (!string.Equals(playStartingRequestId, command.requestId, StringComparison.Ordinal))
+                {
+                    playStartingRequestId = command.requestId;
+                    StartCoroutine(Play(command, generation));
+                }
             }
             else if (command.action == WelcomePlaybackAction.Play)
             {
@@ -88,8 +110,26 @@ namespace TG.Control.LedPlayer
             if (clip == null) { apiClient.ReportWelcome(command, WelcomePlaybackState.Failed, error: "欢迎音频不可播放"); yield break; }
             Debug.Log($"Welcome decoded request={command.requestId}, duration={clip.length:F3}s, channels={clip.channels}, frequency={clip.frequency}");
             audioSource.clip = clip; prepared = command;
-            if (playAfterPrepare) yield return Play(command, activeGeneration);
-            else apiClient.ReportWelcome(command, WelcomePlaybackState.Preparing, progress: 1);
+            if (playAfterPrepare)
+            {
+                playStartingRequestId = command.requestId;
+                yield return Play(command, activeGeneration);
+            }
+            else StartCoroutine(ReportPreparedUntilPlay(command, activeGeneration));
+        }
+
+        private IEnumerator ReportPreparedUntilPlay(WelcomePlaybackCommand command, int activeGeneration)
+        {
+            // The status POST and the following Play long-poll are separate network
+            // requests. Repeat the prepared acknowledgement until Play arrives so a
+            // transient deployment-network failure cannot leave Touch stuck forever.
+            while (activeGeneration == generation && prepared != null &&
+                   prepared.requestId == command.requestId && !audioSource.isPlaying)
+            {
+                apiClient.ReportWelcome(command, WelcomePlaybackState.Preparing, progress: 1);
+                Debug.Log($"Welcome prepared acknowledgement request={command.requestId}");
+                yield return new WaitForSecondsRealtime(.75f);
+            }
         }
         private IEnumerator Play(WelcomePlaybackCommand command, int activeGeneration)
         {
@@ -100,11 +140,13 @@ namespace TG.Control.LedPlayer
             if (activeGeneration != generation) yield break;
             if (!audioSource.isPlaying)
             {
+                playStartingRequestId = null;
                 Debug.LogError($"Welcome AudioSource failed to start request={command.requestId}");
                 apiClient.ReportWelcome(command, WelcomePlaybackState.Failed, error: "欢迎音频输出启动失败，请检查播放端音频设备");
                 yield break;
             }
             apiClient.ReportWelcome(command, WelcomePlaybackState.Playing, 0, progress: 0);
+            Debug.Log($"Welcome playback started request={command.requestId}, duration={audioSource.clip.length:F3}s");
             while (activeGeneration == generation && audioSource.isPlaying)
             {
                 var duration = Math.Max(.01f, audioSource.clip == null ? 0 : audioSource.clip.length);
@@ -113,7 +155,7 @@ namespace TG.Control.LedPlayer
             }
             if (activeGeneration == generation) { apiClient.ReportWelcome(command, WelcomePlaybackState.Completed, audioSource.time, progress: 1); Cancel(false); }
         }
-        private void Cancel(bool release) { generation++; if (audioSource != null) audioSource.Stop(); prepared = null; if (release && clip != null) { if (audioSource != null && audioSource.clip == clip) audioSource.clip = null; Destroy(clip); clip = null; } }
+        private void Cancel(bool release) { generation++; playStartingRequestId = null; if (audioSource != null) audioSource.Stop(); prepared = null; if (release && clip != null) { if (audioSource != null && audioSource.clip == clip) audioSource.clip = null; Destroy(clip); clip = null; } }
         private static AudioType DetectAudioType(string url)
         {
             var clean = (url ?? string.Empty).Split('?', '#')[0];

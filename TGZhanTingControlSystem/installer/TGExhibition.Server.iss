@@ -41,7 +41,6 @@ Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 [Files]
 Source: "{#SourceRoot}\Tools\Stop-TGServerForUpgrade.ps1"; Flags: dontcopy
 Source: "{#SourceRoot}\Server\*"; DestDir: "{app}\Server"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#SourceRoot}\TtsWorker\*"; DestDir: "{app}\TtsWorker"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\Tools\*"; DestDir: "{app}\Tools"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\ThirdParty\*"; DestDir: "{app}\ThirdParty"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\package-manifest.json"; DestDir: "{app}"; Flags: ignoreversion

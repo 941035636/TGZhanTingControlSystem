@@ -32,13 +32,6 @@ $required = @(
     'LedPlayer\LedPlayer_Data\Plugins\x86_64\AVProVideoWinRT.dll',
     'LedPlayer\LedPlayer_Data\Plugins\x86_64\Audio360.dll',
     'Launcher\TG.Control.Launcher.exe',
-    'TtsWorker\MeloTtsLocal\runtime\python.exe',
-    'TtsWorker\MeloTtsLocal\worker.py',
-    'TtsWorker\MeloTtsLocal\models\MeloTTS-Chinese\config.json',
-    'TtsWorker\MeloTtsLocal\models\MeloTTS-Chinese\checkpoint.pth',
-    'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\config.json',
-    'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\pytorch_model.bin',
-    'TtsWorker\MeloTtsLocal\models\bert-base-multilingual-uncased\vocab.txt',
     'Tools\Install-TGExhibition.ps1', 'Tools\Uninstall-TGExhibition.ps1', 'Tools\Test-AdminLogin.ps1', 'Tools\New-AdminAccount.ps1',
     'ThirdParty\NOTICE.md', 'ThirdParty\MeloTTS-LICENSE.txt', 'ThirdParty\InnoSetup-LICENSE.txt'
 )

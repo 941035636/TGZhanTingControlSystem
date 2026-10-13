@@ -232,8 +232,6 @@ namespace TG.Control.LedPlayer
             var lateBySeconds = Math.Max(0, (DateTimeOffset.UtcNow - executeAt).TotalSeconds);
             var startPosition = command.positionSeconds + lateBySeconds;
             var startRequestedAt = Time.realtimeSinceStartup;
-            var initialStartRecoveryDeadline = Time.realtimeSinceStartup +
-                                               Mathf.Max(0.25f, initialVideoStartTimeoutSeconds);
             var diagnostics = PlaybackAdapter as IVideoPlaybackDiagnostics;
             var frameBaseline = diagnostics?.RenderedVideoFrameCount ?? 0L;
             ApplyMix(command);
@@ -250,52 +248,16 @@ namespace TG.Control.LedPlayer
                 if (narrationPrepared) narrationAudioSource.Pause();
             }
 
-            // A native decoder can report Playing even when it failed to provide Unity with a
-            // renderable texture. Confirm the first frame so a black screen is never accepted
-            // as a successful LED start.
+            // A native decoder can expose one renderable frame while its playback clock is
+            // still stalled on some deployed Windows hardware paths. Confirm sustained frame
+            // and time progression before reporting Playing to the server.
             if (videoPrepared && diagnostics != null)
             {
-                // Cached formal content must either expose a new frame or fail clearly before the
-                // three-second product limit. Do not silently wait for the legacy eight-second
-                // decoder timeout after the controlled startup recovery window has elapsed.
-                var frameDeadline = startRequestedAt + Mathf.Min(
-                    Mathf.Max(0.25f, initialVideoStartTimeoutSeconds),
-                    Mathf.Max(0.25f, firstVideoFrameTimeoutSeconds));
-                var nextRecoveryAt = startRequestedAt + Mathf.Max(0.25f, initialVideoRecoveryDelaySeconds);
-                var recoveryCount = 0;
-                while (generation == playbackGeneration &&
-                       !HasNewVideoFrame(diagnostics, frameBaseline) &&
-                       Time.realtimeSinceStartup < frameDeadline)
-                {
-                    if (playbackPaused) frameDeadline += Time.unscaledDeltaTime;
-                    else if (Time.realtimeSinceStartup >= nextRecoveryAt &&
-                             Time.realtimeSinceStartup < initialStartRecoveryDeadline)
-                    {
-                        // Some Windows hardware decoders accept Seek+Play but never release a
-                        // frame until their native state is toggled. Reproduce the operator's
-                        // formerly required Pause/Resume sequence automatically, and re-seek to
-                        // the current planned position so audio/video timing remains correct.
-                        PlaybackAdapter.Pause();
-                        yield return new WaitForSecondsRealtime(Mathf.Max(0.02f, recoveryPauseSeconds));
-                        if (generation != playbackGeneration || playbackPaused) yield break;
-                        var recoveredPosition = startPosition +
-                                                Math.Max(0, Time.realtimeSinceStartup - startRequestedAt);
-                        PlaybackAdapter.Seek(recoveredPosition);
-                        yield return null;
-                        if (generation != playbackGeneration || playbackPaused) yield break;
-                        PlaybackAdapter.Resume();
-                        recoveryCount++;
-                        nextRecoveryAt = Time.realtimeSinceStartup +
-                                         Mathf.Max(0.35f, initialVideoRecoveryDelaySeconds);
-                        Debug.LogWarning($"[LED Player] 首帧尚未生成，执行第 {recoveryCount} 次受控启动恢复，" +
-                                         $"目标位置={recoveredPosition:0.000}s，帧基线={frameBaseline}，" +
-                                         $"当前帧={diagnostics.RenderedVideoFrameCount}。");
-                    }
-                    yield return null;
-                }
-
+                var videoStarted = false;
+                yield return ConfirmVideoProgress(diagnostics, frameBaseline, startPosition, generation,
+                    value => videoStarted = value);
                 if (generation != playbackGeneration) yield break;
-                if (!HasNewVideoFrame(diagnostics, frameBaseline))
+                if (!videoStarted)
                 {
                     var backend = string.IsNullOrWhiteSpace(diagnostics.PlaybackBackend)
                         ? "unknown backend"
@@ -305,11 +267,9 @@ namespace TG.Control.LedPlayer
                     yield break;
                 }
 
-                var firstFrameElapsed = Time.realtimeSinceStartup - startRequestedAt;
-                Debug.Log($"[LED Player] 当前媒体新画面已确认：耗时 {firstFrameElapsed:0.000} 秒，" +
-                          $"帧 {frameBaseline}->{diagnostics.RenderedVideoFrameCount}，后端={diagnostics.PlaybackBackend}。");
-                if (recoveryCount > 0)
-                    Debug.LogWarning($"[LED Player] 当前媒体首帧通过 {recoveryCount} 次受控恢复后生成。");
+                Debug.Log($"[LED Player] 当前媒体已确认持续播放：耗时 {Time.realtimeSinceStartup - startRequestedAt:0.000} 秒，" +
+                          $"帧 {frameBaseline}->{diagnostics.RenderedVideoFrameCount}，时间={PlaybackAdapter.CurrentTimeSeconds:0.000}s，" +
+                          $"后端={diagnostics.PlaybackBackend}。");
             }
             else
             {
@@ -345,6 +305,69 @@ namespace TG.Control.LedPlayer
             string.Equals(preparedNarrationUrl, command.narrationAudioUrl, StringComparison.Ordinal) &&
             (!string.IsNullOrWhiteSpace(command.mediaUrl) ? videoPrepared : true) &&
             (!string.IsNullOrWhiteSpace(command.narrationAudioUrl) ? narrationPrepared : true);
+
+        private IEnumerator ConfirmVideoProgress(IVideoPlaybackDiagnostics diagnostics, long frameBaseline,
+            double startPosition, int generation, Action<bool> completed)
+        {
+            var startedAt = Time.realtimeSinceStartup;
+            var deadline = startedAt + Mathf.Min(Mathf.Max(0.25f, initialVideoStartTimeoutSeconds),
+                Mathf.Max(0.25f, firstVideoFrameTimeoutSeconds));
+            var nextRecoveryAt = startedAt + Mathf.Max(0.25f, initialVideoRecoveryDelaySeconds);
+            var recoveryCount = 0;
+            var firstFrameSeen = false;
+            var confirmationFrameBaseline = frameBaseline;
+            var confirmationTimeBaseline = startPosition;
+            var confirmationDeadline = 0f;
+            while (generation == playbackGeneration && Time.realtimeSinceStartup < deadline)
+            {
+                if (playbackPaused)
+                {
+                    deadline += Time.unscaledDeltaTime;
+                    yield return null;
+                    continue;
+                }
+
+                var frameCount = diagnostics.RenderedVideoFrameCount;
+                if (!firstFrameSeen && HasNewVideoFrame(diagnostics, frameBaseline))
+                {
+                    firstFrameSeen = true;
+                    confirmationFrameBaseline = frameCount;
+                    confirmationTimeBaseline = PlaybackAdapter.CurrentTimeSeconds;
+                    confirmationDeadline = Time.realtimeSinceStartup + 0.55f;
+                    Debug.Log($"[LED Player] 首帧已生成，开始确认播放推进：时间={confirmationTimeBaseline:0.000}s，帧={frameCount}。");
+                }
+
+                if (firstFrameSeen && PlaybackAdapter.IsPlaying &&
+                    frameCount > confirmationFrameBaseline &&
+                    PlaybackAdapter.CurrentTimeSeconds >= confirmationTimeBaseline + 0.12)
+                {
+                    completed(true);
+                    yield break;
+                }
+
+                var stalledAfterFirstFrame = firstFrameSeen && Time.realtimeSinceStartup >= confirmationDeadline;
+                if (Time.realtimeSinceStartup >= nextRecoveryAt &&
+                    (stalledAfterFirstFrame || !firstFrameSeen) &&
+                    Time.realtimeSinceStartup < deadline && recoveryCount < 3)
+                {
+                    PlaybackAdapter.Pause();
+                    yield return new WaitForSecondsRealtime(Mathf.Max(0.02f, recoveryPauseSeconds));
+                    if (generation != playbackGeneration || playbackPaused) yield break;
+                    var recoveredPosition = startPosition + Math.Max(0, Time.realtimeSinceStartup - startedAt);
+                    PlaybackAdapter.Seek(recoveredPosition);
+                    yield return null;
+                    if (generation != playbackGeneration || playbackPaused) yield break;
+                    PlaybackAdapter.Resume();
+                    recoveryCount++;
+                    firstFrameSeen = false;
+                    nextRecoveryAt = Time.realtimeSinceStartup + Mathf.Max(0.25f, initialVideoRecoveryDelaySeconds);
+                    Debug.LogWarning($"[LED Player] 首帧或播放推进未确认，执行第 {recoveryCount} 次受控启动恢复，" +
+                                     $"目标位置={recoveredPosition:0.000}s，帧={diagnostics.RenderedVideoFrameCount}。");
+                }
+                yield return null;
+            }
+            completed(false);
+        }
 
         private static bool HasNewVideoFrame(IVideoPlaybackDiagnostics diagnostics, long frameBaseline) =>
             diagnostics.HasRenderableVideoFrame && diagnostics.RenderedVideoFrameCount > frameBaseline;

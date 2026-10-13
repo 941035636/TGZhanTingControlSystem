@@ -18,7 +18,10 @@ public sealed class WelcomeCoordinator(
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly PlaybackOptions options = playbackOptions.Value;
     private WelcomePlaybackStatus current = NewStatus(null, WelcomePlaybackState.Standby, "等待触摸唤醒");
+    private WelcomeAudioAsset? activeAudio;
     private CancellationTokenSource? timeoutSource;
+    private CancellationTokenSource? playDeliverySource;
+    private string? playDeliveryRequestId;
 
     public bool IsProtectingFormalPlayback => current.State is WelcomePlaybackState.Requested or WelcomePlaybackState.Preparing or WelcomePlaybackState.Playing;
 
@@ -52,6 +55,7 @@ public sealed class WelcomeCoordinator(
             var requestId = Guid.NewGuid().ToString("N");
             var audio = new WelcomeAudioAsset(element.AssetId, element.AssetUrl, element.AssetSha256,
                 element.AssetSizeBytes, element.AssetMediaType);
+            activeAudio = audio;
             current = NewStatus(requestId, WelcomePlaybackState.Preparing, "正在由LED播放端准备欢迎语音", settings.Captions);
             ArmTimeout(requestId);
             logger.LogInformation("Welcome {RequestId} requested for LED client {LedClientId}", requestId, options.LedClientId);
@@ -79,20 +83,42 @@ public sealed class WelcomeCoordinator(
                 current = Set(current.RequestId, WelcomePlaybackState.Failed,
                     string.IsNullOrWhiteSpace(report.Error) ? "欢迎语音播放失败" : report.Error, captions, report.PositionSeconds, report.Progress);
                 logger.LogWarning("Welcome {RequestId} failed on LED: {Error}", report.RequestId, current.Message);
+                activeAudio = null;
                 CancelTimeout();
+                CancelPlayDelivery();
                 await eventLog.AppendAsync("Warning", "Welcome", "Failed", current.Message ?? "欢迎语音播放失败", cancellationToken: cancellationToken);
                 return;
             }
-            if (report.State == WelcomePlaybackState.Completed) CancelTimeout();
+            if (report.State == WelcomePlaybackState.Completed)
+            {
+                activeAudio = null;
+                CancelTimeout();
+                CancelPlayDelivery();
+            }
             if (report.State == WelcomePlaybackState.Preparing)
             {
-                var config = await uiExperience.GetAsync(cancellationToken);
-                var element = config.TouchElements?.LastOrDefault(item => string.Equals(item.Key, "welcome.audio", StringComparison.OrdinalIgnoreCase));
-                if (element is null) return;
-                var play = new WelcomePlaybackCommand(broker.NextSequence(), Guid.NewGuid().ToString("N"), current.RequestId!,
-                    WelcomePlaybackAction.Play, new WelcomeAudioAsset(element.AssetId!, element.AssetUrl!, element.AssetSha256!, element.AssetSizeBytes, element.AssetMediaType!),
-                    DateTimeOffset.UtcNow.AddMilliseconds(Math.Max(250, options.PrepareLeadMilliseconds)));
-                await broker.PublishWelcomeAsync(options.LedClientId, play, cancellationToken);
+                // Use the descriptor captured when the request was created. Re-reading
+                // the UI draft here could leave the state stuck in Preparing when an
+                // admin publish or server restart changes the current configuration.
+                if (activeAudio is null)
+                {
+                    current = Set(current.RequestId, WelcomePlaybackState.Failed, "欢迎语音资产已失效，请重新发布欢迎词", captions);
+                    CancelTimeout();
+                    return;
+                }
+                // The LED repeats its prepared acknowledgement until it receives Play.
+                // Only the first acknowledgement may open the delivery loop; otherwise
+                // every acknowledgement would enqueue another Play command.
+                if (!string.Equals(playDeliveryRequestId, current.RequestId, StringComparison.OrdinalIgnoreCase))
+                {
+                    playDeliveryRequestId = current.RequestId;
+                    await PublishPlayAsync(current.RequestId!, activeAudio, cancellationToken);
+                    StartPlayDeliveryLoop(current.RequestId!);
+                }
+            }
+            else if (report.State == WelcomePlaybackState.Playing)
+            {
+                CancelPlayDelivery();
             }
         }
         finally { gate.Release(); }
@@ -101,7 +127,11 @@ public sealed class WelcomeCoordinator(
     public void Acknowledge(string? requestId)
     {
         if (current.State == WelcomePlaybackState.Completed && (string.IsNullOrWhiteSpace(requestId) || string.Equals(requestId, current.RequestId, StringComparison.OrdinalIgnoreCase)))
+        {
+            activeAudio = null;
+            CancelPlayDelivery();
             current = NewStatus(null, WelcomePlaybackState.Standby, "等待触摸唤醒");
+        }
     }
 
     private void ArmTimeout(string requestId)
@@ -120,6 +150,8 @@ public sealed class WelcomeCoordinator(
                     if (string.Equals(current.RequestId, requestId, StringComparison.OrdinalIgnoreCase) && IsProtectingFormalPlayback)
                     {
                         current = Set(requestId, WelcomePlaybackState.Failed, "欢迎语音播放超时，请检查LED播放端后重试", current.Captions);
+                        activeAudio = null;
+                        CancelPlayDelivery();
                         await broker.PublishWelcomeAsync(options.LedClientId, new WelcomePlaybackCommand(broker.NextSequence(),
                             Guid.NewGuid().ToString("N"), requestId, WelcomePlaybackAction.Stop, null, DateTimeOffset.UtcNow), CancellationToken.None);
                         await eventLog.AppendAsync("Warning", "Welcome", "Timeout", current.Message!, cancellationToken: CancellationToken.None);
@@ -137,6 +169,61 @@ public sealed class WelcomeCoordinator(
         timeoutSource.Cancel();
         timeoutSource.Dispose();
         timeoutSource = null;
+    }
+
+    private async Task PublishPlayAsync(string requestId, WelcomeAudioAsset audio, CancellationToken cancellationToken)
+    {
+        var play = new WelcomePlaybackCommand(broker.NextSequence(), Guid.NewGuid().ToString("N"), requestId,
+            WelcomePlaybackAction.Play, audio,
+            DateTimeOffset.UtcNow.AddMilliseconds(Math.Max(250, options.PrepareLeadMilliseconds)));
+        await broker.PublishWelcomeAsync(options.LedClientId, play, cancellationToken);
+        logger.LogInformation("Welcome {RequestId} Play command queued for LED {LedClientId} (command {CommandId})",
+            requestId, options.LedClientId, play.CommandId);
+    }
+
+    private void StartPlayDeliveryLoop(string requestId)
+    {
+        if (playDeliverySource is not null) return;
+        playDeliverySource = new CancellationTokenSource();
+        var source = playDeliverySource;
+        var token = source.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(900), token);
+                for (var attempt = 1; attempt <= 12; attempt++)
+                {
+                    await gate.WaitAsync(token);
+                    try
+                    {
+                        if (!string.Equals(current.RequestId, requestId, StringComparison.OrdinalIgnoreCase) ||
+                            current.State != WelcomePlaybackState.Preparing || activeAudio is null) return;
+                        await PublishPlayAsync(requestId, activeAudio, token);
+                        logger.LogWarning("Welcome {RequestId} Play delivery attempt {Attempt}/12", requestId, attempt);
+                    }
+                    finally { gate.Release(); }
+                    await Task.Delay(TimeSpan.FromMilliseconds(900), token);
+                }
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (ReferenceEquals(playDeliverySource, source))
+                {
+                    playDeliverySource = null;
+                    source.Dispose();
+                }
+            }
+        }, token);
+    }
+
+    private void CancelPlayDelivery()
+    {
+        playDeliverySource?.Cancel();
+        playDeliverySource?.Dispose();
+        playDeliverySource = null;
+        playDeliveryRequestId = null;
     }
 
     private WelcomePlaybackStatus Set(string? requestId, WelcomePlaybackState state, string message,

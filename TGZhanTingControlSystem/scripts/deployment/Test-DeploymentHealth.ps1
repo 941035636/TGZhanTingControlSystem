@@ -11,8 +11,6 @@ $required = @(
     (Join-Path $InstallRoot 'TouchClient\TouchClient.exe'),
     (Join-Path $InstallRoot 'LedPlayer\LedPlayer.exe'),
     (Join-Path $InstallRoot 'Launcher\TG.Control.Launcher.exe'),
-    (Join-Path $InstallRoot 'TtsWorker\MeloTtsLocal\runtime\python.exe'),
-    (Join-Path $InstallRoot 'TtsWorker\MeloTtsLocal\models\MeloTTS-Chinese\checkpoint.pth'),
     (Join-Path $DataRoot 'Config\server.site.json')
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath $_) })

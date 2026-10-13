@@ -65,6 +65,7 @@ if ($remaining.Count -gt 0) {
 }
 
 $lockProbe = Join-Path $workerRoot 'MeloTtsLocal\runtime\libcrypto-1_1.dll'
+if (-not (Test-Path -LiteralPath $lockProbe -PathType Leaf)) { exit 0 }
 for ($attempt = 0; $attempt -lt 40; $attempt++) {
     if (Test-FileUnlocked $lockProbe) { exit 0 }
     Start-Sleep -Milliseconds 250

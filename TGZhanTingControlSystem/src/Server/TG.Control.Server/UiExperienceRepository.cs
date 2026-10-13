@@ -47,6 +47,8 @@ public sealed class UiExperienceRepository
                 await using var stream = File.OpenRead(filePath);
                 currentVersion = (await JsonSerializer.DeserializeAsync<UiExperienceConfig>(stream, jsonOptions, cancellationToken))?.Version ?? 0;
             }
+            if (request.Version != currentVersion)
+                throw new UiExperienceConflictException(currentVersion);
 
             var saved = UiExperiencePolicy.Normalize(request) with
             {
@@ -78,7 +80,7 @@ public sealed class UiExperienceRepository
 
     private static UiExperienceConfig Defaults() => new UiExperienceConfig(
         0, "展厅自动讲解系统", "TG EXHIBITION · 智慧展陈中控终端", null, "#EEF3F0", "#1C5B46",
-        "展厅自动讲解系统", "等待触控终端启动讲解", null, "none", "#0A1F1B", true, true,
+        "展厅自动讲解系统", "等待触控终端启动讲解", null, "none", "#0A1F1B", false, false,
         DateTimeOffset.MinValue, "system") with
     {
         Layout = new UiExperienceLayout(),
@@ -89,4 +91,10 @@ public sealed class UiExperienceRepository
     private static string Clean(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     private static string NormalizeColor(string? value, string fallback) =>
         !string.IsNullOrWhiteSpace(value) && System.Text.RegularExpressions.Regex.IsMatch(value, "^#[0-9a-fA-F]{6}$") ? value : fallback;
+}
+
+public sealed class UiExperienceConflictException(long currentVersion) : Exception(
+    $"终端界面配置已被其他管理页面更新，请重新读取最新配置后再发布。当前版本：V{currentVersion}。")
+{
+    public long CurrentVersion { get; } = currentVersion;
 }

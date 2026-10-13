@@ -208,37 +208,55 @@ namespace TG.Control.Touch.UI
         private void BuildExitConfirmation(Transform canvas)
         {
             var backdrop = factory.Image("Exit Confirmation Backdrop", canvas,
-                new Color(0, 0, 0, .72f));
+                theme.HomeDarkBackdropVeil);
             TouchUiFactory.Stretch(backdrop.rectTransform);
             exitConfirmation = backdrop.gameObject;
 
             var dialog = factory.RoundedImage("Exit Confirmation Dialog", backdrop.transform,
-                theme.SurfaceElevated);
+                theme.HomeDarkSurfaceElevated);
+            dialog.gameObject.AddComponent<Outline>().effectColor = theme.HomeDarkBorder;
+            dialog.gameObject.GetComponent<Outline>().effectDistance = new Vector2(2, 2);
             TouchUiFactory.Anchor(dialog.rectTransform, .5f, .5f, .5f, .5f,
                 -350, -180, 350, 180);
 
             var title = factory.Label("Exit Confirmation Title", dialog.transform,
                 "确认退出中控端？", theme.PageTitle, FontStyle.Bold,
-                theme.TextPrimary, TextAnchor.MiddleCenter);
+                theme.HomeDarkTextPrimary, TextAnchor.MiddleCenter);
             TouchUiFactory.Anchor(title.rectTransform, 0, 1, 1, 1,
                 theme.Space32, -100, -theme.Space32, -theme.Space32);
 
             var detail = factory.Label("Exit Confirmation Detail", dialog.transform,
                 "退出后可通过运行管理程序重新启动中控端。", theme.Body, FontStyle.Normal,
-                theme.TextSecondary, TextAnchor.MiddleCenter);
+                theme.HomeDarkTextSecondary, TextAnchor.MiddleCenter);
             TouchUiFactory.Anchor(detail.rectTransform, 0, .5f, 1, 1,
                 theme.Space32, -20, -theme.Space32, -102);
 
             var cancel = factory.TouchButton(dialog.transform, "取消", false, HideExitConfirmation);
             TouchUiFactory.Anchor(cancel.GetComponent<RectTransform>(), .5f, 0, .5f, 0,
                 -240, theme.Space32, -20, theme.Space32 + theme.ButtonHeight);
+            ApplyExitButtonStyle(cancel, theme.HomeDarkGlass, theme.HomeDarkBorderSoft,
+                theme.HomeDarkAccent, theme.HomeDarkTextPrimary);
 
             var confirm = factory.TouchButton(dialog.transform, "确认退出", false, ConfirmExit);
             TouchUiFactory.Anchor(confirm.GetComponent<RectTransform>(), .5f, 0, .5f, 0,
                 20, theme.Space32, 240, theme.Space32 + theme.ButtonHeight);
-            confirm.GetComponent<Image>().color = Color.Lerp(theme.SecondaryButton, theme.Error, .34f);
+            ApplyExitButtonStyle(confirm, Color.Lerp(theme.HomeDarkGlass, theme.Error, .22f),
+                theme.Error, theme.Error, Color.white);
 
             exitConfirmation.SetActive(false);
+        }
+
+        private static void ApplyExitButtonStyle(Button button, Color normal, Color highlighted,
+            Color pressed, Color labelColor)
+        {
+            var colors = button.colors;
+            colors.normalColor = normal;
+            colors.highlightedColor = highlighted;
+            colors.pressedColor = pressed;
+            colors.selectedColor = highlighted;
+            button.colors = colors;
+            var label = button.transform.Find("Label")?.GetComponent<Text>();
+            if (label != null) label.color = labelColor;
         }
 
         private void ShowExitConfirmation() => exitConfirmation.SetActive(true);

@@ -12,7 +12,10 @@ namespace TG.Control.Touch
         private static void CreateRuntime()
         {
             Application.targetFrameRate = 60;
-            Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
+            // Keep the 1920x1080 reference resolution for CanvasScaler layout, but let the
+            // Windows player render the fullscreen window at the display's native resolution.
+            // Forcing a 1920x1080 framebuffer makes a 4K touch terminal upscale the entire UI.
+            Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
             if (UnityEngine.Object.FindObjectOfType<TouchApiClient>() != null) return;
             var root = new GameObject("TG Touch Runtime");
             root.SetActive(false);
