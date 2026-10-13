@@ -38,6 +38,7 @@ namespace TG.Control.LedPlayer
         public bool IsConnected => connected;
         public bool IsSyncing => syncing;
         public long SyncedContentVersion => syncedContentVersion;
+        public UiExperienceConfig LatestUiExperience { get; private set; }
         private string BaseUrl => serverBaseUrl.TrimEnd('/');
 
         private void Awake()
@@ -334,10 +335,17 @@ namespace TG.Control.LedPlayer
                     if (request.result == UnityWebRequest.Result.Success)
                     {
                         var config = JsonUtility.FromJson<UiExperienceConfig>(request.downloadHandler.text);
-                        if (config != null && config.version != uiExperienceVersion)
+                        if (config != null)
                         {
-                            uiExperienceVersion = config.version;
-                            UiExperienceChanged?.Invoke(config);
+                            // Retain the latest snapshot even when no UI subscriber is ready yet.
+                            // Runtime components on the same bootstrap object do not have a
+                            // guaranteed Start/coroutine completion order on a fast local server.
+                            LatestUiExperience = config;
+                            if (config.version != uiExperienceVersion)
+                            {
+                                uiExperienceVersion = config.version;
+                                UiExperienceChanged?.Invoke(config);
+                            }
                         }
                     }
                     else Debug.LogWarning("LED待机界面配置获取失败：" + request.responseCode + " " + request.error);

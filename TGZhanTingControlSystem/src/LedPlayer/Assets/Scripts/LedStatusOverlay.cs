@@ -55,6 +55,10 @@ namespace TG.Control.LedPlayer
             apiClient.ContentSyncChanged += OnContentSyncChanged;
             apiClient.UiExperienceChanged += ApplyConfig;
             if (playbackController != null) playbackController.PlaybackActiveChanged += OnPlaybackActiveChanged;
+            // UiExperienceLoop can complete before this Start method subscribes on a
+            // fresh installation. Replay the retained snapshot so the first launch
+            // applies the server-configured idle media without requiring a republish.
+            if (apiClient.LatestUiExperience != null) ApplyConfig(apiClient.LatestUiExperience);
             OnConnectionChanged(apiClient.IsConnected);
         }
 
