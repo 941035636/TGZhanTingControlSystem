@@ -53,10 +53,6 @@ const displayAccountName = (value: string): string => {
   if (value.toLowerCase() === 'admin') return '管理员'
   return /[A-Za-z]/.test(value) ? '管理账号' : value
 }
-const displayLanguage = (value: string): string => value.toLowerCase() === 'zh-cn' ? '中文（中国大陆）' : '当前配置语言'
-const displayProvider = (provider: TtsProviderDescriptor | undefined): string => provider?.developmentOnly ? '开发测试语音服务' : '本地中文语音服务'
-const displayVoice = (provider: TtsProviderDescriptor | undefined, voiceName: string): string =>
-  provider?.developmentOnly ? '开发测试音色' : /^[\u0000-\u007f]+$/.test(voiceName) ? '中文标准讲解' : voiceName
 const displayAssetName = (value: string | null | undefined, kind: AssetKind): string => {
   const name = (value ?? '').replace(/\.[^.]+$/, '').trim()
   return !name || /[A-Za-z]/.test(name) ? `${assetKindName(kind)}素材` : name
@@ -100,7 +96,7 @@ const displayMessage = (value: string): string => {
 }
 
 function renderLogin(message = ''): void {
-  root.innerHTML = `<main class="login-shell"><section class="login-brand"><p class="eyebrow">展厅智能中控</p><h1>展厅自动讲解<br/>管理平台</h1><p>统一管理 12 个展陈模块、宣传视频、讲解文案与内容发布。</p><div class="brand-stats"><span>双屏联动</span><span>语音讲解</span><span>内容发布</span></div></section><section class="login-panel"><form id="login-form" class="login-card"><h2>欢迎登录</h2><p class="login-tip">请输入具有内容发布权限的管理账号</p><label>用户名<input id="username" autocomplete="username" placeholder="请输入用户名" /></label><label>密码<input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" /></label><p id="login-error" class="login-error">${escapeHtml(message)}</p><button class="primary login-button" type="submit">登录管理平台</button><p class="login-foot">展厅智能中控系统 · 内部管理入口</p></form></section></main>`
+  root.innerHTML = `<main class="login-shell"><section class="login-brand"><p class="eyebrow">展厅智能中控</p><h1>展厅自动讲解<br/>管理平台</h1><p>统一管理 12 个展陈模块、大屏视频、展示图片与内容发布。</p><div class="brand-stats"><span>双屏联动</span><span>素材管理</span><span>内容发布</span></div></section><section class="login-panel"><form id="login-form" class="login-card"><h2>欢迎登录</h2><p class="login-tip">请输入具有内容发布权限的管理账号</p><label>用户名<input id="username" autocomplete="username" placeholder="请输入用户名" /></label><label>密码<input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" /></label><p id="login-error" class="login-error">${escapeHtml(message)}</p><button class="primary login-button" type="submit">登录管理平台</button><p class="login-foot">展厅智能中控系统 · 内部管理入口</p></form></section></main>`
   root.querySelector<HTMLFormElement>('#login-form')?.addEventListener('submit', login)
   root.querySelector<HTMLInputElement>('#password')?.focus()
 }
@@ -123,8 +119,8 @@ async function loadDashboard(): Promise<void> {
       api.getContent(), api.getDraft(), api.clientStatuses(), api.playbackSessions(), api.getUi(), api.routes(), api.readiness(), api.contentVersions(), api.operations()
     ])
     const restored = restoreDraft(published, serverDraft)
-    content = restored.content; ttsProviders = []; clientStatuses = clients; playbackSessions = sessions; uiConfig = ui
-    draftBaseVersion = serverDraft.baseContentVersion; draftRevision = serverDraft.revision; draftStatuses = serverDraft.narrationAudioStatuses; publishReadiness = serverDraft.publishReadiness
+    content = restored.content; clientStatuses = clients; playbackSessions = sessions; uiConfig = ui
+    draftBaseVersion = serverDraft.baseContentVersion; draftRevision = serverDraft.revision; publishReadiness = serverDraft.publishReadiness
     routes = routeResult.routes ?? []; readiness = ready; versions = history; operationEvents = events; dirty = restored.dirty
     draftMutationSequence = restored.needsSync ? 1 : 0; draftSyncedSequence = 0; renderDashboard()
     if (restored.needsSync) void syncDraftNow()
@@ -134,12 +130,11 @@ async function loadDashboard(): Promise<void> {
 function renderDashboard(): void {
   if (!content) return
   activeView = normalizeAdminWorkspaceView(activeView)
-  const availableProviders = ttsProviders.filter(item => item.available && item.voices.length > 0)
-  root.innerHTML = `<header class="topbar"><div><p class="eyebrow">展厅智能中控</p><h1>展厅自动讲解管理平台</h1><p class="meta">正式内容 ${formatVersion(content.version)} · 草稿第 ${draftRevision} 次修订 · ${content.modules.length} 个模块 · 发布人 ${escapeHtml(displayAccountName(content.publishedBy || '系统初始化'))}</p></div><div class="actions"><div class="tts-badge ${availableProviders.length ? 'ready' : ''}"><span>语音合成服务</span><strong>${availableProviders.length ? `${availableProviders.length} 个服务可用` : '当前未配置'}</strong></div><div class="account"><span>当前账号</span><strong>${escapeHtml(displayAccountName(username))}</strong></div><button id="logout">退出</button><button id="publish" class="primary" ${dirty && !draftConflict && publishReadiness?.canPublish === true ? '' : 'disabled'}>发布新版本</button></div></header>
+  root.innerHTML = `<header class="topbar"><div><p class="eyebrow">展厅智能中控</p><h1>展厅自动讲解管理平台</h1><p class="meta">正式内容 ${formatVersion(content.version)} · 草稿第 ${draftRevision} 次修订 · ${content.modules.length} 个模块 · 发布人 ${escapeHtml(displayAccountName(content.publishedBy || '系统初始化'))}</p></div><div class="actions"><div class="account"><span>当前账号</span><strong>${escapeHtml(displayAccountName(username))}</strong></div><button id="logout">退出</button><button id="publish" class="primary" ${dirty && !draftConflict && publishReadiness?.canPublish === true ? '' : 'disabled'}>发布新版本</button></div></header>
     <nav class="workspace-nav">${navButton('content','内容中心')}${adminUiFeatures.enableCustomRouteUi ? navButton('routes','讲解路线') : ''}${navButton('versions','发布与回滚')}${navButton('operations','终端与运行')}</nav>
     <main>${renderWorkspace()}</main><div id="toast" class="toast" aria-live="polite"></div>`
   root.querySelector('#publish')?.addEventListener('click', publish)
-  root.querySelector('#logout')?.addEventListener('click', async () => { disposeNodeRuntime(); await api.logout(); content = null; username = ''; renderLogin() })
+  root.querySelector('#logout')?.addEventListener('click', async () => { await api.logout(); content = null; username = ''; renderLogin() })
   root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => button.addEventListener('click',()=>{activeView=normalizeAdminWorkspaceView(button.dataset.view as AdminWorkspaceView);renderDashboard()}))
   if(activeView==='content'){
     root.querySelector('#add')?.addEventListener('click', addModule)
@@ -158,15 +153,20 @@ function renderWorkspace():string{
   if(activeView==='routes')return renderRoutesView()
   if(activeView==='versions')return renderVersionsView()
   if(activeView==='operations')return renderOperationsView()
-  return `${draftConflict?`<section class="publish-validation-error"><strong>草稿同步冲突</strong><p>${escapeHtml(draftConflict)}</p></section>`:''}${publishError?`<section class="publish-validation-error"><strong>发布已阻止：请修复以下素材</strong><p>${escapeHtml(displayMessage(publishError)).replaceAll('；','<br/>')}</p></section>`:''}${renderNarrationPublishSummary()}<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>讲解节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).length + (item.nodes.filter(node => node.ttsAudioUrl).length), 0)}</strong><span>展示与音频素材</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
-  <section class="section-title"><div><p class="eyebrow">内容管理</p><h2>内容中心</h2><p class="section-note">配置模块、讲解节点、讲解语音和大屏素材；修改会安全保存到服务器草稿，发布后终端才会更新。</p></div><div class="section-actions"><button id="edit-ui">终端界面设置</button><button id="add">新增模块</button></div></section><section class="module-grid">${content.modules.sort((a,b) => a.order-b.order).map(moduleCard).join('')}</section>`
+  return `${draftConflict?`<section class="publish-validation-error"><strong>草稿同步冲突</strong><p>${escapeHtml(draftConflict)}</p></section>`:''}${publishError?`<section class="publish-validation-error"><strong>发布已阻止：请修复以下素材</strong><p>${escapeHtml(displayMessage(publishError)).replaceAll('；','<br/>')}</p></section>`:''}${renderContentPublishSummary()}<section class="summary"><article><strong>${content.modules.filter(item => item.enabled).length}</strong><span>已启用模块</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.length, 0)}</strong><span>展示节点</span></article><article><strong>${content.modules.reduce((sum, item) => sum + item.nodes.flatMap(node => node.assets).filter(asset => asset.kind === 0 || asset.kind === 1).length, 0)}</strong><span>视频与图片</span></article><article><strong>${dirty ? '待发布' : '已同步'}</strong><span>编辑状态</span></article><article><strong>${clientStatuses.filter(client => client.online).length}/${Math.max(2, clientStatuses.length)}</strong><span>终端在线</span></article><article><strong>${playbackSessions.length}</strong><span>进行中讲解</span></article></section>
+  <section class="section-title"><div><p class="eyebrow">内容管理</p><h2>内容中心</h2><p class="section-note">配置模块及大屏视频、图片素材；修改会自动保存到服务器草稿，发布新版本后终端才会更新。</p></div><div class="section-actions"><button id="edit-ui">终端界面设置</button><button id="add">新增模块</button></div></section><section class="module-grid">${content.modules.sort((a,b) => a.order-b.order).map(moduleCard).join('')}</section>`
 }
+const displayLanguage = (value: string): string => value.toLowerCase() === 'zh-cn' ? '中文（中国大陆）' : '当前配置语言'
+const displayProvider = (provider: TtsProviderDescriptor | undefined): string => provider?.developmentOnly ? '开发测试语音服务' : '本地中文语音服务'
+const displayVoice = (provider: TtsProviderDescriptor | undefined, voiceName: string): string =>
+  provider?.developmentOnly ? '开发测试音色' : /^[\u0000-\u007f]+$/.test(voiceName) ? '中文标准讲解' : voiceName
 
-function renderNarrationPublishSummary(): string {
-  if (!publishReadiness) return '<section id="narration-publish-summary" class="narration-publish-summary checking"><strong>正在由服务器检查讲解语音发布状态…</strong></section>'
-  const summary = publishReadiness.narrationAudio
-  const issues = publishReadiness.issues.map(issue => `<li class="${issue.severity === 1 ? 'blocking' : 'warning'}"><strong>${issue.severity === 1 ? '阻止发布' : '发布提醒'}</strong><span>${escapeHtml(displayMessage(issue.message))}</span></li>`).join('')
-  return `<section id="narration-publish-summary" class="narration-publish-summary ${publishReadiness.canPublish ? 'ready' : 'blocked'}"><header><div><span>讲解语音发布检查</span><strong>${publishReadiness.canPublish ? '可以发布' : `存在 ${summary.blockingIssues} 项阻塞问题`}</strong></div><p>结论来自服务端，发布时会再次执行完整校验。</p></header><div class="narration-publish-counts"><span><b>${summary.fresh}</b> 个语音有效</span><span><b>${summary.missing}</b> 个缺失</span><span><b>${summary.staleText + summary.staleSynthesisConfiguration}</b> 个已过期</span><span><b>${summary.legacyUnverified}</b> 个旧版</span><span><b>${summary.invalidAsset + summary.invalidBinding}</b> 个异常</span></div>${issues ? `<ul>${issues}</ul>` : '<p class="publish-ready-note">所有需要正式讲解音频的节点均已通过检查。</p>'}</section>`
+function renderContentPublishSummary(): string {
+  if (!publishReadiness) return '<section id="content-publish-summary" class="narration-publish-summary checking"><strong>正在由服务器检查内容发布状态…</strong></section>'
+  const relevantIssues = publishReadiness.issues.filter(issue => issue.code !== 'video_without_narration_audio')
+  const issues = relevantIssues.map(issue => `<li class="${issue.severity === 1 ? 'blocking' : 'warning'}"><strong>${issue.severity === 1 ? '阻止发布' : '发布提醒'}</strong><span>${escapeHtml(displayMessage(issue.message))}</span></li>`).join('')
+  const blocking = publishReadiness.issues.filter(issue => issue.severity === 1).length
+  return `<section id="content-publish-summary" class="narration-publish-summary ${publishReadiness.canPublish ? 'ready' : 'blocked'}"><header><div><span>内容发布检查</span><strong>${publishReadiness.canPublish ? '可以发布' : `存在 ${blocking} 项阻塞问题`}</strong></div><p>结论来自服务端，发布时会再次执行素材完整性校验。</p></header>${issues ? `<ul>${issues}</ul>` : '<p class="publish-ready-note">当前草稿已通过发布检查。</p>'}</section>`
 }
 
 function renderRoutesView():string{
@@ -231,7 +231,7 @@ function readinessBanner():string{const state=!readiness?.canStart?'blocked':rea
 async function refreshOperations():Promise<void>{try{[clientStatuses,playbackSessions,readiness,operationEvents]=await Promise.all([api.clientStatuses(),api.playbackSessions(),api.readiness(),api.operations()]);renderDashboard();showToast('运行状态已刷新。')}catch(error){showToast(error instanceof Error?error.message:'刷新失败')}}
 function formatTime(value:string):string{const date=new Date(value);return Number.isNaN(date.getTime())?'-':date.getUTCFullYear()<2000?'系统初始化':date.toLocaleString('zh-CN',{hour12:false})}
 
-function moduleCard(module: ExhibitionModule): string { return `<article class="module-card ${module.enabled ? '' : 'disabled'}" data-module="${module.id}"><div class="module-number">${String(module.order).padStart(2,'0')}</div><div class="module-body"><div class="module-heading"><input class="module-name" value="${escapeHtml(module.name)}" aria-label="模块名称"/><label class="switch"><input type="checkbox" class="module-enabled" ${module.enabled?'checked':''}/><span></span></label></div><textarea class="module-description" placeholder="填写模块简介">${escapeHtml(module.description)}</textarea><div class="module-cover-setting"><span>${module.coverUrl?'已设置中控卡片底图':'尚未设置中控卡片底图'}</span><label class="upload-button">${module.coverUrl?'替换底图':'上传底图'}<input class="module-cover-file" type="file" accept="image/*"/></label></div><div class="module-footer"><span>${module.nodes.length} 个讲解节点 · ${module.nodes.reduce((sum,node)=>sum+node.assets.length+(node.ttsAudioUrl?1:0),0)} 个素材</span><button class="node-button">编辑内容</button></div></div></article>` }
+function moduleCard(module: ExhibitionModule): string { return `<article class="module-card ${module.enabled ? '' : 'disabled'}" data-module="${module.id}"><div class="module-number">${String(module.order).padStart(2,'0')}</div><div class="module-body"><div class="module-heading"><input class="module-name" value="${escapeHtml(module.name)}" aria-label="模块名称"/><label class="switch"><input type="checkbox" class="module-enabled" ${module.enabled?'checked':''}/><span></span></label></div><textarea class="module-description" placeholder="填写模块简介">${escapeHtml(module.description)}</textarea><div class="module-cover-setting"><span>${module.coverUrl?'已设置中控卡片底图':'尚未设置中控卡片底图'}</span><label class="upload-button">${module.coverUrl?'替换底图':'上传底图'}<input class="module-cover-file" type="file" accept="image/*"/></label></div><div class="module-footer"><span>${module.nodes.length} 个展示节点 · ${module.nodes.reduce((sum,node)=>sum+node.assets.filter(asset => asset.kind === 0 || asset.kind === 1).length,0)} 个视频/图片</span><button class="node-button">编辑大屏素材</button></div></div></article>` }
 
 function bindCard(card: HTMLElement): void {
   const module = content?.modules.find(item => item.id === card.dataset.module); if (!module) return
@@ -253,13 +253,12 @@ function openNodeEditor(moduleId: string): void {
 }
 
 function renderNodeEditor(): void {
-  disposeNodeRuntime()
   document.querySelector('#node-modal')?.remove()
   const module = content?.modules.find(item => item.id === editingModuleId); if (!module) return
   const nodes = module.nodes.sort((a,b)=>a.order-b.order)
   const node = nodes.find(item => item.id === editingNodeId) ?? null
   const modal = document.createElement('div'); modal.id = 'node-modal'; modal.className = 'modal-backdrop'
-  modal.innerHTML = `<section class="editor-modal"><header class="editor-header"><div><p class="eyebrow">内容编辑</p><h2>${escapeHtml(module.name)} · 讲解内容</h2></div><button id="close-editor" class="icon-button">×</button></header><div class="editor-layout"><aside class="node-list"><div class="node-list-title"><strong>讲解节点</strong><button id="add-node">＋ 新增</button></div>${nodes.length ? nodes.map(item => `<button class="node-list-item ${item.id===editingNodeId?'active':''}" data-node-id="${item.id}"><span>${String(item.order).padStart(2,'0')}</span><strong>${escapeHtml(item.name || '未命名节点')}</strong><small>${item.assets.length} 个大屏素材</small></button>`).join('') : '<div class="empty-node">暂无节点<br/>点击“新增”创建第一段讲解</div>'}</aside><div class="node-editor">${node ? nodeForm(node) : '<div class="empty-editor"><strong>尚未创建讲解节点</strong><p>每个节点可同时配置讲解文案、合成语音和大屏宣传视频。</p></div>'}</div></div></section>`
+  modal.innerHTML = `<section class="editor-modal"><header class="editor-header"><div><p class="eyebrow">大屏内容编辑</p><h2>${escapeHtml(module.name)} · 展示素材</h2></div><button id="close-editor" class="icon-button">×</button></header><div class="editor-layout"><aside class="node-list"><div class="node-list-title"><strong>展示节点</strong><button id="add-node">＋ 新增</button></div>${nodes.length ? nodes.map(item => `<button class="node-list-item ${item.id===editingNodeId?'active':''}" data-node-id="${item.id}"><span>${String(item.order).padStart(2,'0')}</span><strong>${escapeHtml(item.name || '未命名节点')}</strong><small>${item.assets.filter(asset => asset.kind === 0 || asset.kind === 1).length} 个视频/图片</small></button>`).join('') : '<div class="empty-node">暂无展示节点<br/>点击“新增”创建第一段内容</div>'}</aside><div class="node-editor">${node ? nodeForm(node) : '<div class="empty-editor"><strong>尚未创建展示节点</strong><p>创建节点后，可上传大屏视频或图片素材。</p></div>'}</div></div></section>`
   document.body.appendChild(modal)
   modal.querySelector('#close-editor')?.addEventListener('click', closeNodeEditor)
   modal.addEventListener('click', event => { if (event.target === modal) closeNodeEditor() })
@@ -269,9 +268,9 @@ function renderNodeEditor(): void {
 }
 
 function nodeForm(node: NarrationNode): string {
-  return `<div class="editor-fields"><div class="segment-guidance"><strong>按段落编排播放顺序</strong><p>一个节点只安排一种声音：语音介绍节点不要上传视频；视频节点不要生成或上传讲解语音。需要穿插时，请按“语音介绍 → 视频 → 语音补充”分别建立节点。</p></div><div class="field-row"><label>节点名称<input id="node-name" value="${escapeHtml(node.name)}"/></label><label class="short-field">顺序<input id="node-order" type="number" min="1" value="${node.order}"/></label><label class="short-field">故障策略<select id="failure-policy"><option value="0" ${node.failurePolicy===0?'selected':''}>跳过继续</option><option value="1" ${node.failurePolicy===1?'selected':''}>停止讲解</option></select></label></div><div class="field-row"><label>历史声画策略<select id="audio-mix-policy"><option value="0" ${node.audioMixPolicy===0?'selected':''}>压低视频原声</option><option value="1" ${node.audioMixPolicy===1?'selected':''}>保留视频原声</option><option value="2" ${node.audioMixPolicy===2?'selected':''}>静音视频</option></select></label><label class="short-field">视频音量<input id="video-volume" type="number" min="0" max="1" step="0.05" value="${node.videoVolume || 0.25}"/></label><label class="short-field">讲解音量<input id="narration-volume" type="number" min="0" max="1" step="0.05" value="${node.narrationVolume || 1}"/></label></div><label>讲解文案<textarea id="narration-text" class="narration-text" placeholder="语音介绍节点填写；纯视频节点可留空">${escapeHtml(node.narrationText)}</textarea></label>
-    <section id="tts-workspace" class="tts-workspace">${ttsPanel(node)}</section>
-    <section class="assets-section"><div class="assets-heading"><div><strong>大屏展示素材</strong><p>建议使用1920×1080高清横屏视频；超大视频将直接流式写入服务器磁盘。</p></div></div><div class="upload-row"><select id="asset-kind"><option value="0">宣传视频</option><option value="1">展示图片</option><option value="2">动画素材</option></select><label>时长（秒）<input id="asset-duration" type="number" min="0" step="0.1" value="0"/></label><label class="upload-button">选择并上传<input id="asset-file" type="file" accept="video/*,image/*,.mov,.mkv,.webm"/></label><div id="upload-progress" class="upload-progress"><span></span></div></div><div class="asset-list">${node.assets.length ? node.assets.map(asset => `<article><div class="asset-icon">${asset.kind===0?'▶':asset.kind===1?'▧':'◆'}</div><div><strong>${escapeHtml(displayAssetName(asset.name, asset.kind))}</strong><p>${assetKindName(asset.kind)} · ${formatSize(asset.sizeBytes)}${asset.durationSeconds?` · ${asset.durationSeconds} 秒`:''}</p></div><a href="${escapeHtml(asset.url)}" target="_blank">查看</a><button data-remove-asset="${asset.id}">移除</button></article>`).join('') : '<div class="empty-assets">尚未上传大屏素材</div>'}</div></section>
+  const displayAssets = node.assets.filter(asset => asset.kind === 0 || asset.kind === 1)
+  return `<div class="editor-fields"><div class="segment-guidance"><strong>按大屏展示顺序编排内容</strong><p>每个节点可维护视频或图片素材。修改会自动保存到草稿，发布新版本后才会同步到终端。</p></div><div class="field-row"><label>节点名称<input id="node-name" value="${escapeHtml(node.name)}"/></label><label class="short-field">顺序<input id="node-order" type="number" min="1" value="${node.order}"/></label><label class="short-field">故障策略<select id="failure-policy"><option value="0" ${node.failurePolicy===0?'selected':''}>跳过继续</option><option value="1" ${node.failurePolicy===1?'selected':''}>停止讲解</option></select></label></div>
+    <section class="assets-section visual-assets-only"><div class="assets-heading"><div><strong>大屏展示素材</strong><p>支持视频与图片。建议使用 1920×1080 横屏素材；超大视频将直接流式写入服务器磁盘。</p></div><span>${displayAssets.length} 个素材</span></div><div class="upload-row"><label>素材类型<select id="asset-kind"><option value="0">宣传视频</option><option value="1">展示图片</option></select></label><label>展示时长（秒）<input id="asset-duration" type="number" min="0" step="0.1" value="0"/><small>图片可填写展示时长；视频可保持 0</small></label><label class="upload-button">选择并上传<input id="asset-file" type="file" accept="video/*,image/*,.mov,.mkv,.webm"/></label><div id="upload-progress" class="upload-progress"><span></span></div></div><div class="asset-list">${displayAssets.length ? displayAssets.map(asset => `<article><div class="asset-icon">${asset.kind===0?'▶':'▧'}</div><div><strong>${escapeHtml(displayAssetName(asset.name, asset.kind))}</strong><p>${assetKindName(asset.kind)} · ${formatSize(asset.sizeBytes)}${asset.durationSeconds?` · ${asset.durationSeconds} 秒`:''}</p></div><a href="${escapeHtml(asset.url)}" target="_blank" rel="noreferrer">查看</a><button data-remove-asset="${asset.id}">移除</button></article>`).join('') : '<div class="empty-assets"><strong>尚未上传大屏素材</strong><span>请选择视频或图片并上传</span></div>'}</div></section>
     <footer class="editor-footer"><span>修改保存在当前草稿中，点击主页面“发布新版本”后终端才会更新。</span><button id="delete-node" class="danger">删除当前节点</button><button id="done-node" class="primary">完成编辑</button></footer></div>`
 }
 
@@ -409,6 +408,7 @@ function initializeTtsController(module: ExhibitionModule, node: NarrationNode, 
 // allowing it to become an unused-build error or an active UI path.
 void legacyTtsPanel
 void initializeTtsController
+void disposeNodeRuntime
 
 function refreshTtsWorkspace(module: ExhibitionModule, node: NarrationNode, modal: HTMLElement): void {
   if (!document.body.contains(modal) || editingModuleId !== module.id || editingNodeId !== node.id) return
@@ -492,39 +492,31 @@ function bindNodeForm(module: ExhibitionModule, node: NarrationNode, modal: HTML
   bind<HTMLInputElement>('#node-name', input => node.name=input.value)
   bind<HTMLInputElement>('#node-order', input => node.order=Math.max(1,Number(input.value)||1))
   bind<HTMLSelectElement>('#failure-policy', select => node.failurePolicy=Number(select.value) as 0|1)
-  bind<HTMLSelectElement>('#audio-mix-policy', select => node.audioMixPolicy=Number(select.value) as 0|1|2)
-  bind<HTMLInputElement>('#video-volume', input => node.videoVolume=Math.min(1,Math.max(0,Number(input.value)||0)))
-  bind<HTMLInputElement>('#narration-volume', input => node.narrationVolume=Math.min(1,Math.max(0,Number(input.value)||0)))
-  modal.querySelector<HTMLTextAreaElement>('#narration-text')?.addEventListener('input', event => {
-    node.narrationText=(event.target as HTMLTextAreaElement).value;markDirty();refreshTtsWorkspace(module,node,modal)
-  })
   modal.querySelector('#done-node')?.addEventListener('click', closeNodeEditor)
   modal.querySelector('#delete-node')?.addEventListener('click', () => { module.nodes=module.nodes.filter(item=>item.id!==node.id); editingNodeId=module.nodes[0]?.id??null; markDirty(); renderNodeEditor() })
   modal.querySelectorAll<HTMLElement>('[data-remove-asset]').forEach(button => button.addEventListener('click', () => { node.assets=node.assets.filter(asset=>asset.id!==button.dataset.removeAsset); markDirty(); renderNodeEditor() }))
-  modal.querySelector<HTMLInputElement>('#asset-file')?.addEventListener('change', event => uploadSelectedAsset(node, event.target as HTMLInputElement, false))
-  bindTtsActions(module,node,modal)
+  modal.querySelector<HTMLInputElement>('#asset-file')?.addEventListener('change', event => uploadSelectedAsset(node, event.target as HTMLInputElement))
 }
 
-async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement, narrationAudio: boolean): Promise<void> {
+async function uploadSelectedAsset(node: NarrationNode, input: HTMLInputElement, removedNarrationAudioEntry = false): Promise<void> {
+  if (removedNarrationAudioEntry) return showToast('讲解音频上传功能已移除。')
   const file=input.files?.[0]; if(!file)return
   const modal=document.querySelector<HTMLElement>('#node-modal')!
-  const kind=narrationAudio?3:Number(modal.querySelector<HTMLSelectElement>('#asset-kind')?.value??0) as AssetKind
-  const duration=narrationAudio?0:Number(modal.querySelector<HTMLInputElement>('#asset-duration')?.value??0)
+  const kind=Number(modal.querySelector<HTMLSelectElement>('#asset-kind')?.value??0) as AssetKind
+  if (kind !== 0 && kind !== 1) return showToast('当前仅支持上传视频或图片素材。')
+  const duration=Number(modal.querySelector<HTMLInputElement>('#asset-duration')?.value??0)
   const progress=modal.querySelector<HTMLElement>('#upload-progress')!; progress.classList.add('visible')
   try {
     const asset=await api.uploadAsset(file,kind,duration,percent=>{const bar=progress.querySelector<HTMLElement>('span');if(bar)bar.style.width=`${percent}%`})
-    if(narrationAudio) {
-      const binding=await api.bindManualNarrationAudio(asset,node.narrationText)
-      node.narrationAudio=binding;node.ttsConfiguration=binding.synthesisConfiguration;node.ttsAudioUrl=binding.asset.url
-    } else node.assets.push(asset)
+    node.assets.push(asset)
     markDirty()
     await syncDraftNow()
     renderNodeEditor(); showToast('素材上传成功。')
   } catch(error){progress.classList.remove('visible');showToast(error instanceof Error?error.message:'上传失败')}
 }
 
-function addNode(module: ExhibitionModule): void { const order=Math.max(0,...module.nodes.map(item=>item.order))+1; const node:NarrationNode={id:crypto.randomUUID(),name:`讲解节点 ${order}`,order,narrationText:'',ttsAudioUrl:null,assets:[],failurePolicy:0,audioMixPolicy:0,videoVolume:0.25,narrationVolume:1,ttsConfiguration:null,narrationAudio:null}; module.nodes.push(node);editingNodeId=node.id;markDirty();renderNodeEditor() }
-function closeNodeEditor(): void { disposeNodeRuntime(); document.querySelector('#node-modal')?.remove(); editingModuleId=null;editingNodeId=null;renderDashboard() }
+function addNode(module: ExhibitionModule): void { const order=Math.max(0,...module.nodes.map(item=>item.order))+1; const node:NarrationNode={id:crypto.randomUUID(),name:`展示节点 ${order}`,order,narrationText:'',ttsAudioUrl:null,assets:[],failurePolicy:0,audioMixPolicy:1,videoVolume:1,narrationVolume:1,ttsConfiguration:null,narrationAudio:null}; module.nodes.push(node);editingNodeId=node.id;markDirty();renderNodeEditor() }
+function closeNodeEditor(): void { document.querySelector('#node-modal')?.remove(); editingModuleId=null;editingNodeId=null;renderDashboard() }
 
 function cloneUiConfig(source: UiExperienceConfig): UiExperienceConfig {
   return JSON.parse(JSON.stringify(source)) as UiExperienceConfig
@@ -712,7 +704,7 @@ function markDirty(rerender=false): void {
 function addModule(): void { if(!content)return;const order=Math.max(0,...content.modules.map(item=>item.order))+1;content.modules.push({id:crypto.randomUUID(),name:'新模块',order,description:'',coverUrl:null,enabled:true,nodes:[]});markDirty(true) }
 
 function validateDraft(modules: ExhibitionModule[]): string | null {
-  for(const module of modules){if(!module.name.trim())return `第 ${module.order} 个模块名称不能为空。`;for(const node of module.nodes){if(!node.name.trim())return `${module.name}存在未命名节点。`;const hasVideo=node.assets.some(asset=>asset.kind===0||asset.kind===2),hasAudio=!!node.ttsAudioUrl||!!node.narrationAudio;if(hasVideo&&hasAudio)return `${module.name} / ${node.name}同时包含视频和讲解语音，请拆分为按顺序播放的独立节点。`;if(!node.narrationText.trim()&&!node.ttsAudioUrl&&!hasVideo)return `${module.name} / ${node.name}需要讲解文案、讲解音频或视频。`}}
+  for(const module of modules){if(!module.name.trim())return `第 ${module.order} 个模块名称不能为空。`;for(const node of module.nodes){if(!node.name.trim())return `${module.name}存在未命名节点。`;const hasPlayableVideo=node.assets.some(asset=>asset.kind===0||asset.kind===2);if(!hasPlayableVideo)return `${module.name} / ${node.name}需要至少上传一个可播放视频；图片素材可以同时保存。`}}
   return null
 }
 
@@ -812,8 +804,8 @@ function applyDraftSnapshot(snapshot: ContentDraftSnapshot): void {
 }
 
 function refreshPublishReadiness(): void {
-  const summary = root.querySelector<HTMLElement>('#narration-publish-summary')
-  if (summary) summary.outerHTML = renderNarrationPublishSummary()
+  const summary = root.querySelector<HTMLElement>('#content-publish-summary')
+  if (summary) summary.outerHTML = renderContentPublishSummary()
   const button = root.querySelector<HTMLButtonElement>('#publish')
   if (!button) return
   button.disabled = !dirty || Boolean(draftConflict) || publishReadiness?.canPublish !== true

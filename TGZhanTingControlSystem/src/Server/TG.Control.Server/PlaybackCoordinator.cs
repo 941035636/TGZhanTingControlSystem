@@ -332,11 +332,16 @@ public sealed class PlaybackCoordinator(
         NarrationNode? node = null, double? videoVolumeOverride = null)
     {
         var hasOverride = videoVolumeOverride.HasValue;
+        var hasNarration = !string.IsNullOrWhiteSpace(narrationAudioUrl);
+        var mixPolicy = hasOverride
+            ? AudioMixPolicy.Duck
+            : hasNarration ? node?.AudioMixPolicy ?? AudioMixPolicy.Duck : AudioMixPolicy.KeepOriginal;
+        var videoVolume = hasOverride
+            ? Math.Clamp(videoVolumeOverride!.Value, 0, 1)
+            : hasNarration ? NormalizeVideoVolume(node) : 1;
         return new PlaybackCommand(broker.NextSequence(), Guid.NewGuid().ToString("N"), sessionId, moduleId,
             nodeId, action, mediaUrl, executeAt, 0, version, narrationAudioUrl,
-            hasOverride ? AudioMixPolicy.Duck : node?.AudioMixPolicy ?? AudioMixPolicy.Duck,
-            hasOverride ? Math.Clamp(videoVolumeOverride!.Value, 0, 1) : NormalizeVideoVolume(node),
-            NormalizeNarrationVolume(node));
+            mixPolicy, videoVolume, NormalizeNarrationVolume(node));
     }
 
     private static double NormalizeVideoVolume(NarrationNode? node) =>

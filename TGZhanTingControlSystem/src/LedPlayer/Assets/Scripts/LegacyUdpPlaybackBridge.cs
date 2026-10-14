@@ -22,7 +22,8 @@ namespace TG.Control.LedPlayer
         [SerializeField] private bool enabledByDefault = true;
         private UdpClient socket;
         private float legacyVideoVolume = 1f;
-        private bool legacyPlaybackPaused;
+        private bool legacyPlaybackActive;
+        private bool dispatchingLegacyCommand;
         private bool listening;
 
         public bool IsListening => listening;
@@ -31,6 +32,7 @@ namespace TG.Control.LedPlayer
         private void OnEnable()
         {
             if (!enabledByDefault || playbackController == null) return;
+            playbackController.PlaybackActiveChanged += HandlePlaybackActiveChanged;
             var configuredPath = Environment.GetEnvironmentVariable("TG_LEGACY_VIDEO_PATH");
             if (!string.IsNullOrWhiteSpace(configuredPath)) legacyVideoPath = configuredPath;
             var configuredPort = Environment.GetEnvironmentVariable("TG_LEGACY_UDP_PORT");
@@ -56,6 +58,9 @@ namespace TG.Control.LedPlayer
 
         private void OnDisable()
         {
+            if (playbackController != null)
+                playbackController.PlaybackActiveChanged -= HandlePlaybackActiveChanged;
+            legacyPlaybackActive = false;
             listening = false;
             socket?.Close();
             socket = null;
@@ -96,21 +101,40 @@ namespace TG.Control.LedPlayer
             var command = (payload ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(command)) return;
             Debug.Log("[LED Legacy UDP] 收到：" + command);
-            if (IsLegacyPlayCommand(command))
+            if (IsLegacyStartCommand(command))
             {
                 PlayLegacyVideo();
+                return;
+            }
+
+            if (IsLegacyResumeCommand(command))
+            {
+                if (legacyPlaybackActive)
+                {
+                    Send(PlaybackAction.Resume);
+                    Debug.Log("[LED Legacy UDP] VideoPlay继续当前视频。");
+                }
+                else
+                {
+                    Debug.Log("[LED Legacy UDP] VideoPlay首次启动旧现场视频。");
+                    PlayLegacyVideo();
+                }
                 return;
             }
 
             switch (command)
             {
                 case "VideoPause":
-                    legacyPlaybackPaused = !legacyPlaybackPaused;
-                    Send(legacyPlaybackPaused ? PlaybackAction.Pause : PlaybackAction.Resume);
-                    Debug.Log($"[LED Legacy UDP] VideoPause切换为{(legacyPlaybackPaused ? "暂停" : "继续")}。");
+                    if (legacyPlaybackActive)
+                    {
+                        Send(PlaybackAction.Pause);
+                        Debug.Log("[LED Legacy UDP] VideoPause暂停当前视频。");
+                    }
+                    else
+                        Debug.LogWarning("[LED Legacy UDP] 尚未启动旧现场视频，忽略VideoPause。");
                     break;
                 case "CloseVideo":
-                    legacyPlaybackPaused = false;
+                    legacyPlaybackActive = false;
                     Send(PlaybackAction.Stop);
                     break;
                 case "VoiceStart":
@@ -144,15 +168,19 @@ namespace TG.Control.LedPlayer
                 return;
             }
 
-            legacyPlaybackPaused = false;
+            legacyPlaybackActive = true;
             Send(PlaybackAction.PlayVideo, 0, new Uri(path).AbsoluteUri);
         }
 
-        private static bool IsLegacyPlayCommand(string command)
+        private static bool IsLegacyStartCommand(string command)
         {
             return command.Equals("Play:yiluxiangxin", StringComparison.OrdinalIgnoreCase) ||
-                   command.Equals("Play:yiluxiangxin.mp4", StringComparison.OrdinalIgnoreCase) ||
-                   command.Equals("VideoPlay|yiluxiangxin", StringComparison.OrdinalIgnoreCase) ||
+                   command.Equals("Play:yiluxiangxin.mp4", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsLegacyResumeCommand(string command)
+        {
+            return command.Equals("VideoPlay|yiluxiangxin", StringComparison.OrdinalIgnoreCase) ||
                    command.Equals("VideoPlay|yiluxiangxin.mp4", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -160,19 +188,37 @@ namespace TG.Control.LedPlayer
         {
             if (playbackController == null) return;
             var now = DateTimeOffset.UtcNow;
-            playbackController.HandleLegacyCommand(new PlaybackCommand
+            dispatchingLegacyCommand = true;
+            try
             {
-                commandId = "legacy-udp-" + Guid.NewGuid().ToString("N"),
-                sessionId = "legacy-udp-yiluxiangxin",
-                moduleId = "legacy-yiluxiangxin",
-                nodeId = "legacy-yiluxiangxin",
-                action = action,
-                mediaUrl = mediaUrl,
-                executeAtUtc = now.ToString("O"),
-                contentVersion = 0,
-                videoVolume = volume,
-                audioMixPolicy = AudioMixPolicy.KeepOriginal
-            });
+                playbackController.HandleLegacyCommand(new PlaybackCommand
+                {
+                    commandId = "legacy-udp-" + Guid.NewGuid().ToString("N"),
+                    sessionId = "legacy-udp-yiluxiangxin",
+                    moduleId = "legacy-yiluxiangxin",
+                    nodeId = "legacy-yiluxiangxin",
+                    action = action,
+                    mediaUrl = mediaUrl,
+                    executeAtUtc = now.ToString("O"),
+                    contentVersion = 0,
+                    videoVolume = volume,
+                    audioMixPolicy = AudioMixPolicy.KeepOriginal
+                });
+            }
+            finally
+            {
+                dispatchingLegacyCommand = false;
+            }
+        }
+
+        private void HandlePlaybackActiveChanged(bool active)
+        {
+            if (dispatchingLegacyCommand) return;
+
+            // A completed/failed legacy playback, or a formal Server session taking over the
+            // single player, invalidates the legacy resume state. The next VideoPlay command
+            // must then start the mapped film instead of resuming unrelated media.
+            legacyPlaybackActive = false;
         }
     }
 }

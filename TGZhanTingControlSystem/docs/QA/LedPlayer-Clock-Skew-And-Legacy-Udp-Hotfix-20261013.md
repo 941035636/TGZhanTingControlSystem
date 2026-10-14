@@ -1,4 +1,4 @@
-# LedPlayer 时钟偏差与旧中控暂停切换修复记录
+# LedPlayer 时钟偏差与旧中控暂停/继续修复记录
 
 日期：2026-10-13  
 分支：`codex/product-upgrade`
@@ -9,7 +9,7 @@
 
 1. 中控开始讲解后，视频停在第一帧，必须人工“暂停→继续”后才能播放。
 2. 点击待机欢迎入口后，TouchClient 长时间停留在“LED端正在校验欢迎音频”。
-3. UDP 7002 旧中控第一次点击暂停有效，第二次点击同一个暂停按钮不能恢复播放。
+3. UDP 7002 旧中控发送暂停后，再发送继续命令时视频不能从原位置恢复。
 
 Server、TouchClient、正式 Session 状态机和新中控的 Pause/Resume 指令语义均未修改。
 
@@ -61,7 +61,7 @@ Welcome detected Server/LED clock offset ... outside trusted window ..., startin
 
 此保护用于避免时钟异常导致业务卡死，不能替代三台设备的正常校时。正式部署仍应让 Server、TouchClient 和 LedPlayer 使用同一局域网时间源，以保证计划起播精度和声画同步。
 
-## 4. UDP 旧中控暂停键修复
+## 4. UDP 旧中控暂停/继续修复
 
 修改文件：
 
@@ -69,27 +69,35 @@ Welcome detected Server/LED clock offset ... outside trusted window ..., startin
 
 ### 4.1 根因
 
-旧中控只有一个播放/暂停切换按钮，每次点击暂停区域都会发送同一条 UDP 消息：
+重新核对旧安卓工程 `VideoPlayControl.cs` 及 `UDPClient.cs` 后，确认同一条
+`VideoPlay|yiluxiangxin` 同时承担“首次开始”和“解除暂停后继续”两种语义：
 
 ```text
-VideoPause
+playTog:  ison = true  -> VideoPlay|yiluxiangxin（首次开始）
+pauseTog: ison = true  -> VideoPause（暂停）
+pauseTog: ison = false -> VideoPlay|yiluxiangxin（从暂停继续）
 ```
 
-兼容桥原来把每一条 `VideoPause` 都固定转换成新协议的 `PlaybackAction.Pause`。因此第一次点击可以暂停，第二次点击仍然是暂停，不可能恢复播放。
+上一版热修复错误地把 `VideoPause` 当成了本地 Toggle：第一次转为 Pause，第二次转为 Resume；同时将
+`VideoPlay|yiluxiangxin` 固定归类为从头播放。若反向固定成 Resume，又会导致旧中控第一次点击播放时没有可恢复的媒体。
+因此该协议不能只按命令文本静态映射，兼容层必须结合旧视频是否已经启动来解释 `VideoPlay`。
 
 ### 4.2 修复方式
 
-- 在旧协议兼容桥中保存旧播放会话的暂停状态。
-- 第一次收到 `VideoPause` 时转换为 `Pause`。
-- 第二次收到 `VideoPause` 时转换为 `Resume`，后续继续交替。
-- 收到旧视频 Play 或 CloseVideo 时重置切换状态。
+- `VideoPlay|yiluxiangxin` 在尚无旧视频活动时转换为 `PlaybackAction.PlayVideo`，兼容旧安卓 `playTog` 的首次启动。
+- `VideoPlay|yiluxiangxin` 在旧视频已经启动时转换为 `PlaybackAction.Resume`，兼容 `pauseTog` 关闭后的原位置继续。
+- `Play:yiluxiangxin` 保留为显式 `PlaybackAction.PlayVideo` 兼容命令。
+- `VideoPause` 在旧视频活动时始终转换为 `PlaybackAction.Pause`，重复 UDP 包仍保持暂停；未启动旧视频时忽略，避免暂停正式 Server 会话。
+- `CloseVideo` 继续转换为 `PlaybackAction.Stop`。
+- 旧视频自然结束、播放失败或正式 Server 会话接管播放器时，兼容层清除旧视频活动状态；下一条 `VideoPlay` 会重新开始影片，而不会恢复无关媒体。
 - 新中控通过 Server 下发的独立 Pause/Resume 指令保持原样，不受此兼容逻辑影响。
 
 预期现场日志按点击顺序交替出现：
 
 ```text
-[LED Legacy UDP] VideoPause切换为暂停。
-[LED Legacy UDP] VideoPause切换为继续。
+[LED Legacy UDP] VideoPlay首次启动旧现场视频。
+[LED Legacy UDP] VideoPause暂停当前视频。
+[LED Legacy UDP] VideoPlay继续当前视频。
 ```
 
 ## 5. 验证状态
@@ -100,9 +108,14 @@ VideoPause
 | 手工校时后的欢迎词播放 | PASS | 现场确认两个问题随时钟校准一并恢复 |
 | LedPlayer Unity脚本编译 | PASS | Unity 2020.3.35f1c2，无脚本编译错误 |
 | LedPlayer Windows Player构建 | PASS | 本地正式Windows构建成功 |
-| 安装包文件清单与SHA-256 | PASS | 156个文件全部通过清单校验 |
+| UDP命令映射本机运行验证 | PASS | 首次`VideoPlay`→PlayVideo；重复两次`VideoPause`均为Pause；再次`VideoPlay`→Resume；Close后`VideoPlay`→PlayVideo |
+| 旧安卓中控Toggle实机验证 | NOT RUN | 仍需使用旧安卓工程或现场平板验证实际按钮操作 |
+| 最新修复安装包 | NOT RUN | 2026-10-14协议更正后尚未重新生成LedPlayer安装包 |
 | 应用内时钟偏差保护现场验证 | NOT RUN | 已进入新安装包，仍需在不同步时钟条件下验证立即播放 |
-| 旧中控暂停→再次点击继续 | NOT RUN | 代码与构建完成，仍需现场UDP 7002实机回归 |
+
+本机验证使用实际文件 `D:\video\yiluxiangxin.mp4` 和真实 UDP 7002 数据包，运行日志保存在：
+
+`artifacts/UdpResumeVerification/LedPlayer-udp-state-aware-runtime-2.log`
 
 ## 6. 交付与部署
 
@@ -132,7 +145,7 @@ VideoPause
 1. 故意让 Server 与 LED 相差一分钟以上，启动欢迎词，确认不会长期停在校验状态，并出现时钟偏差警告。
 2. 在相同时间差下开始正式视频，确认三秒内持续播放，不人工点击暂停/继续。
 3. 恢复三台电脑时间同步，再验证欢迎词、视频首播和基本声画同步。
-4. 使用旧中控播放视频，第一次点击暂停，第二次点击同一按钮恢复播放。
+4. 使用旧中控播放视频，将暂停 Toggle 打开后确认暂停，再关闭 Toggle，确认由 `VideoPlay|yiluxiangxin` 从原位置继续。
 5. 验证旧中控停止、重新播放和音量控制仍正常。
 6. 验证新中控暂停、继续、跳过和终止未受 UDP 兼容修改影响。
 

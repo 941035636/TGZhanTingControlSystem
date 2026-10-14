@@ -393,12 +393,6 @@ namespace TG.Control.LedPlayer
         {
             var narrationVolume = command.narrationVolume > 0 ? command.narrationVolume : 1.0;
             narrationAudioSource.volume = Mathf.Clamp01((float)narrationVolume);
-            if (!narrationPrepared)
-            {
-                PlaybackAdapter.SetVolume(1);
-                return;
-            }
-
             switch (command.audioMixPolicy)
             {
                 case AudioMixPolicy.KeepOriginal:

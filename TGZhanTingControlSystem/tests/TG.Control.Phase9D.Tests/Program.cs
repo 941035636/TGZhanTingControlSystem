@@ -42,6 +42,7 @@ internal static class Program
             ("Adopt and Publish cannot silently cross", AdoptPublishConcurrencyIsSafe),
             ("Legacy content reads, publishes, rolls back and plays", LegacyCompatibility),
             ("Live LED video volume is validated, dispatched and restored", LiveVideoVolumeControl),
+            ("Live LED video volume is inherited by the next video node", LiveVideoVolumeIsInheritedByNextNode),
             ("Video plus narration text without audio is an explicit warning", VideoWithoutAudioWarns),
             ("Video and narration audio must be split into ordered nodes", VideoAndNarrationAudioCannotOverlap),
             ("Pure narration text without audio blocks publish", PureNarrationWithoutAudioBlocks),
@@ -405,6 +406,49 @@ internal static class Program
         var recoveredPrepare = await recoveredBroker.WaitAsync("led-main", TimeSpan.FromSeconds(1), CancellationToken.None);
         Equal(0.65, recoveredPrepare!.VideoVolume);
         Equal(AudioMixPolicy.Duck, recoveredPrepare.AudioMixPolicy);
+    }
+
+    private static async Task LiveVideoVolumeIsInheritedByNextNode()
+    {
+        await using var context = await TestContext.CreateAsync();
+        var firstVideo = context.CreateVisualAsset("volume-first.mp4");
+        var secondVideo = context.CreateVisualAsset("volume-second.mp4");
+        var firstNode = new NarrationNode("first", "First", 1, string.Empty, null, [firstVideo]);
+        var secondNode = new NarrationNode("second", "Second", 2, string.Empty, null, [secondVideo]);
+        await context.Published.SaveAsync(
+            [new ExhibitionModule("module", "Module", 1, string.Empty, null, true, [firstNode, secondNode])],
+            "volume-test", CancellationToken.None);
+
+        var broker = new CommandBroker();
+        var coordinator = new PlaybackCoordinator(context.Published, broker,
+            Options.Create(new PlaybackOptions { RequireLedReadyBeforeStart = false, LedClientId = "led-main" }),
+            new PlaybackSessionStore(context.StorageOptions, context.Environment), context.Events,
+            NullLogger<PlaybackCoordinator>.Instance);
+        var started = await coordinator.StartAsync(new StartNarrationRequest(["module"], "volume-test"),
+            CancellationToken.None);
+
+        var firstPrepare = await broker.WaitAsync("led-main", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Equal(PlaybackAction.Prepare, firstPrepare!.Action);
+        Equal(AudioMixPolicy.KeepOriginal, firstPrepare.AudioMixPolicy);
+        Equal(1d, firstPrepare.VideoVolume);
+
+        var changed = await coordinator.ControlAsync(
+            new ControlNarrationRequest(started.SessionId, PlaybackAction.SetVideoVolume, 0.2),
+            CancellationToken.None);
+        True(changed.Accepted, changed.Message);
+        var liveVolume = await broker.WaitAsync("led-main", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Equal(PlaybackAction.SetVideoVolume, liveVolume!.Action);
+        Equal(0.2, liveVolume.VideoVolume);
+
+        await coordinator.ReportAsync(new PlaybackStatusReport("led-main", firstPrepare.CommandId,
+            started.SessionId, "first", PlaybackState.Completed, 0, null, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+        var secondPrepare = await broker.WaitAsync("led-main", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Equal(PlaybackAction.Prepare, secondPrepare!.Action);
+        Equal("second", secondPrepare.NodeId);
+        Equal(AudioMixPolicy.Duck, secondPrepare.AudioMixPolicy);
+        Equal(0.2, secondPrepare.VideoVolume);
+        Equal(0.2, (await coordinator.GetSessionAsync(started.SessionId, CancellationToken.None))!.VideoVolume);
     }
 
     private static async Task VideoWithoutAudioWarns()
