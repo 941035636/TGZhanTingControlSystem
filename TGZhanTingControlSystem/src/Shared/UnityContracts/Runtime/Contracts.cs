@@ -134,6 +134,7 @@ namespace TG.Control.UnityContracts
         public string coverUrl;
         public bool enabled;
         public NarrationNode[] nodes;
+        public ContentAsset[] galleryImages;
     }
 
     [Serializable]

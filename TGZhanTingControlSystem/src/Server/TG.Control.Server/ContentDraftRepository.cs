@@ -86,8 +86,10 @@ public sealed class ContentDraftRepository
     {
         if (!File.Exists(filePath)) return null;
         await using var stream = File.OpenRead(filePath);
-        return await JsonSerializer.DeserializeAsync<ContentDraftDocument>(stream, jsonOptions, cancellationToken)
-               ?? throw new InvalidDataException("Content draft file is empty or invalid.");
+        var draft = await JsonSerializer.DeserializeAsync<ContentDraftDocument>(stream, jsonOptions,
+                        cancellationToken)
+                    ?? throw new InvalidDataException("Content draft file is empty or invalid.");
+        return draft with { Modules = NarrationAudioCompatibility.NormalizeModules(draft.Modules) };
     }
 
     private async Task WriteAsync(ContentDraftDocument draft, CancellationToken cancellationToken)

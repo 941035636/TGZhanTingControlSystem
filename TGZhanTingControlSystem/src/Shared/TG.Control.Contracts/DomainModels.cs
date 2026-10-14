@@ -90,7 +90,8 @@ public sealed record ExhibitionModule(
     string Description,
     string? CoverUrl,
     bool Enabled,
-    IReadOnlyList<NarrationNode> Nodes);
+    IReadOnlyList<NarrationNode> Nodes,
+    IReadOnlyList<ContentAsset>? GalleryImages = null);
 
 public sealed record PublishedContent(
     long Version,

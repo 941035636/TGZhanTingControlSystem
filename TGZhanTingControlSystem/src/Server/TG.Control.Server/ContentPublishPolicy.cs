@@ -27,6 +27,12 @@ public static class ContentPublishPolicy
 
         foreach (var module in modules)
         {
+            foreach (var asset in module.GalleryImages ?? [])
+            {
+                ValidateGalleryAsset(module, asset, assetStorage, requestHost, issues);
+                ValidateStableAssetIdentity(module, null, asset, assetsById, assetIdsByUrl, issues, null);
+            }
+
             foreach (var node in module.Nodes ?? [])
             {
                 foreach (var asset in node.Assets ?? [])
@@ -119,16 +125,58 @@ public static class ContentPublishPolicy
                    NarrationAudioFingerprint.ComputeText(node.NarrationText), StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void ValidateStableAssetIdentity(ExhibitionModule module, NarrationNode node, ContentAsset asset,
+    private static void ValidateGalleryAsset(ExhibitionModule module, ContentAsset asset, AssetStorage assetStorage,
+        HostString requestHost, ICollection<ContentPublishIssue> issues)
+    {
+        if (asset.Kind != AssetKind.Image)
+            AddGalleryIssue(issues, module, "gallery_asset_kind_invalid",
+                $"图集素材“{asset.Name}”不是图片类型。第一版图集只允许 JPG、JPEG、PNG 图片。");
+        if (!IsSupportedGalleryImage(asset))
+            AddGalleryIssue(issues, module, "gallery_asset_format_invalid",
+                $"图集素材“{asset.Name}”格式不受支持。第一版图集只允许 JPG、JPEG、PNG 图片。");
+        if (string.IsNullOrWhiteSpace(asset.Id) || string.IsNullOrWhiteSpace(asset.Name) ||
+            string.IsNullOrWhiteSpace(asset.Url))
+        {
+            AddGalleryIssue(issues, module, "gallery_asset_identity_missing",
+                "图集图片的素材编号、名称和地址不能为空。");
+            return;
+        }
+        if (asset.SizeBytes <= 0 || string.IsNullOrWhiteSpace(asset.Sha256))
+        {
+            AddGalleryIssue(issues, module, "gallery_asset_integrity_missing",
+                $"图集素材“{asset.Name}”缺少文件大小或 SHA-256 完整性信息，请重新上传。");
+            return;
+        }
+
+        var storageError = assetStorage.ValidatePublishedReference(asset.Url, asset.SizeBytes, requestHost,
+            asset.Sha256);
+        if (storageError is not null)
+            AddGalleryIssue(issues, module, "gallery_asset_invalid",
+                $"图集素材“{asset.Name}”：{storageError}");
+    }
+
+    private static bool IsSupportedGalleryImage(ContentAsset asset)
+    {
+        var path = asset.Url.Split('?', '#')[0];
+        var extension = Path.GetExtension(path);
+        var supportedExtension = extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                 extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                 extension.Equals(".png", StringComparison.OrdinalIgnoreCase);
+        var supportedMediaType = string.IsNullOrWhiteSpace(asset.MediaType) ||
+                                 asset.MediaType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                 asset.MediaType.Equals("image/png", StringComparison.OrdinalIgnoreCase);
+        return supportedExtension && supportedMediaType;
+    }
+
+    private static void ValidateStableAssetIdentity(ExhibitionModule module, NarrationNode? node, ContentAsset asset,
         IDictionary<string, ContentAsset> assetsById, IDictionary<string, string> assetIdsByUrl,
         ICollection<ContentPublishIssue> issues, NarrationAudioBindingStatus? narrationAudioStatus)
     {
         if (string.IsNullOrWhiteSpace(asset.Id) || string.IsNullOrWhiteSpace(asset.Url)) return;
         if (assetsById.TryGetValue(asset.Id, out var existing) && !SameIdentity(existing, asset))
         {
-            AddIssue(issues, module, node, "asset_id_conflict", ContentPublishIssueSeverity.Error,
-                $"资产ID {asset.Id} 在当前内容中对应了不同的URL或完整性信息。",
-                narrationAudioStatus);
+            AddAssetIssue(issues, module, node, "asset_id_conflict",
+                $"资产ID {asset.Id} 在当前内容中对应了不同的URL或完整性信息。", narrationAudioStatus);
         }
         else
         {
@@ -139,9 +187,8 @@ public static class ContentPublishPolicy
         if (assetIdsByUrl.TryGetValue(canonicalUrl, out var existingId) &&
             !string.Equals(existingId, asset.Id, StringComparison.OrdinalIgnoreCase))
         {
-            AddIssue(issues, module, node, "asset_url_identity_conflict", ContentPublishIssueSeverity.Error,
-                $"同一不可变音频URL关联了不同资产ID（{existingId} / {asset.Id}）。",
-                narrationAudioStatus);
+            AddAssetIssue(issues, module, node, "asset_url_identity_conflict",
+                $"同一不可变素材URL关联了不同资产ID（{existingId} / {asset.Id}）。", narrationAudioStatus);
         }
         else
         {
@@ -170,6 +217,24 @@ public static class ContentPublishPolicy
     {
         issues.Add(new ContentPublishIssue(module.Id, node.Id, module.Name, node.Name, code, severity,
             $"模块“{module.Name}” / 节点“{node.Name}”：{detail}", status));
+    }
+
+    private static void AddAssetIssue(ICollection<ContentPublishIssue> issues, ExhibitionModule module,
+        NarrationNode? node, string code, string detail, NarrationAudioBindingStatus? status)
+    {
+        if (node is not null)
+        {
+            AddIssue(issues, module, node, code, ContentPublishIssueSeverity.Error, detail, status);
+            return;
+        }
+        AddGalleryIssue(issues, module, code, detail);
+    }
+
+    private static void AddGalleryIssue(ICollection<ContentPublishIssue> issues, ExhibitionModule module,
+        string code, string detail)
+    {
+        issues.Add(new ContentPublishIssue(module.Id, "$gallery", module.Name, "模块图集", code,
+            ContentPublishIssueSeverity.Error, $"模块“{module.Name}” / 图片图集：{detail}"));
     }
 
     private static string Key(string moduleId, string nodeId) => moduleId + KeySeparator + nodeId;

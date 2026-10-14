@@ -1,6 +1,6 @@
 # 模块图集投放到 LED 大屏 — 封存开发计划
 
-> 状态：`DEFERRED / 已封存，尚未实施`
+> 状态：`IN PROGRESS / Gallery A 已完成，等待人工确认后进入 Gallery B`
 >
 > 记录日期：2026-10-13
 >
@@ -195,6 +195,16 @@ AdminWeb 每个模块增加“图片图集”区域：
 3. **Gallery C — LED渲染**：缓存、解码、双缓冲切换、错误上报、资源释放。
 4. **Gallery D — TouchClient页面**：模块选择、缩略图、投放、前后切换、停止与状态恢复。
 5. **Gallery E — 集成验收**：大图压力、断网、重连、Server/LED/Touch重启、正式讲解切换、Rollback和UDP回归。
+
+当前实施进度（2026-10-15）：
+
+| 阶段 | 状态 | 说明 |
+| --- | --- | --- |
+| Gallery A | `COMPLETE / 待人工确认` | 已完成领域模型、AdminWeb模块图集、发布校验、Manifest及Rollback自动化测试。 |
+| Gallery B | `NOT STARTED` | 等待 Gallery A 人工确认。 |
+| Gallery C | `NOT STARTED` | 尚未开始。 |
+| Gallery D | `NOT STARTED` | 尚未开始。 |
+| Gallery E | `NOT STARTED` | 尚未开始。 |
 
 首个可测试版本预计5～7个工作日；含自动轮播、恢复和现场压力测试的交付版本建议预留7～10个工作日。
 

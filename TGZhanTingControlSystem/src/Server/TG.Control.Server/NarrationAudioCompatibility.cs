@@ -10,7 +10,8 @@ public static class NarrationAudioCompatibility
     public static IReadOnlyList<ExhibitionModule> NormalizeModules(IReadOnlyList<ExhibitionModule> modules) =>
         modules.Select(module => module with
         {
-            Nodes = (module.Nodes ?? []).Select(NormalizeNode).ToArray()
+            Nodes = (module.Nodes ?? []).Select(NormalizeNode).ToArray(),
+            GalleryImages = (module.GalleryImages ?? []).ToArray()
         }).ToArray();
 
     public static NarrationNode NormalizeNode(NarrationNode node) =>

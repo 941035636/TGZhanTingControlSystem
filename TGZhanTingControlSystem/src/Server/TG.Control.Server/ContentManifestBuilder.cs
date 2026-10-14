@@ -7,8 +7,7 @@ public static class ContentManifestBuilder
     public static ContentSyncManifest Build(PublishedContent content)
     {
         var candidates = content.Modules
-            .SelectMany(module => module.Nodes ?? [])
-            .SelectMany(NodeAssets)
+            .SelectMany(ModuleAssets)
             .Where(asset => !string.IsNullOrWhiteSpace(asset.Url))
             .ToArray();
         var assets = candidates
@@ -16,6 +15,16 @@ public static class ContentManifestBuilder
             .Select(group => ValidateAndSelect(group.Key, group))
             .ToArray();
         return new ContentSyncManifest(content.Version, assets);
+    }
+
+    private static IEnumerable<ContentSyncAsset> ModuleAssets(ExhibitionModule module)
+    {
+        foreach (var asset in module.GalleryImages ?? [])
+            yield return new ContentSyncAsset(asset.Url, asset.Sha256, asset.SizeBytes,
+                asset.Id, asset.MediaType);
+
+        foreach (var asset in (module.Nodes ?? []).SelectMany(NodeAssets))
+            yield return asset;
     }
 
     private static IEnumerable<ContentSyncAsset> NodeAssets(NarrationNode node)

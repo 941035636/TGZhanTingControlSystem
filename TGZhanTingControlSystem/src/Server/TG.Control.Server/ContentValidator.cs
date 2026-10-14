@@ -38,6 +38,11 @@ public static class ContentValidator
                 var coverError = assetStorage.ValidatePublishedReference(module.CoverUrl, 0, requestHost);
                 if (coverError is not null) Add($"{moduleKey}.coverUrl", $"模块“{module.Name}” / 封面素材：{coverError}");
             }
+            foreach (var asset in module.GalleryImages ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(asset.Name) || string.IsNullOrWhiteSpace(asset.Url))
+                    Add($"{moduleKey}.galleryImages", "图集图片名称和地址不能为空。");
+            }
             var nodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var node in module.Nodes ?? [])
             {
@@ -72,7 +77,10 @@ public static class ContentValidator
             currentContent, legacyValidation);
         foreach (var issue in publishReadiness.Issues.Where(item =>
                      item.Severity == ContentPublishIssueSeverity.Error))
-            Add($"modules[{issue.ModuleId}].nodes[{issue.NodeId}].narrationAudio", issue.Message);
+            Add(issue.NodeId == "$gallery"
+                    ? $"modules[{issue.ModuleId}].galleryImages"
+                    : $"modules[{issue.ModuleId}].nodes[{issue.NodeId}].narrationAudio",
+                issue.Message);
 
         return errors.ToDictionary(item => item.Key, item => item.Value.ToArray());
     }

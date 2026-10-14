@@ -5,7 +5,7 @@ export type AudioMixPolicy = 0 | 1 | 2
 export interface TtsSynthesisConfiguration { providerKey: string; voice: string; language: string; rate: number; pitch: number; volume: number; outputMediaType: string; sampleRateHz: number; channels: number }
 export interface NarrationAudioBinding { asset: ContentAsset; narrationTextFingerprint: string; synthesisConfigurationFingerprint: string; synthesisConfiguration: TtsSynthesisConfiguration; origin: 0 | 1 | 2; boundAtUtc: string; fingerprintVersion: string; providerRequestId: string | null }
 export interface NarrationNode { id: string; name: string; order: number; narrationText: string; ttsAudioUrl: string | null; assets: ContentAsset[]; failurePolicy: 0 | 1; audioMixPolicy: AudioMixPolicy; videoVolume: number; narrationVolume: number; ttsConfiguration?: TtsSynthesisConfiguration | null; narrationAudio?: NarrationAudioBinding | null }
-export interface ExhibitionModule { id: string; name: string; order: number; description: string; coverUrl: string | null; enabled: boolean; nodes: NarrationNode[] }
+export interface ExhibitionModule { id: string; name: string; order: number; description: string; coverUrl: string | null; enabled: boolean; nodes: NarrationNode[]; galleryImages: ContentAsset[] }
 export interface PublishedContent { version: number; publishedAtUtc: string; publishedBy: string; modules: ExhibitionModule[] }
 export interface LoginResult { token: string; username: string; roles: string[]; expiresAtUtc: string }
 export interface TtsStatus { provider: string; voice: string; configured: boolean }

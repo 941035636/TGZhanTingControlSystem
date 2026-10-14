@@ -1,5 +1,5 @@
 import './style.css'
-import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentDraftSnapshot, type ContentPublishReadiness, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiElementOverride, type UiExperienceConfig } from './api'
+import { api, ApiError, resolveAssetUrl, type AssetKind, type ClientRuntimeStatus, type ContentAsset, type ContentDraftSnapshot, type ContentPublishReadiness, type ContentVersionSummary, type ExhibitionModule, type NarrationAudioCandidateEvaluation, type NarrationAudioDraftStatus, type NarrationNode, type NarrationRoute, type OperationalEvent, type PlaybackSessionStatus, type PublishedContent, type SystemReadiness, type TtsProviderDescriptor, type TtsSynthesisConfiguration, type UiElementOverride, type UiExperienceConfig } from './api'
 import { bindingStatusLabel, jobStatusLabel, TtsWorkflowController, type TtsWorkflowApi } from './tts-workflow'
 import { validateLedIdleMediaDimensions } from './ui-media-validation'
 import { adminUiFeatures, normalizeAdminWorkspaceView, showRouteBasedTouchTemplates, type AdminWorkspaceView } from './feature-flags'
@@ -231,7 +231,7 @@ function readinessBanner():string{const state=!readiness?.canStart?'blocked':rea
 async function refreshOperations():Promise<void>{try{[clientStatuses,playbackSessions,readiness,operationEvents]=await Promise.all([api.clientStatuses(),api.playbackSessions(),api.readiness(),api.operations()]);renderDashboard();showToast('运行状态已刷新。')}catch(error){showToast(error instanceof Error?error.message:'刷新失败')}}
 function formatTime(value:string):string{const date=new Date(value);return Number.isNaN(date.getTime())?'-':date.getUTCFullYear()<2000?'系统初始化':date.toLocaleString('zh-CN',{hour12:false})}
 
-function moduleCard(module: ExhibitionModule): string { return `<article class="module-card ${module.enabled ? '' : 'disabled'}" data-module="${module.id}"><div class="module-number">${String(module.order).padStart(2,'0')}</div><div class="module-body"><div class="module-heading"><input class="module-name" value="${escapeHtml(module.name)}" aria-label="模块名称"/><label class="switch"><input type="checkbox" class="module-enabled" ${module.enabled?'checked':''}/><span></span></label></div><textarea class="module-description" placeholder="填写模块简介">${escapeHtml(module.description)}</textarea><div class="module-cover-setting"><span>${module.coverUrl?'已设置中控卡片底图':'尚未设置中控卡片底图'}</span><label class="upload-button">${module.coverUrl?'替换底图':'上传底图'}<input class="module-cover-file" type="file" accept="image/*"/></label></div><div class="module-footer"><span>${module.nodes.length} 个展示节点 · ${module.nodes.reduce((sum,node)=>sum+node.assets.filter(asset => asset.kind === 0 || asset.kind === 1).length,0)} 个视频/图片</span><button class="node-button">编辑大屏素材</button></div></div></article>` }
+function moduleCard(module: ExhibitionModule): string { return `<article class="module-card ${module.enabled ? '' : 'disabled'}" data-module="${module.id}"><div class="module-number">${String(module.order).padStart(2,'0')}</div><div class="module-body"><div class="module-heading"><input class="module-name" value="${escapeHtml(module.name)}" aria-label="模块名称"/><label class="switch"><input type="checkbox" class="module-enabled" ${module.enabled?'checked':''}/><span></span></label></div><textarea class="module-description" placeholder="填写模块简介">${escapeHtml(module.description)}</textarea><div class="module-cover-setting"><span>${module.coverUrl?'已设置中控卡片底图':'尚未设置中控卡片底图'}</span><label class="upload-button">${module.coverUrl?'替换底图':'上传底图'}<input class="module-cover-file" type="file" accept="image/*"/></label></div><div class="module-footer"><span>${module.nodes.length} 个展示节点 · ${module.galleryImages.length} 张图集图片</span><div class="module-actions"><button class="gallery-button">管理图片图集</button><button class="node-button">编辑大屏素材</button></div></div></div></article>` }
 
 function bindCard(card: HTMLElement): void {
   const module = content?.modules.find(item => item.id === card.dataset.module); if (!module) return
@@ -242,7 +242,81 @@ function bindCard(card: HTMLElement): void {
     const file=(event.target as HTMLInputElement).files?.[0];if(!file)return
     try{const asset=await api.uploadAsset(file,1,0,()=>{});module.coverUrl=asset.url;markDirty(true);await syncDraftNow();showToast('板块底图已上传，发布新版本后中控端生效。')}catch(error){showToast(error instanceof Error?error.message:'板块底图上传失败')}
   })
+  card.querySelector('.gallery-button')?.addEventListener('click', () => openGalleryEditor(module.id))
   card.querySelector('.node-button')?.addEventListener('click', () => openNodeEditor(module.id))
+}
+
+function openGalleryEditor(moduleId: string): void {
+  const module = content?.modules.find(item => item.id === moduleId); if (!module) return
+  renderGalleryEditor(module)
+}
+
+function renderGalleryEditor(module: ExhibitionModule): void {
+  document.querySelector('#gallery-modal')?.remove()
+  const images = module.galleryImages
+  const modal = document.createElement('div'); modal.id = 'gallery-modal'; modal.className = 'modal-backdrop'
+  modal.innerHTML = `<section class="gallery-modal"><header class="editor-header"><div><p class="eyebrow">模块图片图集</p><h2>${escapeHtml(module.name)} · 图片管理</h2></div><button id="close-gallery" class="icon-button">×</button></header><div class="gallery-editor-body"><div class="gallery-toolbar"><div><strong>有序图片图集</strong><p>支持 JPG、JPEG、PNG；数组顺序就是后续大屏展示顺序。</p></div><label class="upload-button gallery-upload">批量上传图片<input id="gallery-files" type="file" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png"/></label></div><div id="gallery-upload-progress" class="gallery-upload-status"></div><div class="gallery-grid">${images.length ? images.map((asset,index) => galleryCard(asset,index,images.length)).join('') : '<div class="empty-gallery"><strong>当前模块还没有图集图片</strong><span>可以一次选择多张 JPG 或 PNG 图片上传。</span></div>'}</div><footer class="editor-footer"><span>排序、名称和删除操作会保存到内容草稿，发布新版本后进入正式素材清单。</span><button id="done-gallery" class="primary">完成编辑</button></footer></div></section>`
+  document.body.appendChild(modal)
+  const close = () => { modal.remove(); renderDashboard() }
+  modal.querySelector('#close-gallery')?.addEventListener('click', close)
+  modal.querySelector('#done-gallery')?.addEventListener('click', close)
+  modal.addEventListener('click', event => { if (event.target === modal) close() })
+  modal.querySelector<HTMLInputElement>('#gallery-files')?.addEventListener('change', event => void uploadGalleryFiles(module, (event.target as HTMLInputElement).files, modal))
+  bindGalleryCards(module, modal)
+}
+
+function galleryCard(asset: ContentAsset, index: number, count: number): string {
+  return `<article class="gallery-card" draggable="true" data-gallery-index="${index}"><div class="gallery-preview"><img src="${escapeHtml(resolveAssetUrl(asset.url))}" alt="${escapeHtml(asset.name)}" draggable="false"/><span>${String(index + 1).padStart(2,'0')}</span></div><label>图片名称<input class="gallery-name" value="${escapeHtml(asset.name)}" maxlength="80"/></label><p>${formatSize(asset.sizeBytes)} · ${escapeHtml(asset.mediaType ?? '图片')}</p><div class="gallery-card-actions"><button data-gallery-up ${index === 0 ? 'disabled' : ''}>上移</button><button data-gallery-down ${index === count - 1 ? 'disabled' : ''}>下移</button><a href="${escapeHtml(resolveAssetUrl(asset.url))}" target="_blank" rel="noreferrer">预览</a><button class="danger-text" data-gallery-remove>删除</button></div></article>`
+}
+
+function bindGalleryCards(module: ExhibitionModule, modal: HTMLElement): void {
+  let draggedIndex: number | null = null
+  modal.querySelectorAll<HTMLElement>('[data-gallery-index]').forEach(card => {
+    const index = Number(card.dataset.galleryIndex)
+    card.querySelector<HTMLInputElement>('.gallery-name')?.addEventListener('change', event => {
+      module.galleryImages[index].name = (event.target as HTMLInputElement).value.trim() || `图集图片 ${index + 1}`
+      markDirty()
+    })
+    card.querySelector('[data-gallery-up]')?.addEventListener('click', () => moveGalleryImage(module, index, index - 1))
+    card.querySelector('[data-gallery-down]')?.addEventListener('click', () => moveGalleryImage(module, index, index + 1))
+    card.querySelector('[data-gallery-remove]')?.addEventListener('click', () => {
+      module.galleryImages.splice(index, 1); markDirty(); renderGalleryEditor(module)
+    })
+    card.addEventListener('dragstart', () => { draggedIndex = index; card.classList.add('dragging') })
+    card.addEventListener('dragend', () => { draggedIndex = null; card.classList.remove('dragging') })
+    card.addEventListener('dragover', event => { event.preventDefault(); card.classList.add('drag-target') })
+    card.addEventListener('dragleave', () => card.classList.remove('drag-target'))
+    card.addEventListener('drop', event => {
+      event.preventDefault(); card.classList.remove('drag-target')
+      if (draggedIndex !== null && draggedIndex !== index) moveGalleryImage(module, draggedIndex, index)
+    })
+  })
+}
+
+function moveGalleryImage(module: ExhibitionModule, from: number, to: number): void {
+  if (to < 0 || to >= module.galleryImages.length || from === to) return
+  const [asset] = module.galleryImages.splice(from, 1); module.galleryImages.splice(to, 0, asset)
+  markDirty(); renderGalleryEditor(module)
+}
+
+async function uploadGalleryFiles(module: ExhibitionModule, files: FileList | null, modal: HTMLElement): Promise<void> {
+  const selected = Array.from(files ?? [])
+  if (!selected.length) return
+  const unsupported = selected.find(file => !/\.(jpe?g|png)$/i.test(file.name) || (Boolean(file.type) && !/^image\/(jpeg|png)$/i.test(file.type)))
+  if (unsupported) { showToast(`不支持“${unsupported.name}”，图集仅允许 JPG、JPEG、PNG。`); return }
+  const status = modal.querySelector<HTMLElement>('#gallery-upload-progress')
+  try {
+    for (let index = 0; index < selected.length; index++) {
+      const file = selected[index]
+      if (status) status.textContent = `正在上传 ${index + 1}/${selected.length}：${file.name}`
+      const asset = await api.uploadAsset(file, 1, 0, percent => { if(status) status.textContent = `正在上传 ${index + 1}/${selected.length}：${file.name} · ${percent}%` })
+      module.galleryImages.push(asset)
+    }
+    markDirty(); await syncDraftNow(); showToast(`已上传 ${selected.length} 张图集图片。`); renderGalleryEditor(module)
+  } catch (error) {
+    if (status) status.textContent = ''
+    showToast(error instanceof Error ? error.message : '图集图片上传失败')
+  }
 }
 
 function openNodeEditor(moduleId: string): void {
@@ -701,7 +775,7 @@ function markDirty(rerender=false): void {
   if (rerender) renderDashboard()
   else root.querySelector<HTMLButtonElement>('#publish')?.setAttribute('disabled', '')
 }
-function addModule(): void { if(!content)return;const order=Math.max(0,...content.modules.map(item=>item.order))+1;content.modules.push({id:crypto.randomUUID(),name:'新模块',order,description:'',coverUrl:null,enabled:true,nodes:[]});markDirty(true) }
+function addModule(): void { if(!content)return;const order=Math.max(0,...content.modules.map(item=>item.order))+1;content.modules.push({id:crypto.randomUUID(),name:'新模块',order,description:'',coverUrl:null,enabled:true,nodes:[],galleryImages:[]});markDirty(true) }
 
 function validateDraft(modules: ExhibitionModule[]): string | null {
   for(const module of modules){if(!module.name.trim())return `第 ${module.order} 个模块名称不能为空。`;for(const node of module.nodes){if(!node.name.trim())return `${module.name}存在未命名节点。`;const hasPlayableVideo=node.assets.some(asset=>asset.kind===0||asset.kind===2);if(!hasPlayableVideo)return `${module.name} / ${node.name}需要至少上传一个可播放视频；图片素材可以同时保存。`}}
@@ -792,7 +866,7 @@ function handleDraftError(error: unknown): boolean {
 
 function applyDraftSnapshot(snapshot: ContentDraftSnapshot): void {
   if (!content) return
-  content = { ...content, modules: snapshot.modules }
+  content = { ...content, modules: normalizeModuleGalleries(snapshot.modules) }
   draftBaseVersion = snapshot.baseContentVersion
   draftRevision = snapshot.revision
   draftStatuses = snapshot.narrationAudioStatuses
@@ -828,13 +902,17 @@ function restoreDraft(published: PublishedContent, serverDraft: ContentDraftSnap
       const canMerge = local.serverRevision === serverDraft.revision || (serverDraft.revision === 0 && local.serverRevision === undefined)
       if (canMerge) {
         const needsSync = JSON.stringify(local.modules) !== JSON.stringify(serverDraft.modules)
-        return { content: { ...published, modules: needsSync ? local.modules : serverDraft.modules }, dirty: true, needsSync }
+        return { content: { ...published, modules: normalizeModuleGalleries(needsSync ? local.modules : serverDraft.modules) }, dirty: true, needsSync }
       }
       localStorage.removeItem(draftKey)
     } else if (local) localStorage.removeItem(draftKey)
   } catch { localStorage.removeItem(draftKey) }
   const serverDirty = serverDraft.revision > 0
-  return { content: { ...published, modules: serverDraft.modules }, dirty: serverDirty, needsSync: false }
+  return { content: { ...published, modules: normalizeModuleGalleries(serverDraft.modules) }, dirty: serverDirty, needsSync: false }
+}
+function normalizeModuleGalleries(modules: ExhibitionModule[]): ExhibitionModule[] {
+  for (const module of modules) if (!Array.isArray(module.galleryImages)) module.galleryImages = []
+  return modules
 }
 function showToast(message:string):void { let toast=root.querySelector<HTMLDivElement>('#toast');if(!toast){toast=document.createElement('div');toast.id='toast';toast.className='toast';root.appendChild(toast)}toast.textContent=message;toast.classList.add('visible');window.setTimeout(()=>toast?.classList.remove('visible'),3600) }
 

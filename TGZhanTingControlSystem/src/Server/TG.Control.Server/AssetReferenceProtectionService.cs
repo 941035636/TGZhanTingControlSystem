@@ -54,6 +54,11 @@ public sealed class AssetReferenceProtectionService(
         foreach (var module in modules)
         {
             if (Matches(module.CoverUrl, storedName)) references.Add($"{owner} / 模块“{module.Name}”封面");
+            foreach (var asset in module.GalleryImages ?? [])
+            {
+                if (Matches(asset.Url, storedName))
+                    references.Add($"{owner} / 模块“{module.Name}” / 图片图集 / 素材“{asset.Name}”");
+            }
             foreach (var node in module.Nodes ?? [])
             {
                 foreach (var asset in node.Assets ?? [])
