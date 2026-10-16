@@ -1,6 +1,6 @@
 # 模块图集投放到 LED 大屏 — 封存开发计划
 
-> 状态：`IN PROGRESS / Gallery D TouchClient已完成，等待人工验收后进入 Gallery E`
+> 状态：`IN PROGRESS / Gallery E 本机集成完成，等待三台现场设备验收`
 >
 > 记录日期：2026-10-13
 >
@@ -203,10 +203,10 @@ AdminWeb 每个模块增加“图片图集”区域：
 | Gallery A | `ACCEPTED` | 领域模型、AdminWeb模块图集、发布校验、Manifest及Rollback自动化测试已验收。 |
 | Gallery B | `ACCEPTED` | 独立命令通道、Server协调器、会话持久化、互斥、重启恢复与LED重连重发已通过人工验收。 |
 | Gallery C | `ACCEPTED` | LED图片缓存完整性校验、解码、双缓冲、Contain显示、失败上报、优先级撤屏和资源释放已完成人工验收。 |
-| Gallery D | `COMPLETE / 待人工确认` | 已完成独立图片展示入口、模块与缩略图预览、显式投放、前后切换、8秒轮播、停止、错误反馈及活动会话恢复。 |
-| Gallery E | `NOT STARTED` | 尚未开始。 |
+| Gallery D | `ACCEPTED` | 已完成独立图片展示入口、模块与缩略图预览、显式投放、前后切换、8秒轮播、停止、错误反馈及活动会话恢复，方向已由用户确认。 |
+| Gallery E | `LOCAL PASS / 现场待验` | 最新三端Windows进程、真实4K图片、轮播、Touch/LED/Server重启、欢迎抢占、内容版本安全和UDP 7002隔离已通过；物理三机断网、人工画面、真实视频抢占和8小时长稳尚未执行。 |
 
-首个可测试版本预计5～7个工作日；含自动轮播、恢复和现场压力测试的交付版本建议预留7～10个工作日。
+Gallery A～D开发已经完成；Gallery E本机集成结果和现场待验项记录在 `docs/QA/Gallery-E-Integration-Acceptance-20261017.md`。
 
 ## 11. 后续开发启动条件
 

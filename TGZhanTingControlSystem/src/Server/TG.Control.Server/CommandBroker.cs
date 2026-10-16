@@ -28,11 +28,11 @@ public sealed class CommandBroker : ICommandBroker
     public bool Register(ClientRegistration registration)
     {
         var now = DateTimeOffset.UtcNow;
-        var newInstance = false;
+        var recoveryRequired = false;
         clients.AddOrUpdate(registration.ClientId,
             _ =>
             {
-                newInstance = true;
+                recoveryRequired = true;
                 return new ClientPresence(registration.ClientId, registration.Kind, registration.AppVersion, now, now,
                     registration.ContentVersion, registration.Ready, registration.Status, registration.InstanceId);
             },
@@ -40,7 +40,14 @@ public sealed class CommandBroker : ICommandBroker
             {
                 if (!string.IsNullOrWhiteSpace(registration.InstanceId) &&
                     !string.Equals(current.InstanceId, registration.InstanceId, StringComparison.Ordinal))
-                    newInstance = true;
+                    recoveryRequired = true;
+                // A freshly started LED registers before its content scan has completed. If a
+                // Server restart restores an active session during that first V0/not-ready
+                // registration, the strict version gate correctly defers recovery. Signal once
+                // more when the same process becomes ready (or reports a new ready version) so
+                // the persisted playback/gallery session is not left waiting forever.
+                if (registration.Ready && (!current.Ready || current.ContentVersion != registration.ContentVersion))
+                    recoveryRequired = true;
                 return current with
                 {
                     Kind = registration.Kind,
@@ -53,7 +60,7 @@ public sealed class CommandBroker : ICommandBroker
                 };
             });
         GetChannel(registration.ClientId);
-        return newInstance;
+        return recoveryRequired;
     }
 
     public IReadOnlyList<ClientRuntimeStatus> GetClientStatuses(TimeSpan onlineThreshold)

@@ -1,7 +1,7 @@
 # Gallery C — LED图片渲染
 
 > 实施日期：2026-10-16
-> 状态：`COMPLETE / 等待人工确认`
+> 状态：`ACCEPTED / 已进入 Gallery E 集成验收`
 > 基线：Gallery A commit `d1a6db90a6b60ebae29ce4f23afc819dfea4e944`，Gallery B为同一未提交工作树上的已验收增量
 
 ## 1. 阶段边界

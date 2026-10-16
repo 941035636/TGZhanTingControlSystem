@@ -315,8 +315,8 @@ app.MapPost("/api/clients/register", async (HttpRequest request, ClientRegistrat
     PlaybackCoordinator coordinator, ImageGalleryCoordinator gallery, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
 {
     if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
-    var newInstance = broker.Register(registration);
-    if (newInstance)
+    var recoveryRequired = broker.Register(registration);
+    if (recoveryRequired)
     {
         await coordinator.RecoverClientAsync(registration.ClientId, ct);
         await gallery.RecoverClientAsync(registration.ClientId, ct);

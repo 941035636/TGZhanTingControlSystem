@@ -25,6 +25,7 @@ internal static class Program
             ("incompatible published version discards recovery", VersionChangeDiscardsRecovery),
             ("invalid image integrity is rejected", InvalidAssetIsRejected),
             ("LED offline and strict version gate reject start", LedGateIsEnforced),
+            ("same LED instance becoming ready retriggers recovery", ReadyTransitionRetriggersRecovery),
             ("gallery channel is isolated from playback and welcome", CommandChannelsAreIsolated),
             ("contracts keep explicit enum values and JSON round-trip", ContractsRoundTrip)
         };
@@ -201,6 +202,22 @@ internal static class Program
         using var mismatch = await TestContext.CreateAsync(allowDegraded: false, ledVersionOffset: -1);
         await ThrowsAsync<InvalidOperationException>(() => mismatch.Coordinator.StartAsync(
             new StartGalleryRequest("module-1"), default));
+    }
+
+    private static Task ReadyTransitionRetriggersRecovery()
+    {
+        var broker = new CommandBroker();
+        True(broker.Register(new ClientRegistration("led-main", ClientKind.LedPlayer, "test", 0,
+            false, "syncing", "same-instance")), "First registration must request recovery.");
+        True(!broker.Register(new ClientRegistration("led-main", ClientKind.LedPlayer, "test", 0,
+            false, "still syncing", "same-instance")), "Repeated not-ready heartbeat must not request recovery.");
+        True(broker.Register(new ClientRegistration("led-main", ClientKind.LedPlayer, "test", 7,
+            true, "ready", "same-instance")), "Ready/version transition must request recovery.");
+        True(!broker.Register(new ClientRegistration("led-main", ClientKind.LedPlayer, "test", 7,
+            true, "ready", "same-instance")), "Stable ready heartbeat must not duplicate recovery commands.");
+        True(broker.Register(new ClientRegistration("led-main", ClientKind.LedPlayer, "test", 8,
+            true, "updated", "same-instance")), "A new ready content version must request recovery.");
+        return Task.CompletedTask;
     }
 
     private static async Task CommandChannelsAreIsolated()

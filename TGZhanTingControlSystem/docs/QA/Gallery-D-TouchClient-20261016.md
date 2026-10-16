@@ -1,7 +1,7 @@
 # Gallery D — TouchClient图片展示验收记录
 
 > 日期：2026-10-16
-> 状态：`COMPLETE / 等待人工确认`
+> 状态：`ACCEPTED / 2026-10-17用户确认完成`
 
 ## 1. 自动验证结果
 
@@ -72,4 +72,4 @@ TG.Control.Editor.GalleryDVerification.Run
 | UDP 7002现场回归 | NOT RUN | 本阶段未修改UDP，Gallery E统一回归 |
 | 1920×1080现场屏人工视觉确认 | NOT RUN | 等待用户在Unity/Windows Player中确认 |
 
-本阶段未提交、未推送；等待人工确认，不自动进入Gallery E。
+本阶段于2026-10-17获得用户确认，已进入Gallery E集成验收。

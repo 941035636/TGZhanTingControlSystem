@@ -1,7 +1,7 @@
 # Gallery D — TouchClient图片展示工作台
 
 > 实施日期：2026-10-16
-> 状态：`COMPLETE / 等待人工确认`
+> 状态：`ACCEPTED / 2026-10-17用户确认完成`
 > 基线：Gallery A commit `d1a6db90a6b60ebae29ce4f23afc819dfea4e944`，Gallery B/C为当前同一未提交工作树上的已验收增量
 
 ## 1. 阶段边界
