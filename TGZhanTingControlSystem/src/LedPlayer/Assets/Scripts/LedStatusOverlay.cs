@@ -14,9 +14,11 @@ namespace TG.Control.LedPlayer
     {
         [SerializeField] private LedApiClient apiClient;
         [SerializeField] private LedPlaybackController playbackController;
+        [SerializeField] private LedImageDisplayController galleryController;
 
         private bool connected;
         private bool playbackActive;
+        private bool galleryActive;
         private string status = "正在连接展厅控制服务";
         private Font font;
         private GameObject idleRoot;
@@ -55,6 +57,7 @@ namespace TG.Control.LedPlayer
             apiClient.ContentSyncChanged += OnContentSyncChanged;
             apiClient.UiExperienceChanged += ApplyConfig;
             if (playbackController != null) playbackController.PlaybackActiveChanged += OnPlaybackActiveChanged;
+            if (galleryController != null) galleryController.GalleryActiveChanged += OnGalleryActiveChanged;
             // UiExperienceLoop can complete before this Start method subscribes on a
             // fresh installation. Replay the retained snapshot so the first launch
             // applies the server-configured idle media without requiring a republish.
@@ -72,6 +75,7 @@ namespace TG.Control.LedPlayer
                 apiClient.UiExperienceChanged -= ApplyConfig;
             }
             if (playbackController != null) playbackController.PlaybackActiveChanged -= OnPlaybackActiveChanged;
+            if (galleryController != null) galleryController.GalleryActiveChanged -= OnGalleryActiveChanged;
             foreach (var player in idleMediaPlayers)
                 if (player != null) player.Events.RemoveListener(OnIdleVideoEvent);
         }
@@ -170,15 +174,28 @@ namespace TG.Control.LedPlayer
         {
             playbackActive = value;
             if (value && idleVideoTransitioning) CancelIdleVideoTransition();
-            idleRoot.SetActive(!value);
+            RefreshPresentationVisibility();
+        }
+
+        private void OnGalleryActiveChanged(bool value)
+        {
+            galleryActive = value;
+            if (value && idleVideoTransitioning) CancelIdleVideoTransition();
+            RefreshPresentationVisibility();
+        }
+
+        private void RefreshPresentationVisibility()
+        {
+            var showIdle = !playbackActive && !galleryActive;
+            idleRoot.SetActive(showIdle);
             foreach (var player in idleMediaPlayers)
-                if (value) player?.Control?.Pause();
-            if (!value && IsIdleVideoVisible()) idleMediaPlayers[activeIdleVideoIndex]?.Control?.Play();
+                if (!showIdle) player?.Control?.Pause();
+            if (showIdle && IsIdleVideoVisible()) idleMediaPlayers[activeIdleVideoIndex]?.Control?.Play();
         }
 
         private void OnContentSyncChanged(ContentSyncProgress progress)
         {
-            if (playbackActive) return;
+            if (playbackActive || galleryActive) return;
             if (progress.finished)
                 status = string.IsNullOrWhiteSpace(progress.error) ? "内容已同步，等待启动讲解" : "部分内容尚未缓存，播放时将继续下载";
             else
@@ -325,7 +342,7 @@ namespace TG.Control.LedPlayer
             if (eventType == MediaPlayerEvent.EventType.ReadyToPlay)
             {
                 idleVideoPrepared[index] = true;
-                if (index == activeIdleVideoIndex && !playbackActive)
+                if (index == activeIdleVideoIndex && !playbackActive && !galleryActive)
                     source.Control?.Play();
                 else
                 {
@@ -336,9 +353,10 @@ namespace TG.Control.LedPlayer
             else if (eventType == MediaPlayerEvent.EventType.FirstFrameReady)
             {
                 idleVideoReady[index] = true;
-                if (index == activeIdleVideoIndex && !playbackActive) SetIdleVideoAlpha(index, 1f);
+                if (index == activeIdleVideoIndex && !playbackActive && !galleryActive) SetIdleVideoAlpha(index, 1f);
             }
-            else if (eventType == MediaPlayerEvent.EventType.FinishedPlaying && index == activeIdleVideoIndex && !playbackActive)
+            else if (eventType == MediaPlayerEvent.EventType.FinishedPlaying && index == activeIdleVideoIndex &&
+                     !playbackActive && !galleryActive)
             {
                 CompleteIdleVideoLoop();
             }
@@ -346,7 +364,7 @@ namespace TG.Control.LedPlayer
 
         private void Update()
         {
-            if (playbackActive || !IsIdleVideoVisible()) return;
+            if (playbackActive || galleryActive || !IsIdleVideoVisible()) return;
             var current = idleMediaPlayers[activeIdleVideoIndex];
             if (current?.Control == null || current.Info == null || !current.Control.HasMetaData()) return;
             var duration = current.Info.GetDuration();

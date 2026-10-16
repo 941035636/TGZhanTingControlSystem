@@ -6,6 +6,11 @@ namespace TG.Control.UnityContracts
     public enum PlaybackAction { Prepare, PlayVideo, PlayNarration, Pause, Resume, Stop, Seek, Skip, Retry, SetVideoVolume }
     public enum PlaybackState { Received, Ready, Playing, Paused, Completed, Failed, Skipped }
     public enum AudioMixPolicy { Duck, KeepOriginal, MuteVideo }
+    public enum GalleryControlAction { Show = 0, Previous = 1, Next = 2, StartSlideshow = 3, PauseSlideshow = 4, Stop = 5 }
+    public enum GalleryDisplayAction { Prepare = 0, Show = 1, Stop = 2 }
+    public enum GalleryDisplayState { Received = 0, Ready = 1, Showing = 2, Failed = 3, Stopped = 4 }
+    public enum GallerySessionState { Preparing = 0, Showing = 1, Failed = 2 }
+    public enum GalleryFitMode { Contain = 0 }
 
     [Serializable]
     public sealed class ClientRegistration
@@ -110,6 +115,97 @@ namespace TG.Control.UnityContracts
     {
         public bool active;
         public PlaybackSessionStatus session;
+    }
+
+    [Serializable]
+    public sealed class StartGalleryRequest
+    {
+        public string moduleId;
+        public int imageIndex;
+        public string requestedBy;
+    }
+
+    [Serializable]
+    public sealed class StartGalleryResponse
+    {
+        public string sessionId;
+        public string startedAtUtc;
+        public int imageCount;
+    }
+
+    [Serializable]
+    public sealed class ControlGalleryRequest
+    {
+        public string sessionId;
+        public GalleryControlAction action;
+        public int imageIndex = -1;
+        public int slideshowIntervalSeconds;
+    }
+
+    [Serializable]
+    public sealed class ControlGalleryResponse
+    {
+        public string sessionId;
+        public GalleryControlAction action;
+        public bool accepted;
+        public string message;
+        public GallerySessionStatus session;
+    }
+
+    [Serializable]
+    public sealed class GalleryDisplayCommand
+    {
+        public long sequence;
+        public string commandId;
+        public string sessionId;
+        public string moduleId;
+        public string imageId;
+        public GalleryDisplayAction action;
+        public long contentVersion;
+        public string assetId;
+        public string url;
+        public string sha256;
+        public long sizeBytes;
+        public string mediaType;
+        public string executeAtUtc;
+        public GalleryFitMode fitMode;
+    }
+
+    [Serializable]
+    public sealed class GalleryDisplayStatusReport
+    {
+        public string clientId;
+        public string commandId;
+        public string sessionId;
+        public string imageId;
+        public GalleryDisplayState state;
+        public string error;
+        public string reportedAtUtc;
+    }
+
+    [Serializable]
+    public sealed class GallerySessionStatus
+    {
+        public string sessionId;
+        public long contentVersion;
+        public string moduleId;
+        public string moduleName;
+        public string imageId;
+        public string imageName;
+        public int currentImageNumber;
+        public int imageCount;
+        public GallerySessionState state;
+        public bool slideshowActive;
+        public int slideshowIntervalSeconds;
+        public string error;
+        public string updatedAtUtc;
+    }
+
+    [Serializable]
+    public sealed class GallerySessionLookup
+    {
+        public bool active;
+        public GallerySessionStatus session;
     }
 
     [Serializable]

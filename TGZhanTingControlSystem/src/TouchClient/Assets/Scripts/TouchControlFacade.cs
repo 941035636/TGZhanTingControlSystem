@@ -16,6 +16,9 @@ namespace TG.Control.Touch
         public string ActiveSessionId { get; private set; }
         public bool HasActiveSession => !string.IsNullOrWhiteSpace(ActiveSessionId);
         public WelcomePlaybackStatus CurrentWelcome { get; private set; }
+        public string ActiveGallerySessionId { get; private set; }
+        public GallerySessionStatus CurrentGallery { get; private set; }
+        public bool HasActiveGallery => !string.IsNullOrWhiteSpace(ActiveGallerySessionId);
         public event Action<PublishedContent> ContentLoaded;
         public event Action<string> Error;
         public event Action<string> Status;
@@ -24,11 +27,14 @@ namespace TG.Control.Touch
         public event Action<NarrationRoute> RouteSaved;
         public event Action<SystemReadiness> ReadinessChanged;
         public event Action<WelcomePlaybackStatus> WelcomeChanged;
+        public event Action<GallerySessionStatus> GalleryChanged;
         private int sessionMonitorGeneration;
+        private int galleryMonitorGeneration;
         private bool contentRefreshPending;
         private bool routesRefreshPending;
         private bool contentLoadedOnce;
         private bool routesLoadedOnce;
+        private bool galleryRequestPending;
 
         private void Start()
         {
@@ -37,6 +43,7 @@ namespace TG.Control.Touch
             StartCoroutine(CatalogRefreshLoop());
             StartCoroutine(ReadinessLoop());
             StartCoroutine(RestoreActiveSession());
+            StartCoroutine(RestoreActiveGallery());
             StartCoroutine(WelcomeMonitorLoop());
         }
 
@@ -150,14 +157,123 @@ namespace TG.Control.Touch
                 Error?.Invoke(CurrentReadiness?.message ?? "正在检查LED播放端和内容版本，请稍候。");
                 return;
             }
+            Debug.Log("正在向服务器提交讲解启动请求，模块数：" + moduleIds.Length + "。");
             apiClient.StartNarration(moduleIds, Environment.UserName,
                 response =>
                 {
                     ActiveSessionId = response.sessionId;
+                    Debug.Log("服务器已接受讲解启动请求，会话：" + response.sessionId + "。");
                     Status?.Invoke($"讲解任务已启动，共 {response.nodeCount} 个节点。");
                     StartCoroutine(MonitorSession(response.sessionId, ++sessionMonitorGeneration));
                 },
-                message => Error?.Invoke(message));
+                message =>
+                {
+                    Debug.LogError("讲解启动请求失败：" + message);
+                    Error?.Invoke(message);
+                });
+        }
+
+        public void StartGallery(string moduleId, int imageIndex)
+        {
+            if (galleryRequestPending)
+            {
+                Status?.Invoke("图片展示操作正在处理中，请稍候。");
+                return;
+            }
+            if (HasActiveSession)
+            {
+                Error?.Invoke("正式讲解正在进行，暂时不能展示图片。");
+                return;
+            }
+            if (HasActiveGallery)
+            {
+                Error?.Invoke("当前已有图片正在大屏展示，请先停止当前图集。");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(moduleId) || imageIndex < 0)
+            {
+                Error?.Invoke("请先选择需要投放的图片。");
+                return;
+            }
+
+            galleryRequestPending = true;
+            Status?.Invoke("正在向LED大屏投放所选图片…");
+            apiClient.StartGallery(moduleId, imageIndex, Environment.UserName, response =>
+            {
+                galleryRequestPending = false;
+                if (response == null || string.IsNullOrWhiteSpace(response.sessionId))
+                {
+                    Error?.Invoke("服务器未返回有效的图片展示会话。");
+                    return;
+                }
+                ActiveGallerySessionId = response.sessionId;
+                CurrentGallery = null;
+                GalleryChanged?.Invoke(null);
+                Status?.Invoke($"图片图集已启动，共 {response.imageCount} 张，正在准备大屏画面。");
+                StartCoroutine(MonitorGallery(response.sessionId, ++galleryMonitorGeneration));
+            }, message =>
+            {
+                galleryRequestPending = false;
+                Error?.Invoke("图片投放失败：" + message);
+            });
+        }
+
+        public void ShowGalleryImage(int imageIndex) =>
+            ControlGallery(GalleryControlAction.Show, imageIndex, 0);
+
+        public void PreviousGalleryImage() => ControlGallery(GalleryControlAction.Previous, -1, 0);
+
+        public void NextGalleryImage() => ControlGallery(GalleryControlAction.Next, -1, 0);
+
+        public void StartGallerySlideshow(int intervalSeconds) =>
+            ControlGallery(GalleryControlAction.StartSlideshow, -1, intervalSeconds);
+
+        public void PauseGallerySlideshow() =>
+            ControlGallery(GalleryControlAction.PauseSlideshow, -1, 0);
+
+        public void StopGallery() => ControlGallery(GalleryControlAction.Stop, -1, 0);
+
+        private void ControlGallery(GalleryControlAction action, int imageIndex, int intervalSeconds)
+        {
+            if (galleryRequestPending)
+            {
+                Status?.Invoke("图片展示操作正在处理中，请稍候。");
+                return;
+            }
+            if (!HasActiveGallery)
+            {
+                Error?.Invoke("当前没有正在展示的图片图集。");
+                return;
+            }
+
+            galleryRequestPending = true;
+            apiClient.ControlGallery(ActiveGallerySessionId, action, imageIndex, intervalSeconds, response =>
+            {
+                galleryRequestPending = false;
+                if (response == null || !response.accepted)
+                {
+                    Error?.Invoke(response?.message ?? "图片展示操作未被服务器接受。");
+                    return;
+                }
+                Status?.Invoke(response.message);
+                if (action == GalleryControlAction.Stop)
+                {
+                    ActiveGallerySessionId = null;
+                    CurrentGallery = null;
+                    galleryMonitorGeneration++;
+                    GalleryChanged?.Invoke(null);
+                    return;
+                }
+                if (response.session != null)
+                {
+                    CurrentGallery = response.session;
+                    GalleryChanged?.Invoke(CurrentGallery);
+                }
+            }, message =>
+            {
+                galleryRequestPending = false;
+                Error?.Invoke("图片展示操作失败：" + message);
+            });
         }
 
         public void Pause() => Control(PlaybackAction.Pause);
@@ -274,6 +390,49 @@ namespace TG.Control.Touch
                 RequestContent(false);
                 RequestRoutes(false);
             }
+        }
+
+        private IEnumerator MonitorGallery(string sessionId, int generation)
+        {
+            while (generation == galleryMonitorGeneration &&
+                   string.Equals(ActiveGallerySessionId, sessionId, StringComparison.Ordinal))
+            {
+                var completed = false;
+                GallerySessionLookup lookup = null;
+                apiClient.GetGallerySession(sessionId, value => { lookup = value; completed = true; },
+                    _ => completed = true);
+                while (!completed && generation == galleryMonitorGeneration) yield return null;
+                if (generation != galleryMonitorGeneration) yield break;
+
+                if (lookup != null && !lookup.active)
+                {
+                    ActiveGallerySessionId = null;
+                    CurrentGallery = null;
+                    GalleryChanged?.Invoke(null);
+                    Status?.Invoke("图片展示已结束。");
+                    yield break;
+                }
+                if (lookup?.session != null)
+                {
+                    CurrentGallery = lookup.session;
+                    GalleryChanged?.Invoke(CurrentGallery);
+                }
+                yield return new WaitForSecondsRealtime(1f);
+            }
+        }
+
+        private IEnumerator RestoreActiveGallery()
+        {
+            var completed = false;
+            GallerySessionLookup lookup = null;
+            apiClient.GetActiveGallery(value => { lookup = value; completed = true; }, _ => completed = true);
+            while (!completed) yield return null;
+            if (lookup?.active != true || lookup.session == null || HasActiveGallery) yield break;
+            ActiveGallerySessionId = lookup.session.sessionId;
+            CurrentGallery = lookup.session;
+            GalleryChanged?.Invoke(CurrentGallery);
+            Status?.Invoke("已恢复正在展示的图片图集。");
+            StartCoroutine(MonitorGallery(ActiveGallerySessionId, ++galleryMonitorGeneration));
         }
 
         private IEnumerator WelcomeMonitorLoop()

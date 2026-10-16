@@ -63,22 +63,28 @@ namespace TG.Control.LedPlayer
                 yield break;
             }
 
-            if (mediaUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
-            {
-                success(mediaUrl);
-                yield break;
-            }
-
-            if (Path.IsPathRooted(mediaUrl))
-            {
-                success(new Uri(mediaUrl).AbsoluteUri);
-                yield break;
-            }
-
             if (validationByUrl.TryGetValue(mediaUrl, out var metadata))
             {
                 if (expectedSize <= 0) expectedSize = metadata.SizeBytes;
                 if (string.IsNullOrWhiteSpace(expectedSha256)) expectedSha256 = metadata.Sha256;
+            }
+
+            if (mediaUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase) || Path.IsPathRooted(mediaUrl))
+            {
+                var localPath = mediaUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(mediaUrl).LocalPath
+                    : mediaUrl;
+                bool localValid = false;
+                string localError = null;
+                yield return ValidateFile(localPath, expectedSize, expectedSha256,
+                    (ok, error) => { localValid = ok; localError = error; });
+                if (!localValid)
+                {
+                    failure(localError);
+                    yield break;
+                }
+                success(new Uri(Path.GetFullPath(localPath)).AbsoluteUri);
+                yield break;
             }
 
             var finalPath = GetCachePath(mediaUrl);

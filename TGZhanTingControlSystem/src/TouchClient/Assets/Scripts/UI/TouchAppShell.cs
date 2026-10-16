@@ -125,10 +125,12 @@ namespace TG.Control.Touch.UI
             ApplyVisualMode();
         }
 
-        public void SetGlobalState(bool connected, SystemReadiness readiness, bool hasActiveSession)
+        public void SetGlobalState(bool connected, SystemReadiness readiness, bool hasActiveSession,
+            bool hasActiveGallery = false)
         {
             topBar.SetConnection(connected);
             navigation.SetPlaybackAvailable(hasActiveSession);
+            navigation.SetGalleryActive(hasActiveGallery);
             if (!connected)
             {
                 topBar.SetReadiness("服务连接中", StatusTone.Error);

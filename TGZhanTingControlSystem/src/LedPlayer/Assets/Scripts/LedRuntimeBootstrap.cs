@@ -38,6 +38,7 @@ namespace TG.Control.LedPlayer
             var controller = root.AddComponent<LedPlaybackController>();
             var legacyUdp = root.AddComponent<LegacyUdpPlaybackBridge>();
             var welcomeController = root.AddComponent<LedWelcomePlaybackController>();
+            var galleryController = root.AddComponent<LedImageDisplayController>();
             var overlay = root.AddComponent<LedStatusOverlay>();
             CreateVideoCanvas(root.transform, mediaPlayer);
             SetReference(adapter, "mediaPlayer", mediaPlayer);
@@ -47,8 +48,10 @@ namespace TG.Control.LedPlayer
             SetReference(legacyUdp, "playbackController", controller);
             SetReference(welcomeController, "apiClient", api);
             SetReference(welcomeController, "audioSource", narrationAudio);
+            SetReference(galleryController, "apiClient", api);
             SetReference(overlay, "apiClient", api);
             SetReference(overlay, "playbackController", controller);
+            SetReference(overlay, "galleryController", galleryController);
             foreach (var camera in UnityEngine.Object.FindObjectsOfType<Camera>())
             {
                 camera.clearFlags = CameraClearFlags.SolidColor;

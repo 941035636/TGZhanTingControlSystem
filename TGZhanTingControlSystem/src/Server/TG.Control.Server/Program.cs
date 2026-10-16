@@ -29,7 +29,11 @@ builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection(Ter
 builder.Services.AddSingleton<IContentRepository, JsonContentRepository>();
 builder.Services.AddSingleton<ICommandBroker, CommandBroker>();
 builder.Services.AddSingleton<PlaybackCoordinator>();
+builder.Services.AddSingleton<IPlaybackActivityState>(services => services.GetRequiredService<PlaybackCoordinator>());
 builder.Services.AddSingleton<WelcomeCoordinator>();
+builder.Services.AddSingleton<IWelcomeActivityState>(services => services.GetRequiredService<WelcomeCoordinator>());
+builder.Services.AddSingleton<GallerySessionStore>();
+builder.Services.AddSingleton<ImageGalleryCoordinator>();
 builder.Services.AddSingleton<ITtsService, UnconfiguredTtsService>();
 if (builder.Environment.IsDevelopment() &&
     builder.Configuration.GetValue<bool>($"{TtsProductionOptions.SectionName}:EnableDeterministicTestProvider"))
@@ -308,11 +312,15 @@ app.MapPost("/api/tts/candidates/{candidateId}/adopt", async (string candidateId
     catch (ContentDraftWorkflowException exception) { return DraftWorkflowError(exception); }
 });
 app.MapPost("/api/clients/register", async (HttpRequest request, ClientRegistration registration, ICommandBroker broker,
-    PlaybackCoordinator coordinator, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
+    PlaybackCoordinator coordinator, ImageGalleryCoordinator gallery, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
 {
     if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
     var newInstance = broker.Register(registration);
-    if (newInstance) await coordinator.RecoverClientAsync(registration.ClientId, ct);
+    if (newInstance)
+    {
+        await coordinator.RecoverClientAsync(registration.ClientId, ct);
+        await gallery.RecoverClientAsync(registration.ClientId, ct);
+    }
     return Results.Ok(new { registered = true });
 });
 app.MapGet("/api/commands/next", async (string clientId, HttpRequest request, ICommandBroker broker,
@@ -327,6 +335,13 @@ app.MapGet("/api/welcome/commands/next", async (string clientId, HttpRequest req
 {
     if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
     var command = await broker.WaitWelcomeAsync(clientId, TimeSpan.FromSeconds(options.Value.LongPollSeconds), ct);
+    return command is null ? Results.NoContent() : Results.Ok(command);
+});
+app.MapGet("/api/gallery/commands/next", async (string clientId, HttpRequest request, ICommandBroker broker,
+    IOptions<PlaybackOptions> options, IOptions<TerminalOptions> terminal, CancellationToken ct) =>
+{
+    if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
+    var command = await broker.WaitGalleryAsync(clientId, TimeSpan.FromSeconds(options.Value.LongPollSeconds), ct);
     return command is null ? Results.NoContent() : Results.Ok(command);
 });
 app.MapGet("/api/clients/status", (HttpRequest request, AdminSessionStore sessions, ICommandBroker broker, IOptions<PlaybackOptions> options) =>
@@ -357,20 +372,28 @@ app.MapGet("/api/readiness", async (HttpRequest request, AdminSessionStore sessi
         led?.ContentVersion ?? 0, message, DateTimeOffset.UtcNow));
 });
 app.MapPost("/api/playback/start", async (HttpRequest httpRequest, StartNarrationRequest request,
-    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator, WelcomeCoordinator welcome, CancellationToken ct) =>
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, PlaybackCoordinator coordinator,
+    WelcomeCoordinator welcome, ImageGalleryCoordinator gallery, CancellationToken ct) =>
 {
     if (!HasOperatorAccess(httpRequest, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
-    if (welcome.IsProtectingFormalPlayback)
-        return Results.Conflict(new { message = "欢迎语音正在进行，请等待欢迎流程完成后再开始讲解。" });
-    try { return Results.Ok(await coordinator.StartAsync(request, ct)); }
+    try
+    {
+        var result = await gallery.RunHigherPriorityAsync("formal playback",
+            token => welcome.IsProtectingFormalPlayback
+                ? Task.FromException<StartNarrationResponse>(new InvalidOperationException(
+                    "欢迎语音正在进行，请等待欢迎流程完成后再开始讲解。"))
+                : coordinator.StartAsync(request, token), ct);
+        return Results.Ok(result);
+    }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
     catch (KeyNotFoundException exception) { return Results.BadRequest(new { message = exception.Message }); }
 });
 app.MapPost("/api/welcome/request", async (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
-    WelcomeCoordinator coordinator, CancellationToken ct) =>
+    WelcomeCoordinator coordinator, ImageGalleryCoordinator gallery, CancellationToken ct) =>
 {
     if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
-    var result = await coordinator.RequestAsync(ct);
+    var result = await gallery.RunHigherPriorityAsync("welcome playback",
+        token => coordinator.RequestAsync(token), ct);
     return result.Accepted ? Results.Ok(result) : Results.Conflict(result);
 });
 app.MapGet("/api/welcome/status", (HttpRequest request, AdminSessionStore sessions, IOptions<TerminalOptions> terminal,
@@ -424,6 +447,46 @@ app.MapPost("/api/playback/status", async (HttpRequest request, PlaybackStatusRe
         "Client {ClientId} command {CommandId} state {State} position {Position} error {Error}",
         report.ClientId, report.CommandId, report.State, report.PositionSeconds, report.Error);
     await coordinator.ReportAsync(report, ct);
+    return Results.Accepted();
+});
+app.MapPost("/api/gallery/start", async (HttpRequest request, StartGalleryRequest start,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, ImageGalleryCoordinator gallery,
+    CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
+    try { return Results.Ok(await gallery.StartAsync(start, ct)); }
+    catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
+    catch (KeyNotFoundException exception) { return Results.BadRequest(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapPost("/api/gallery/control", async (HttpRequest request, ControlGalleryRequest control,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, ImageGalleryCoordinator gallery,
+    CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
+    var result = await gallery.ControlAsync(control, ct);
+    return result.Accepted ? Results.Ok(result) : Results.NotFound(result);
+});
+app.MapGet("/api/gallery/active", async (HttpRequest request, AdminSessionStore sessions,
+    IOptions<TerminalOptions> terminal, ImageGalleryCoordinator gallery, CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
+    var active = await gallery.GetActiveAsync(ct);
+    return Results.Ok(new GallerySessionLookup(active is not null, active));
+});
+app.MapGet("/api/gallery/sessions/{sessionId}", async (string sessionId, HttpRequest request,
+    AdminSessionStore sessions, IOptions<TerminalOptions> terminal, ImageGalleryCoordinator gallery,
+    CancellationToken ct) =>
+{
+    if (!HasOperatorAccess(request, sessions, terminal, out _, out var authenticated)) return AuthenticationFailure(authenticated);
+    var active = await gallery.GetSessionAsync(sessionId, ct);
+    return Results.Ok(new GallerySessionLookup(active is not null, active));
+});
+app.MapPost("/api/gallery/status", async (HttpRequest request, GalleryDisplayStatusReport report,
+    IOptions<TerminalOptions> terminal, ImageGalleryCoordinator gallery, CancellationToken ct) =>
+{
+    if (!HasTerminalAccess(request, terminal)) return Results.Unauthorized();
+    await gallery.ReportAsync(report, ct);
     return Results.Accepted();
 });
 app.MapGet("/api/operations", async (HttpRequest request, int? count, AdminSessionStore sessions,

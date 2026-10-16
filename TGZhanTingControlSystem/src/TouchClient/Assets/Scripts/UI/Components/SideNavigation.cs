@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace TG.Control.Touch.UI.Components
 {
-    public enum TouchShellSection { ReceptionHome, Routes, Combination, Playback, SystemStatus }
+    public enum TouchShellSection { ReceptionHome, ImageGallery, Routes, Combination, Playback, SystemStatus }
 
     /// <summary>Navigation for the currently enabled TouchClient capabilities.</summary>
     public sealed class SideNavigation
@@ -33,6 +33,7 @@ namespace TG.Control.Touch.UI.Components
         private readonly List<Item> items = new List<Item>();
         private TouchShellSection active;
         private bool homeDarkMode;
+        private bool galleryActive;
 
         public RectTransform Root => root.rectTransform;
         public event Action<TouchShellSection> NavigateRequested;
@@ -50,9 +51,10 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(caption.rectTransform, 0, 1, 1, 1, 28, -79, -theme.PagePadding, -57);
 
             CreateItem(factory, TouchShellSection.ReceptionHome, "讲解首页", "home", 0);
-            CreateItem(factory, TouchShellSection.Playback, "当前讲解", "microphone", 1);
-            CreateItem(factory, TouchShellSection.SystemStatus, "系统状态", "activity", 2);
-            var optionalIndex = 3;
+            CreateItem(factory, TouchShellSection.ImageGallery, "图片展示", "layers", 1);
+            CreateItem(factory, TouchShellSection.Playback, "当前讲解", "microphone", 2);
+            CreateItem(factory, TouchShellSection.SystemStatus, "系统状态", "activity", 3);
+            var optionalIndex = 4;
             if (TouchFeatureFlags.EnableCustomRouteUi)
                 CreateItem(factory, TouchShellSection.Routes, "讲解路线", "route", optionalIndex++);
             if (TouchFeatureFlags.EnableThemeCombinationUi)
@@ -75,6 +77,13 @@ namespace TG.Control.Touch.UI.Components
             item.Available = available;
             item.Button.interactable = available;
             Apply(item);
+        }
+
+        public void SetGalleryActive(bool value)
+        {
+            galleryActive = value;
+            var item = items.Find(candidate => candidate.Section == TouchShellSection.ImageGallery);
+            if (item != null) Apply(item);
         }
 
         public void RefreshTheme()
@@ -195,7 +204,9 @@ namespace TG.Control.Touch.UI.Components
             item.Label.color = !item.Available ? theme.Disabled
                 : homeDarkMode ? (selected ? Color.white : theme.HomeDarkTextSecondary)
                 : selected ? theme.TextPrimary : theme.TextSecondary;
-            item.Activity.gameObject.SetActive(item.Section == TouchShellSection.Playback && item.Available);
+            item.Activity.gameObject.SetActive(
+                (item.Section == TouchShellSection.Playback && item.Available) ||
+                (item.Section == TouchShellSection.ImageGallery && galleryActive));
             item.Activity.color = theme.Success;
         }
     }

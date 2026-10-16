@@ -19,6 +19,7 @@ namespace TG.Control.LedPlayer
         [SerializeField] private float assetRetryDelaySeconds = 2f;
         public event Action<PlaybackCommand> CommandReceived;
         public event Action<WelcomePlaybackCommand> WelcomeCommandReceived;
+        public event Action<GalleryDisplayCommand> GalleryCommandReceived;
         public event Action<bool> ConnectionChanged;
         public event Action<ContentSyncProgress> ContentSyncChanged;
         public event Action<UiExperienceConfig> UiExperienceChanged;
@@ -71,6 +72,7 @@ namespace TG.Control.LedPlayer
             running = true;
             StartCoroutine(PollLoop());
             StartCoroutine(WelcomePollLoop());
+            StartCoroutine(GalleryPollLoop());
             StartCoroutine(ContentSyncLoop());
             StartCoroutine(UiExperienceLoop());
         }
@@ -127,6 +129,18 @@ namespace TG.Control.LedPlayer
                 positionSeconds = position, progress = progress, error = error, reportedAtUtc = DateTimeOffset.UtcNow.ToString("O")
             }));
 
+        public void ReportGallery(GalleryDisplayCommand command, GalleryDisplayState state, string error = null) =>
+            StartCoroutine(Post("/api/gallery/status", new GalleryDisplayStatusReport
+            {
+                clientId = clientId,
+                commandId = command.commandId,
+                sessionId = command.sessionId,
+                imageId = command.imageId,
+                state = state,
+                error = error,
+                reportedAtUtc = DateTimeOffset.UtcNow.ToString("O")
+            }));
+
         private IEnumerator PollLoop()
         {
             while (running)
@@ -172,6 +186,28 @@ namespace TG.Control.LedPlayer
                     else if (request.responseCode != 204)
                     {
                         Debug.LogWarning("LED欢迎指令轮询失败：" + request.responseCode + " " + request.error);
+                        SetConnected(false);
+                    }
+                }
+            }
+        }
+
+        private IEnumerator GalleryPollLoop()
+        {
+            while (running)
+            {
+                if (!connected) { yield return new WaitForSecondsRealtime(1); continue; }
+                using (var request = UnityWebRequest.Get(BaseUrl + "/api/gallery/commands/next?clientId=" +
+                                                         UnityWebRequest.EscapeURL(clientId)))
+                {
+                    ApplyTerminalHeader(request);
+                    request.timeout = 25;
+                    yield return request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success && request.responseCode == 200)
+                        GalleryCommandReceived?.Invoke(JsonUtility.FromJson<GalleryDisplayCommand>(request.downloadHandler.text));
+                    else if (request.responseCode != 204)
+                    {
+                        Debug.LogWarning("LED图集指令轮询失败：" + request.responseCode + " " + request.error);
                         SetConnected(false);
                     }
                 }

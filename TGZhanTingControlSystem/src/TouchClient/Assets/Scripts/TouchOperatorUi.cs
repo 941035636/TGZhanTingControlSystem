@@ -21,7 +21,7 @@ namespace TG.Control.Touch
         [SerializeField] private TouchApiClient apiClient;
         [SerializeField] private TouchControlFacade facade;
 
-        private enum PageState { Home, RouteEditor, Playback, SystemStatus }
+        private enum PageState { Home, ImageGallery, RouteEditor, Playback, SystemStatus }
 
         private readonly RouteDraftState routeDraft = new RouteDraftState();
         private readonly PlaybackDisplayContext playbackDisplay = new PlaybackDisplayContext();
@@ -51,6 +51,7 @@ namespace TG.Control.Touch
         private RouteEditorPage routeEditorPage;
         private PlaybackPage playbackPageView;
         private SystemStatusPage systemStatusPageView;
+        private ImageGalleryPage imageGalleryPage;
         private TouchImageLoader imageLoader;
         private GameObject homePage;
         private GameObject legacyHomePage;
@@ -58,6 +59,7 @@ namespace TG.Control.Touch
         private GameObject editorPage;
         private GameObject playbackPageRoot;
         private GameObject systemStatusPageRoot;
+        private GameObject imageGalleryPageRoot;
 
         private void Awake()
         {
@@ -78,6 +80,7 @@ namespace TG.Control.Touch
             presenter.RouteSaved += OnRouteSaved;
             presenter.ReadinessChanged += OnReadinessChanged;
             presenter.WelcomeChanged += OnWelcomeChanged;
+            presenter.GalleryChanged += OnGalleryChanged;
             presenter.UiExperienceChanged += ApplyUiExperience;
             presenter.UiExperienceLoadFailed += OnUiExperienceLoadFailed;
             presenter.Error += OnError;
@@ -105,7 +108,8 @@ namespace TG.Control.Touch
                               welcomeState == WelcomePlaybackState.Preparing ||
                               welcomeState == WelcomePlaybackState.Playing;
             if (!welcomeEnabled || welcomeExperiencePage == null || welcomeExperiencePage.Visible || facade == null ||
-                !connected || facade.HasActiveSession || routeDraft.IsDirty || pageState == PageState.RouteEditor ||
+                !connected || facade.HasActiveSession || facade.HasActiveGallery || routeDraft.IsDirty ||
+                pageState == PageState.RouteEditor ||
                 welcomeBusy) return;
             if (Time.realtimeSinceStartup - lastInteractionAt >= idleTimeoutSeconds)
                 ShowWelcomeExperience();
@@ -161,6 +165,15 @@ namespace TG.Control.Touch
             }
             if (systemStatusPageView != null)
                 systemStatusPageView.ViewPlaybackRequested -= ContinueCurrentPlayback;
+            if (imageGalleryPage != null)
+            {
+                imageGalleryPage.DisplayRequested -= DisplayGalleryImage;
+                imageGalleryPage.PreviousRequested -= PreviousGalleryImage;
+                imageGalleryPage.NextRequested -= NextGalleryImage;
+                imageGalleryPage.StartSlideshowRequested -= StartGallerySlideshow;
+                imageGalleryPage.PauseSlideshowRequested -= PauseGallerySlideshow;
+                imageGalleryPage.StopRequested -= StopGallery;
+            }
             imageLoader?.Dispose();
             if (presenter == null) return;
             presenter.ConnectionChanged -= OnConnectionChanged;
@@ -172,6 +185,7 @@ namespace TG.Control.Touch
             presenter.ReadinessChanged -= OnReadinessChanged;
             presenter.UiExperienceChanged -= ApplyUiExperience;
             presenter.WelcomeChanged -= OnWelcomeChanged;
+            presenter.GalleryChanged -= OnGalleryChanged;
             presenter.UiExperienceLoadFailed -= OnUiExperienceLoadFailed;
             presenter.Error -= OnError;
             presenter.Dispose();
@@ -237,11 +251,20 @@ namespace TG.Control.Touch
             systemStatusPageView = new SystemStatusPage(uiFactory, theme, body);
             systemStatusPageView.ViewPlaybackRequested += ContinueCurrentPlayback;
             systemStatusPageRoot = systemStatusPageView.Root.gameObject;
+            imageGalleryPage = new ImageGalleryPage(uiFactory, theme, imageLoader, body);
+            imageGalleryPage.DisplayRequested += DisplayGalleryImage;
+            imageGalleryPage.PreviousRequested += PreviousGalleryImage;
+            imageGalleryPage.NextRequested += NextGalleryImage;
+            imageGalleryPage.StartSlideshowRequested += StartGallerySlideshow;
+            imageGalleryPage.PauseSlideshowRequested += PauseGallerySlideshow;
+            imageGalleryPage.StopRequested += StopGallery;
+            imageGalleryPageRoot = imageGalleryPage.Root.gameObject;
             Stretch(homePage.GetComponent<RectTransform>());
             Stretch(legacyHomePage.GetComponent<RectTransform>());
             Stretch(editorPage.GetComponent<RectTransform>());
             Stretch(playbackPageRoot.GetComponent<RectTransform>());
             Stretch(systemStatusPageRoot.GetComponent<RectTransform>());
+            Stretch(imageGalleryPageRoot.GetComponent<RectTransform>());
             welcomeExperiencePage = new WelcomeExperiencePage(this, uiFactory, theme, imageLoader, canvas.transform);
             welcomeExperiencePage.Entered += OnWelcomeEntered;
             welcomeExperiencePage.WelcomeRequested += OnWelcomeRequested;
@@ -259,6 +282,7 @@ namespace TG.Control.Touch
             if (value)
             {
                 receptionHomePage?.ClearError();
+                moduleKioskPage?.ClearActionFeedback();
                 playbackPageView?.ClearError();
             }
             else if (facade.HasActiveSession)
@@ -323,6 +347,8 @@ namespace TG.Control.Touch
         private void OnSessionChanged(PlaybackSessionStatus value)
         {
             startRequestPending = false;
+            moduleKioskPage?.ClearActionFeedback();
+            imageGalleryPage?.ClearFeedback();
             var restoringIntoHiddenShell = value != null && appShell != null && !appShell.Visible;
             if (value != null)
             {
@@ -346,11 +372,31 @@ namespace TG.Control.Touch
             Refresh();
         }
 
+        private void OnGalleryChanged(GallerySessionStatus value)
+        {
+            imageGalleryPage?.ClearFeedback();
+            var restoringIntoHiddenShell = value != null && appShell != null && !appShell.Visible;
+            if (value != null)
+            {
+                welcomeExperiencePage?.Hide();
+                appShell?.SetVisible(true);
+                lastInteractionAt = Time.realtimeSinceStartup;
+                if (restoringIntoHiddenShell)
+                {
+                    ShowPage(PageState.ImageGallery);
+                    Debug.Log("已恢复活动图片图集并显示图片展示页面。");
+                }
+            }
+            Refresh();
+        }
+
         private void OnStatus(string value)
         {
             status = value;
             receptionHomePage?.ClearError();
+            moduleKioskPage?.ClearActionFeedback();
             playbackPageView?.ClearError();
+            imageGalleryPage?.ClearFeedback();
             if (facade.HasActiveSession && navigateToPlaybackWhenSessionArrives)
             {
                 startRequestPending = false;
@@ -364,10 +410,13 @@ namespace TG.Control.Touch
         {
             navigateToPlaybackWhenSessionArrives = false;
             status = "操作失败：" + value;
+            Debug.LogWarning(status);
             if (welcomeExperiencePage != null && welcomeExperiencePage.Visible && welcomeExperiencePage.IsRequestPending)
                 welcomeExperiencePage.ShowRequestFailure(value);
             receptionHomePage?.ShowError(status);
+            moduleKioskPage?.ShowActionFeedback(status);
             playbackPageView?.ShowError(value);
+            imageGalleryPage?.ShowFeedback(value);
             if (facade == null || !facade.HasActiveSession) playbackDisplay.ClearPending();
             if (startRequestPending && (facade == null || !facade.HasActiveSession))
             {
@@ -547,13 +596,49 @@ namespace TG.Control.Touch
 
         private void BeginStart(string routeName, string[] moduleIds, Action start)
         {
+            if (startRequestPending)
+            {
+                status = "讲解启动请求正在处理中，请勿重复点击。";
+                moduleKioskPage?.ShowActionFeedback(status, false);
+                receptionHomePage?.ShowError(status);
+                Refresh();
+                return;
+            }
             if (moduleIds == null || moduleIds.Length == 0)
             {
-                OnError("当前路线没有可讲解主题。");
+                OnError("当前没有配置可播放素材的讲解主题，请先在管理端完成内容发布。");
+                return;
+            }
+            if (!connected)
+            {
+                OnError("中控端与服务器连接已中断，系统正在自动重连，请稍后重试。");
+                return;
+            }
+            if (facade == null)
+            {
+                OnError("讲解控制服务尚未初始化，请重新启动中控客户端。");
+                return;
+            }
+            if (facade.HasActiveSession)
+            {
+                OnError("当前已有讲解任务正在执行，请进入“当前讲解”继续或终止后再试。");
+                return;
+            }
+            if (readiness == null)
+            {
+                OnError("正在检查LED播放端和内容版本，请稍后重试。");
+                return;
+            }
+            if (!readiness.canStart)
+            {
+                OnError(string.IsNullOrWhiteSpace(readiness.message)
+                    ? "LED播放端或内容素材尚未准备完成，请检查系统状态。"
+                    : readiness.message);
                 return;
             }
 
             status = "正在启动路线：“" + routeName + "”…";
+            moduleKioskPage?.ShowActionFeedback("启动请求已发送，正在等待服务器和LED播放端确认。", false);
             startRequestPending = true;
             navigateToPlaybackWhenSessionArrives = true;
             playbackDisplay.Prepare(routeName, moduleIds);
@@ -611,6 +696,22 @@ namespace TG.Control.Touch
         private void SkipPlayback() => facade.Skip();
         private void SetVideoVolume(double volume) => facade.SetVideoVolume(volume);
 
+        private void DisplayGalleryImage(string moduleId, int imageIndex)
+        {
+            imageGalleryPage?.ClearFeedback();
+            if (facade.HasActiveGallery && facade.CurrentGallery != null &&
+                string.Equals(facade.CurrentGallery.moduleId, moduleId, StringComparison.OrdinalIgnoreCase))
+                facade.ShowGalleryImage(imageIndex);
+            else
+                facade.StartGallery(moduleId, imageIndex);
+        }
+
+        private void PreviousGalleryImage() => facade.PreviousGalleryImage();
+        private void NextGalleryImage() => facade.NextGalleryImage();
+        private void StartGallerySlideshow() => facade.StartGallerySlideshow(8);
+        private void PauseGallerySlideshow() => facade.PauseGallerySlideshow();
+        private void StopGallery() => facade.StopGallery();
+
         private void RemoveSelection(string moduleId)
         {
             if (facade.HasActiveSession) return;
@@ -639,14 +740,16 @@ namespace TG.Control.Touch
             if (editorPage != null) editorPage.SetActive(state == PageState.RouteEditor);
             if (playbackPageRoot != null) playbackPageRoot.SetActive(state == PageState.Playback);
             if (systemStatusPageRoot != null) systemStatusPageRoot.SetActive(state == PageState.SystemStatus);
+            if (imageGalleryPageRoot != null) imageGalleryPageRoot.SetActive(state == PageState.ImageGallery);
             if (state != PageState.Playback) confirmStop = false;
             if (appShell != null)
             {
                 var isKioskHome = state == PageState.Home && useModuleKiosk;
-                appShell.SetHomeDarkMode(isKioskHome || state == PageState.Playback ||
+                appShell.SetHomeDarkMode(isKioskHome || state == PageState.ImageGallery || state == PageState.Playback ||
                                          state == PageState.SystemStatus, isKioskHome,
                                          state == PageState.Playback);
                 var section = state == PageState.Playback ? TouchShellSection.Playback
+                    : state == PageState.ImageGallery ? TouchShellSection.ImageGallery
                     : state == PageState.RouteEditor
                         ? (routeDraft.IsTemporary ? TouchShellSection.Combination : TouchShellSection.Routes)
                         : state == PageState.SystemStatus ? TouchShellSection.SystemStatus
@@ -669,6 +772,17 @@ namespace TG.Control.Touch
             if (section == TouchShellSection.Playback)
             {
                 if (facade.HasActiveSession) ShowPage(PageState.Playback);
+                return;
+            }
+            if (section == TouchShellSection.ImageGallery)
+            {
+                if (pageState == PageState.RouteEditor)
+                {
+                    ReturnHome();
+                    if (pageState != PageState.Home) return;
+                }
+                ShowPage(PageState.ImageGallery);
+                Refresh();
                 return;
             }
             if (section == TouchShellSection.Combination)
@@ -738,13 +852,14 @@ namespace TG.Control.Touch
         private void Refresh()
         {
             if (appShell == null) return;
-            appShell.SetGlobalState(connected, readiness, facade.HasActiveSession);
+            appShell.SetGlobalState(connected, readiness, facade.HasActiveSession, facade.HasActiveGallery);
             if (presenter != null) receptionHomePage?.Render(presenter.State, presenter.NormalizeAssetUrl);
             if (presenter != null) moduleKioskPage?.Render(presenter.State, presenter.NormalizeAssetUrl);
             if (presenter != null) routeEditorPage?.Render(presenter.State, routeDraft, status, presenter.NormalizeAssetUrl);
             if (presenter != null) playbackPageView?.Render(presenter.State, playbackDisplay.RouteName,
                 playbackDisplay.ModuleIds, confirmStop, presenter.NormalizeAssetUrl);
             if (presenter != null) systemStatusPageView?.Render(presenter.State, playbackDisplay.RouteName);
+            if (presenter != null) imageGalleryPage?.Render(presenter.State, presenter.NormalizeAssetUrl);
         }
 
         private void ApplyUiExperience(UiExperienceConfig config)
@@ -762,6 +877,7 @@ namespace TG.Control.Touch
                 routeEditorPage?.RefreshTheme();
                 playbackPageView?.RefreshTheme();
                 systemStatusPageView?.RefreshTheme();
+                imageGalleryPage?.RefreshTheme();
             }
             ApplyShellBackground(config);
             var layout = config.layout;

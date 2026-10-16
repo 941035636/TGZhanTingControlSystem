@@ -241,9 +241,11 @@ namespace TG.Control.Touch.UI.Pages
                 activeQuickNotice.SetActive(false);
             }
             temporaryButton.interactable = state.Content != null;
-            startAllButton.interactable = CanStart(state) &&
-                                          state.Content?.modules?.Any(module => module.enabled && HasContent(module)) == true;
-            startAllButton.GetComponent<Image>().color = startAllButton.interactable
+            // Do not silently swallow the touch while Server/LED readiness is transient. The
+            // shared start coordinator will show the exact blocking reason and Server remains the
+            // final authority for starting a session.
+            startAllButton.interactable = state.Content != null;
+            startAllButton.GetComponent<Image>().color = CanStart(state)
                 ? theme.Primary : theme.SecondaryButton;
             RebuildRoutesIfNeeded(state);
         }

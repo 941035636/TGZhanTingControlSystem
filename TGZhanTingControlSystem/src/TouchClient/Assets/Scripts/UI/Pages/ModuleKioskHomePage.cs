@@ -57,7 +57,9 @@ namespace TG.Control.Touch.UI.Pages
         private Vector2 lastGridSize;
         private string signature;
         private Func<string, string> resolveUrl;
-        private bool canStart;
+        private string actionFeedback;
+        private float actionFeedbackUntil;
+        private bool actionFeedbackIsError;
 
         public RectTransform Root => root;
         public event Action<string[]> ModulesStartRequested;
@@ -173,19 +175,48 @@ namespace TG.Control.Touch.UI.Pages
             }
             selectedModuleIds.RemoveWhere(id => !modules.Any(module => string.Equals(module.id, id,
                 StringComparison.OrdinalIgnoreCase)));
-            canStart = state.Connected && state.Readiness?.canStart == true && !state.HasActiveSession;
             ApplySelection();
-            startAllButton.interactable = canStart && modules.Any(HasContent);
-            readinessText.text = state.HasActiveSession ? "讲解进行中"
+            // Keep the action available once content has loaded. The coordinator still performs
+            // the authoritative connection/readiness/session checks and can therefore explain why
+            // a start is currently blocked. A disabled UGUI Button silently discards touches and
+            // previously made transient network/readiness states look like a dead button.
+            startAllButton.interactable = state.Content != null;
+            var readinessMessage = state.HasActiveSession ? "讲解进行中"
                 : !state.Connected ? "服务连接中断"
                 : state.Readiness == null ? "状态检查中"
                 : state.Readiness.canStart ? "系统已就绪"
                 : state.Readiness.ledOnline ? "系统暂未就绪" : "LED播放端离线";
-            readinessIndicator.color = state.HasActiveSession || !state.Connected || state.Readiness?.canStart != true
+            var readinessColor = state.HasActiveSession || !state.Connected || state.Readiness?.canStart != true
                 ? theme.Warning : theme.Success;
+            if (!string.IsNullOrWhiteSpace(actionFeedback) && Time.realtimeSinceStartup < actionFeedbackUntil)
+            {
+                readinessText.text = actionFeedback;
+                readinessIndicator.color = actionFeedbackIsError ? theme.Error : theme.Warning;
+            }
+            else
+            {
+                actionFeedback = null;
+                readinessText.text = readinessMessage;
+                readinessIndicator.color = readinessColor;
+            }
         }
 
         public void RefreshTheme() => ApplySelection();
+
+        public void ShowActionFeedback(string message, bool isError = true)
+        {
+            actionFeedback = string.IsNullOrWhiteSpace(message) ? "当前操作暂不可用，请检查系统状态。" : message;
+            actionFeedbackIsError = isError;
+            actionFeedbackUntil = Time.realtimeSinceStartup + 8f;
+            readinessText.text = actionFeedback;
+            readinessIndicator.color = isError ? theme.Error : theme.Warning;
+        }
+
+        public void ClearActionFeedback()
+        {
+            actionFeedback = null;
+            actionFeedbackUntil = 0f;
+        }
 
         private void BuildHeader()
         {
@@ -428,7 +459,7 @@ namespace TG.Control.Touch.UI.Pages
                 : string.Join(" · ", selected.Take(2).Select(item => item.name)) +
                   (selected.Count > 2 ? " 等 " + selected.Count + " 个展区" : string.Empty);
             clearButton.interactable = selected.Count > 0;
-            startButton.interactable = canStart && selected.Count > 0 && selected.All(HasContent);
+            startButton.interactable = selected.Count > 0;
         }
 
         private List<ExhibitionModule> SelectedModules() => cards
@@ -437,8 +468,15 @@ namespace TG.Control.Touch.UI.Pages
 
         private void StartSelected()
         {
-            var moduleIds = SelectedModules().Where(HasContent).Select(module => module.id).ToArray();
-            if (moduleIds.Length > 0 && startButton.interactable) ModulesStartRequested?.Invoke(moduleIds);
+            var selected = SelectedModules();
+            if (selected.Count == 0) return;
+            var unavailable = selected.Where(module => !HasContent(module)).Select(module => module.name).ToArray();
+            if (unavailable.Length > 0)
+            {
+                ShowActionFeedback("以下展区尚未配置可播放素材：" + string.Join("、", unavailable));
+                return;
+            }
+            ModulesStartRequested?.Invoke(selected.Select(module => module.id).ToArray());
         }
 
         private static bool HasContent(ExhibitionModule module) => module?.nodes != null && module.nodes.Any(node =>

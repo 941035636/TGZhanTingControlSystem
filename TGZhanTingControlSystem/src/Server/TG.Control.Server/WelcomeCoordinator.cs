@@ -7,13 +7,18 @@ namespace TG.Control.Server;
 /// Coordinates the non-session welcome audio. It intentionally has no access to
 /// the formal PlaybackSession store and therefore cannot mutate formal narration.
 /// </summary>
+public interface IWelcomeActivityState
+{
+    bool IsProtectingFormalPlayback { get; }
+}
+
 public sealed class WelcomeCoordinator(
     ICommandBroker broker,
     PlaybackCoordinator playback,
     UiExperienceRepository uiExperience,
     IOptions<PlaybackOptions> playbackOptions,
     OperationalEventRepository eventLog,
-    ILogger<WelcomeCoordinator> logger)
+    ILogger<WelcomeCoordinator> logger) : IWelcomeActivityState
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly PlaybackOptions options = playbackOptions.Value;

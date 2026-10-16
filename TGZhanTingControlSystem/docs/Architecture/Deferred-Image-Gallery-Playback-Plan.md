@@ -1,6 +1,6 @@
 # 模块图集投放到 LED 大屏 — 封存开发计划
 
-> 状态：`IN PROGRESS / Gallery A 已完成，等待人工确认后进入 Gallery B`
+> 状态：`IN PROGRESS / Gallery D TouchClient已完成，等待人工验收后进入 Gallery E`
 >
 > 记录日期：2026-10-13
 >
@@ -148,7 +148,7 @@ AVPro 视频层
 - 使用 `LedContentCache`，按真实 SHA/Size 校验；
 - 使用双缓冲图片层，切换时约 200～300ms 淡入淡出；
 - 默认 `Aspect Fit`，完整显示图片，空白处使用黑色；
-- 当前图片显示期间预加载上一张和下一张；
+- 正式内容同步阶段预缓存模块图集资产；目标图片收到 `Prepare` 后才解码到备用纹理，不在LED内维持额外的上一张/下一张4K纹理；
 - 切换后及时释放旧 Texture/Sprite，防止大量4K图片造成显存增长；
 - 停止后恢复管理端配置的 LED 待机画面；
 - 图片失败时保留上一张有效图片并向 Server 上报明确错误，不显示白屏。
@@ -196,14 +196,14 @@ AdminWeb 每个模块增加“图片图集”区域：
 4. **Gallery D — TouchClient页面**：模块选择、缩略图、投放、前后切换、停止与状态恢复。
 5. **Gallery E — 集成验收**：大图压力、断网、重连、Server/LED/Touch重启、正式讲解切换、Rollback和UDP回归。
 
-当前实施进度（2026-10-15）：
+当前实施进度（2026-10-16）：
 
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
-| Gallery A | `COMPLETE / 待人工确认` | 已完成领域模型、AdminWeb模块图集、发布校验、Manifest及Rollback自动化测试。 |
-| Gallery B | `NOT STARTED` | 等待 Gallery A 人工确认。 |
-| Gallery C | `NOT STARTED` | 尚未开始。 |
-| Gallery D | `NOT STARTED` | 尚未开始。 |
+| Gallery A | `ACCEPTED` | 领域模型、AdminWeb模块图集、发布校验、Manifest及Rollback自动化测试已验收。 |
+| Gallery B | `ACCEPTED` | 独立命令通道、Server协调器、会话持久化、互斥、重启恢复与LED重连重发已通过人工验收。 |
+| Gallery C | `ACCEPTED` | LED图片缓存完整性校验、解码、双缓冲、Contain显示、失败上报、优先级撤屏和资源释放已完成人工验收。 |
+| Gallery D | `COMPLETE / 待人工确认` | 已完成独立图片展示入口、模块与缩略图预览、显式投放、前后切换、8秒轮播、停止、错误反馈及活动会话恢复。 |
 | Gallery E | `NOT STARTED` | 尚未开始。 |
 
 首个可测试版本预计5～7个工作日；含自动轮播、恢复和现场压力测试的交付版本建议预留7～10个工作日。

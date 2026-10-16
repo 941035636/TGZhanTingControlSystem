@@ -4,19 +4,27 @@ using TG.Control.Contracts;
 
 namespace TG.Control.Server;
 
+public interface IPlaybackActivityState
+{
+    Task<bool> HasActiveSessionAsync(CancellationToken cancellationToken);
+}
+
 public sealed class PlaybackCoordinator(
     IContentRepository contentRepository,
     ICommandBroker broker,
     IOptions<PlaybackOptions> options,
     PlaybackSessionStore sessionStore,
     OperationalEventRepository eventLog,
-    ILogger<PlaybackCoordinator> logger)
+    ILogger<PlaybackCoordinator> logger) : IPlaybackActivityState
 {
     private readonly PlaybackOptions settings = options.Value;
     private readonly ConcurrentDictionary<string, SessionState> sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim restoreGate = new(1, 1);
     private readonly SemaphoreSlim startGate = new(1, 1);
     private bool restored;
+
+    public async Task<bool> HasActiveSessionAsync(CancellationToken cancellationToken) =>
+        (await GetSessionsAsync(cancellationToken)).Count > 0;
 
     public async Task<IReadOnlyList<PlaybackSessionStatus>> GetSessionsAsync(CancellationToken cancellationToken)
     {

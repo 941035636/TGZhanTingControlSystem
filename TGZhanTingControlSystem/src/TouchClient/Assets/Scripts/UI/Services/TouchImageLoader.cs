@@ -18,6 +18,7 @@ namespace TG.Control.Touch.UI.Services
         private readonly Dictionary<string, Sprite> cache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, List<Action<Sprite>>> pending = new Dictionary<string, List<Action<Sprite>>>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, float> failedAt = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<int, string> targetRequests = new Dictionary<int, string>();
         private bool disposed;
 
         public TouchImageLoader(MonoBehaviour coroutineHost)
@@ -26,6 +27,16 @@ namespace TG.Control.Touch.UI.Services
         }
 
         public void Load(Image target, string url, Action<bool> completed = null)
+        {
+            LoadInternal(target, url, false, completed);
+        }
+
+        public void LoadContain(Image target, string url, Action<bool> completed = null)
+        {
+            LoadInternal(target, url, true, completed);
+        }
+
+        private void LoadInternal(Image target, string url, bool preserveAspect, Action<bool> completed)
         {
             if (disposed)
             {
@@ -38,9 +49,12 @@ namespace TG.Control.Touch.UI.Services
                 return;
             }
 
+            var targetId = target.GetInstanceID();
+            targetRequests[targetId] = url;
+
             if (cache.TryGetValue(url, out var cached) && cached != null)
             {
-                Apply(target, cached);
+                Apply(target, cached, preserveAspect);
                 completed?.Invoke(true);
                 return;
             }
@@ -53,8 +67,10 @@ namespace TG.Control.Touch.UI.Services
 
             Action<Sprite> callback = sprite =>
             {
-                if (target != null && sprite != null) Apply(target, sprite);
-                completed?.Invoke(sprite != null);
+                var isCurrent = target != null && targetRequests.TryGetValue(targetId, out var requestedUrl) &&
+                                string.Equals(requestedUrl, url, StringComparison.OrdinalIgnoreCase);
+                if (isCurrent && sprite != null) Apply(target, sprite, preserveAspect);
+                completed?.Invoke(isCurrent && sprite != null);
             };
             if (pending.TryGetValue(url, out var callbacks))
             {
@@ -106,6 +122,7 @@ namespace TG.Control.Touch.UI.Services
             disposed = true;
             pending.Clear();
             failedAt.Clear();
+            targetRequests.Clear();
             foreach (var sprite in cache.Values) DestroySprite(sprite);
             cache.Clear();
         }
@@ -118,11 +135,11 @@ namespace TG.Control.Touch.UI.Services
             if (texture != null) UnityEngine.Object.Destroy(texture);
         }
 
-        private static void Apply(Image target, Sprite sprite)
+        private static void Apply(Image target, Sprite sprite, bool preserveAspect)
         {
             target.sprite = sprite;
             target.type = Image.Type.Simple;
-            target.preserveAspect = false;
+            target.preserveAspect = preserveAspect;
             target.color = Color.white;
         }
     }

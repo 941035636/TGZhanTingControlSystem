@@ -22,6 +22,7 @@ namespace TG.Control.Touch.UI
         public event Action<NarrationRoute> RouteSaved;
         public event Action<SystemReadiness> ReadinessChanged;
         public event Action<WelcomePlaybackStatus> WelcomeChanged;
+        public event Action<GallerySessionStatus> GalleryChanged;
         public event Action<UiExperienceConfig> UiExperienceChanged;
         public event Action<string> UiExperienceLoadFailed;
         public event Action<string> Error;
@@ -36,7 +37,9 @@ namespace TG.Control.Touch.UI
                 Content = facade.CurrentContent,
                 Readiness = facade.CurrentReadiness,
                 Routes = facade.CurrentRoutes ?? Array.Empty<NarrationRoute>(),
-                HasActiveSession = facade.HasActiveSession
+                HasActiveSession = facade.HasActiveSession,
+                Gallery = facade.CurrentGallery,
+                HasActiveGallery = facade.HasActiveGallery
             };
         }
 
@@ -52,6 +55,7 @@ namespace TG.Control.Touch.UI
             facade.RouteSaved += HandleRouteSaved;
             facade.ReadinessChanged += HandleReadinessChanged;
             facade.WelcomeChanged += HandleWelcomeChanged;
+            facade.GalleryChanged += HandleGalleryChanged;
             facade.Error += HandleError;
         }
 
@@ -67,6 +71,7 @@ namespace TG.Control.Touch.UI
             facade.RouteSaved -= HandleRouteSaved;
             facade.ReadinessChanged -= HandleReadinessChanged;
             facade.WelcomeChanged -= HandleWelcomeChanged;
+            facade.GalleryChanged -= HandleGalleryChanged;
             facade.Error -= HandleError;
         }
 
@@ -88,6 +93,12 @@ namespace TG.Control.Touch.UI
         private void HandleRouteSaved(NarrationRoute value) { RouteSaved?.Invoke(value); }
         private void HandleReadinessChanged(SystemReadiness value) { State.Readiness = value; ReadinessChanged?.Invoke(value); }
         private void HandleWelcomeChanged(WelcomePlaybackStatus value) { State.Welcome = value; WelcomeChanged?.Invoke(value); }
+        private void HandleGalleryChanged(GallerySessionStatus value)
+        {
+            State.Gallery = value;
+            State.HasActiveGallery = value != null || facade.HasActiveGallery;
+            GalleryChanged?.Invoke(value);
+        }
         private void HandleError(string value)
         {
             State.Status = "操作失败：" + value;

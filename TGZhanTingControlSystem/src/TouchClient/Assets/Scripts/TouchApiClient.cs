@@ -64,6 +64,39 @@ namespace TG.Control.Touch
         public void GetActiveNarrationSession(Action<PlaybackSessionLookup> success, Action<string> failure) =>
             StartCoroutine(GetJson("/api/playback/active", success, failure));
 
+        public void StartGallery(string moduleId, int imageIndex, string requestedBy,
+            Action<StartGalleryResponse> success, Action<string> failure)
+        {
+            var request = new StartGalleryRequest
+            {
+                moduleId = moduleId,
+                imageIndex = imageIndex,
+                requestedBy = requestedBy
+            };
+            StartCoroutine(PostJson("/api/gallery/start", request, success, failure));
+        }
+
+        public void ControlGallery(string sessionId, GalleryControlAction action, int imageIndex,
+            int slideshowIntervalSeconds, Action<ControlGalleryResponse> success, Action<string> failure)
+        {
+            var request = new ControlGalleryRequest
+            {
+                sessionId = sessionId,
+                action = action,
+                imageIndex = imageIndex,
+                slideshowIntervalSeconds = slideshowIntervalSeconds
+            };
+            StartCoroutine(PostJson("/api/gallery/control", request, success, failure));
+        }
+
+        public void GetActiveGallery(Action<GallerySessionLookup> success, Action<string> failure) =>
+            StartCoroutine(GetJson("/api/gallery/active", success, failure));
+
+        public void GetGallerySession(string sessionId, Action<GallerySessionLookup> success,
+            Action<string> failure) =>
+            StartCoroutine(GetJson("/api/gallery/sessions/" + UnityWebRequest.EscapeURL(sessionId),
+                success, failure));
+
         public string NormalizeUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return url;
@@ -143,7 +176,14 @@ namespace TG.Control.Touch
                         }
                         else if (request.responseCode != 204)
                         {
-                            SetConnected(false);
+                            // A single failed long poll is not enough to declare the terminal
+                            // offline. Re-register immediately; only a failed registration changes
+                            // the public connection state. This avoids brief UI/button flapping on
+                            // ordinary Wi-Fi hiccups while preserving real disconnect detection.
+                            Debug.LogWarning("讲解指令连接短暂中断，正在重新注册：" +
+                                             request.responseCode + " " + request.error);
+                            yield return new WaitForSecondsRealtime(retryDelaySeconds);
+                            break;
                         }
                     }
                 }
@@ -179,7 +219,7 @@ namespace TG.Control.Touch
                         ? default
                         : JsonUtility.FromJson<TResponse>(request.downloadHandler.text));
                 }
-                else failure?.Invoke(request.downloadHandler.text + " " + request.error);
+                else failure?.Invoke(FriendlyFailure(request.downloadHandler.text, request.error));
             }
         }
 
@@ -241,6 +281,24 @@ namespace TG.Control.Touch
             if (!string.IsNullOrWhiteSpace(terminalApiKey)) request.SetRequestHeader("X-TG-Terminal-Key", terminalApiKey);
         }
 
+        private static string FriendlyFailure(string responseBody, string transportError)
+        {
+            if (!string.IsNullOrWhiteSpace(responseBody))
+            {
+                try
+                {
+                    var error = JsonUtility.FromJson<ApiErrorResponse>(responseBody);
+                    if (!string.IsNullOrWhiteSpace(error?.message)) return error.message;
+                }
+                catch (ArgumentException)
+                {
+                    // Non-JSON responses are returned below without exposing an exception stack.
+                }
+                return responseBody;
+            }
+            return string.IsNullOrWhiteSpace(transportError) ? "服务器未返回有效响应。" : transportError;
+        }
+
         private ClientRegistration Registration() => new ClientRegistration
         {
             clientId = clientId,
@@ -254,5 +312,6 @@ namespace TG.Control.Touch
 
         [Serializable] private sealed class EmptyResponse { }
         [Serializable] private sealed class EmptyRequest { }
+        [Serializable] private sealed class ApiErrorResponse { public string message = string.Empty; }
     }
 }
