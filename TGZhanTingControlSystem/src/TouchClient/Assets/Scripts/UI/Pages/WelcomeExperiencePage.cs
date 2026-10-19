@@ -27,6 +27,7 @@ namespace TG.Control.Touch.UI.Pages
         private readonly TouchImageLoader imageLoader;
         private readonly GameObject root;
         private readonly Image background;
+        private readonly WelcomeAmbientEffects ambientEffects;
         private Image brandLogo;
         private Text brandMarkText;
         private readonly CanvasGroup headingGroup;
@@ -53,6 +54,7 @@ namespace TG.Control.Touch.UI.Pages
 
         public bool Visible => root.activeSelf;
         public bool IsRequestPending => requesting;
+        public WelcomeAmbientEffects AmbientEffects => ambientEffects;
         public event Action WelcomeRequested;
         public event Action Entered;
 
@@ -69,6 +71,11 @@ namespace TG.Control.Touch.UI.Pages
             background.preserveAspect = false;
             background.raycastTarget = false;
             root = background.gameObject;
+
+            var ambientLayer = factory.Rect("Welcome Ambient Effects", root.transform);
+            TouchUiFactory.Stretch(ambientLayer);
+            ambientEffects = ambientLayer.gameObject.AddComponent<WelcomeAmbientEffects>();
+            ambientEffects.Initialize(GetGlowSprite(), GetRingSprite());
 
             BuildTopBrand(factory);
 
