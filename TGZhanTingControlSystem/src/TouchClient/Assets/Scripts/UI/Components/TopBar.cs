@@ -8,7 +8,6 @@ namespace TG.Control.Touch.UI.Components
     /// <summary>Branding, local time and truthful global runtime state.</summary>
     public sealed class TopBar
     {
-        private static Sprite brandCircle;
         private readonly TouchTheme theme;
         private readonly Image root;
         private readonly Image signalLine;
@@ -37,13 +36,15 @@ namespace TG.Control.Touch.UI.Components
             TouchUiFactory.Anchor(signalLine.rectTransform, 0, 0, 0, 0, 36, 10, 184, 12);
             signalLine.raycastTarget = false;
 
-            brandMark = factory.Image("TG Brand Circle", root.transform, theme.ShellHighlight);
-            brandMark.sprite = brandCircle ?? (brandCircle = CreateBrandCircle());
-            TouchUiFactory.Anchor(brandMark.rectTransform, 0, .5f, 0, .5f, 32, -28, 88, 28);
+            brandMark = factory.Image("TG Brand Logo", root.transform, Color.white);
+            brandMark.sprite = BrandVisualAssets.Logo;
+            brandMark.preserveAspect = true;
+            TouchUiFactory.Anchor(brandMark.rectTransform, 0, .5f, 0, .5f, 28, -32, 92, 32);
             brandMark.raycastTarget = false;
             var brandLetters = factory.Label("TG Brand Letters", brandMark.transform, "TG", 20,
                 FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
             TouchUiFactory.Stretch(brandLetters.rectTransform);
+            brandLetters.gameObject.SetActive(brandMark.sprite == null);
 
             title = factory.Label("Product Name", root.transform, "展厅自动讲解系统", 24,
                 FontStyle.Bold, theme.TextPrimary, TextAnchor.MiddleLeft);
@@ -89,28 +90,6 @@ namespace TG.Control.Touch.UI.Components
             subtitle.text = "智慧展厅 · 中控终端";
         }
 
-        private static Sprite CreateBrandCircle()
-        {
-            const int size = 64;
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "TG Top Brand Circle",
-                filterMode = FilterMode.Bilinear,
-                hideFlags = HideFlags.HideAndDontSave
-            };
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-            {
-                var distance = Vector2.Distance(new Vector2(x + .5f, y + .5f),
-                    new Vector2(size / 2f, size / 2f));
-                texture.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(31f - distance)));
-            }
-            texture.Apply(false, true);
-            var sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f));
-            sprite.hideFlags = HideFlags.HideAndDontSave;
-            return sprite;
-        }
-
         public void SetConnection(bool connected) =>
             connectionBadge.Set(connected ? "服务在线" : "服务重连中",
                 connected ? StatusTone.Success : StatusTone.Error);
@@ -131,7 +110,9 @@ namespace TG.Control.Touch.UI.Components
             signalLine.color = homeDarkMode
                 ? new Color(theme.HomeDarkAccent.r, theme.HomeDarkAccent.g, theme.HomeDarkAccent.b, .44f)
                 : theme.Primary;
-            brandMark.color = homeDarkMode ? theme.HomeDarkAccent : theme.ShellHighlight;
+            brandMark.color = brandMark.sprite == null
+                ? (homeDarkMode ? theme.HomeDarkAccent : theme.ShellHighlight)
+                : Color.white;
             title.color = homeDarkMode ? theme.HomeDarkTextPrimary : theme.TextPrimary;
             subtitle.color = homeDarkMode ? theme.HomeDarkTextSecondary : theme.TextSecondary;
             dateLabel.color = homeDarkMode ? theme.HomeDarkTextSecondary : theme.TextSecondary;

@@ -150,15 +150,17 @@ namespace TG.Control.Touch.UI.Pages
             if (!string.Equals(logoUrl, logo, StringComparison.OrdinalIgnoreCase))
             {
                 logoUrl = logo;
-                brandLogo.sprite = null;
-                brandLogo.gameObject.SetActive(false);
-                brandMarkText.gameObject.SetActive(true);
+                UseLocalBrandLogo();
                 if (!string.IsNullOrWhiteSpace(logo)) imageLoader.Load(brandLogo, logo, success =>
                 {
                     if (string.Equals(logoUrl, logo, StringComparison.OrdinalIgnoreCase))
                     {
-                        brandLogo.gameObject.SetActive(success);
-                        brandMarkText.gameObject.SetActive(!success);
+                        if (success)
+                        {
+                            brandLogo.gameObject.SetActive(true);
+                            brandMarkText.gameObject.SetActive(false);
+                        }
+                        else UseLocalBrandLogo();
                     }
                 });
             }
@@ -263,22 +265,19 @@ namespace TG.Control.Touch.UI.Pages
         private void BuildTopBrand(TouchUiFactory factory)
         {
             var markGlow = factory.Image("Standby Brand Soft Halo", root.transform,
-                new Color(.13f, .77f, 1f, .46f));
+                new Color(.13f, .77f, 1f, .18f));
             markGlow.sprite = GetGlowSprite();
-            TouchUiFactory.Anchor(markGlow.rectTransform, 0, 1, 0, 1, 21, -96, 101, -16);
+            TouchUiFactory.Anchor(markGlow.rectTransform, 0, 1, 0, 1, 20, -99, 102, -17);
             markGlow.raycastTarget = false;
-            var mark = factory.Image("Standby TG Brand Mark", root.transform, new Color(.06f, .53f, .98f, 1));
-            mark.sprite = GetButtonSprite();
-            TouchUiFactory.Anchor(mark.rectTransform, 0, 1, 0, 1, 31, -84, 89, -26);
-            mark.raycastTarget = false;
-            brandMarkText = factory.Label("Standby Brand Mark Text", mark.transform, "TG", 23,
+            brandLogo = factory.Image("Standby Brand Logo", root.transform, Color.white);
+            brandLogo.sprite = BrandVisualAssets.Logo;
+            brandLogo.preserveAspect = true;
+            TouchUiFactory.Anchor(brandLogo.rectTransform, 0, 1, 0, 1, 28, -92, 94, -26);
+            brandLogo.raycastTarget = false;
+            brandMarkText = factory.Label("Standby Brand Mark Text", brandLogo.transform, "TG", 23,
                 FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
             TouchUiFactory.Stretch(brandMarkText.rectTransform);
-            brandLogo = factory.Image("Standby Optional Brand Logo", mark.transform, Color.white);
-            TouchUiFactory.Stretch(brandLogo.rectTransform, 6, 6, -6, -6);
-            brandLogo.preserveAspect = true;
-            brandLogo.raycastTarget = false;
-            brandLogo.gameObject.SetActive(false);
+            brandMarkText.gameObject.SetActive(brandLogo.sprite == null);
             var systemName = factory.Label("Welcome System Name", root.transform, "展厅自动讲解系统", 25,
                 FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(systemName.rectTransform, 0, 1, 0, 1, 106, -65, 410, -26);
@@ -290,6 +289,15 @@ namespace TG.Control.Touch.UI.Pages
                 FontStyle.Bold, Color.white, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(clock.rectTransform, 1, 1, 1, 1, -365, -75, -36, -31);
             AddShadow(clock, new Color(.0f, .10f, .28f, .58f), new Vector2(0, -1));
+        }
+
+        private void UseLocalBrandLogo()
+        {
+            brandLogo.sprite = BrandVisualAssets.Logo;
+            brandLogo.color = Color.white;
+            brandLogo.preserveAspect = true;
+            brandLogo.gameObject.SetActive(brandLogo.sprite != null);
+            brandMarkText.gameObject.SetActive(brandLogo.sprite == null);
         }
 
         private void BuildPulseRings(TouchUiFactory factory, TouchTheme theme)
