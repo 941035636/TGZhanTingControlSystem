@@ -34,6 +34,11 @@ namespace TG.Control.Touch
         private TouchUiPresenter presenter;
         private TouchTheme theme;
         private TouchUiFactory uiFactory;
+        private Font uiFont;
+        private CanvasScaler canvasScaler;
+        private int observedScreenWidth;
+        private int observedScreenHeight;
+        private int displayReportVersion;
         private Color accent;
         private PageState pageState;
         private bool navigateToPlaybackWhenSessionArrives;
@@ -65,8 +70,11 @@ namespace TG.Control.Touch
         {
             theme = TouchTheme.CreateDefault();
             accent = theme.Primary;
-            uiFactory = new TouchUiFactory(theme.CreateFont(), () => accent, theme);
+            uiFont = theme.CreateFont();
+            uiFactory = new TouchUiFactory(uiFont, () => accent, theme);
             BuildUi();
+            observedScreenWidth = Screen.width;
+            observedScreenHeight = Screen.height;
         }
 
         private void Start()
@@ -94,10 +102,17 @@ namespace TG.Control.Touch
             if (presenter.State.Routes != null && presenter.State.Routes.Length > 0)
                 OnRoutesLoaded(presenter.State.Routes);
             Refresh();
+            StartCoroutine(ReportDisplayAfterLayout(++displayReportVersion));
         }
 
         private void Update()
         {
+            if (Screen.width != observedScreenWidth || Screen.height != observedScreenHeight)
+            {
+                observedScreenWidth = Screen.width;
+                observedScreenHeight = Screen.height;
+                StartCoroutine(ReportDisplayAfterLayout(++displayReportVersion));
+            }
             appShell?.Tick(DateTime.Now);
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.touchCount > 0)
                 lastInteractionAt = Time.realtimeSinceStartup;
@@ -113,6 +128,30 @@ namespace TG.Control.Touch
                 welcomeBusy) return;
             if (Time.realtimeSinceStartup - lastInteractionAt >= idleTimeoutSeconds)
                 ShowWelcomeExperience();
+        }
+
+        private IEnumerator ReportDisplayAfterLayout(int version)
+        {
+            // Fullscreen resolution may change over several frames during startup. Only the
+            // latest, settled reading should be used for on-site 4K acceptance.
+            yield return new WaitForSecondsRealtime(2f);
+            if (version != displayReportVersion) yield break;
+            if (canvasScaler == null) yield break;
+            var display = Display.main;
+            var canvas = canvasScaler.GetComponent<Canvas>();
+            var desktopWidth = display == null ? 0 : display.systemWidth;
+            var desktopHeight = display == null ? 0 : display.systemHeight;
+            Debug.Log($"Touch display: framebuffer={Screen.width}x{Screen.height}, " +
+                      $"desktop={desktopWidth}x{desktopHeight}, mode={Screen.fullScreenMode}, " +
+                      $"canvasScale={canvas.scaleFactor:F2}, reference=1920x1080, " +
+                      $"pixelPerfect={canvas.pixelPerfect}, font={uiFont?.name}, " +
+                      $"dynamicFont={uiFont?.dynamic}, dpi={Screen.dpi:F0}.");
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (desktopWidth > 0 && desktopHeight > 0 &&
+                (Screen.width != desktopWidth || Screen.height != desktopHeight))
+                Debug.LogWarning("Touch display framebuffer does not match the native desktop resolution; " +
+                                 "check Windows display scaling and fullscreen settings before 4K acceptance.");
+#endif
         }
 
         private void OnDestroy()
@@ -201,11 +240,12 @@ namespace TG.Control.Touch
             var canvas = canvasObject.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 100;
-            var scaler = canvasObject.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = .5f;
+            canvas.pixelPerfect = true;
+            canvasScaler = canvasObject.GetComponent<CanvasScaler>();
+            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            canvasScaler.referenceResolution = new Vector2(1920, 1080);
+            canvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            canvasScaler.matchWidthOrHeight = .5f;
 
             appShell = new TouchAppShell(uiFactory, theme);
             appShell.Build(canvas.transform);
@@ -747,7 +787,7 @@ namespace TG.Control.Touch
                 var isKioskHome = state == PageState.Home && useModuleKiosk;
                 appShell.SetHomeDarkMode(isKioskHome || state == PageState.ImageGallery || state == PageState.Playback ||
                                          state == PageState.SystemStatus, isKioskHome,
-                                         state == PageState.Playback);
+                                          state == PageState.Playback, state == PageState.ImageGallery);
                 var section = state == PageState.Playback ? TouchShellSection.Playback
                     : state == PageState.ImageGallery ? TouchShellSection.ImageGallery
                     : state == PageState.RouteEditor

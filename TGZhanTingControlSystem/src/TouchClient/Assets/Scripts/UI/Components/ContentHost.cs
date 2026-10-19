@@ -17,6 +17,7 @@ namespace TG.Control.Touch.UI.Components
         private bool homeDarkMode;
         private bool revealHomeBackground;
         private bool revealPlaybackBackground;
+        private bool revealGalleryBackground;
 
         public RectTransform Root => frame.rectTransform;
         public RectTransform ContentRoot => contentRoot;
@@ -45,11 +46,13 @@ namespace TG.Control.Touch.UI.Components
                 // action bar without stacking the former double-line glass artwork.
                 frame.sprite = frameDefaultSprite;
                 frame.type = frameDefaultType;
-                frame.color = revealPlaybackBackground ? theme.PlaybackBorderSoft
+                frame.color = revealGalleryBackground ? theme.TechBorderSoft
+                    : revealPlaybackBackground ? theme.PlaybackBorderSoft
                     : revealHomeBackground ? theme.HomeHallBorder : theme.HomeDarkBorderSoft;
                 surface.sprite = surfaceDefaultSprite;
                 surface.type = surfaceDefaultType;
-                surface.color = revealPlaybackBackground ? theme.PlaybackContentSurface
+                surface.color = revealGalleryBackground ? theme.TechContentSurface
+                    : revealPlaybackBackground ? theme.PlaybackContentSurface
                     : revealHomeBackground ? theme.HomeHallContentSurface : theme.HomeDarkSurface;
             }
             else
@@ -64,13 +67,14 @@ namespace TG.Control.Touch.UI.Components
         }
 
         public void SetHomeDarkMode(bool enabled, TouchTheme theme, bool revealBackground = false,
-            bool revealPlayback = false)
+            bool revealPlayback = false, bool revealGallery = false)
         {
             if (homeDarkMode == enabled && revealHomeBackground == revealBackground &&
-                revealPlaybackBackground == revealPlayback) return;
+                revealPlaybackBackground == revealPlayback && revealGalleryBackground == revealGallery) return;
             homeDarkMode = enabled;
             revealHomeBackground = enabled && revealBackground;
             revealPlaybackBackground = enabled && revealPlayback;
+            revealGalleryBackground = enabled && revealGallery;
             RefreshTheme(theme);
         }
     }

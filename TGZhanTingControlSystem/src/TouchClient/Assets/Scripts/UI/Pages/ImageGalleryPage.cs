@@ -69,7 +69,7 @@ namespace TG.Control.Touch.UI.Pages
             this.imageLoader = imageLoader ?? throw new ArgumentNullException(nameof(imageLoader));
             root = factory.Rect("Image Gallery Page", parent);
 
-            var header = factory.RoundedImage("Gallery Header", root, theme.HomeDarkSurfaceElevated);
+            var header = factory.RoundedImage("Gallery Header", root, theme.TechPanelSurface);
             TouchUiFactory.Anchor(header.rectTransform, 0, 1, 1, 1, 0, -100, 0, 0);
             header.raycastTarget = false;
             var eyebrow = factory.Label("Gallery Eyebrow", header.transform, "LED 大屏 · 图片展示", theme.Caption,
@@ -83,12 +83,9 @@ namespace TG.Control.Touch.UI.Pages
                 FontStyle.Normal, theme.HomeDarkTextSecondary, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(hint.rectTransform, .48f, 0, 1, 1, 0, 12, -24, -14);
 
-            var moduleFrame = factory.RoundedImage("Gallery Module Frame", root, theme.HomeDarkBorderSoft);
+            var moduleFrame = factory.TechPanel("Gallery Module", root, theme.TechBorderSoft,
+                theme.TechPanelSurface, out var moduleSurface);
             TouchUiFactory.Anchor(moduleFrame.rectTransform, 0, 0, 0, 1, 0, 0, 310, -112);
-            var moduleSurface = factory.RoundedImage("Gallery Module Surface", moduleFrame.transform,
-                theme.HomeDarkSurfaceElevated);
-            TouchUiFactory.Stretch(moduleSurface.rectTransform, 1, 1, -1, -1);
-            moduleSurface.raycastTarget = false;
             var moduleTitle = factory.Label("Gallery Module Heading", moduleSurface.transform, "选择展厅模块",
                 theme.SectionTitle, FontStyle.Bold, theme.HomeDarkTextPrimary, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(moduleTitle.rectTransform, 0, 1, 1, 1, 20, -62, -20, -14);
@@ -110,18 +107,15 @@ namespace TG.Control.Touch.UI.Pages
             moduleScroll.horizontal = false;
             moduleScroll.scrollSensitivity = 32;
 
-            var previewFrame = factory.RoundedImage("Gallery Preview Frame", root, theme.HomeDarkBorder);
+            var previewFrame = factory.TechPanel("Gallery Preview", root, theme.TechBorder,
+                theme.TechPreviewSurface, out var previewSurface, 2f);
             TouchUiFactory.Anchor(previewFrame.rectTransform, 0, 0, 1, 1, 326, 174, -350, -112);
-            var previewSurface = factory.RoundedImage("Gallery Preview Surface", previewFrame.transform,
-                new Color(.003f, .012f, .035f, .96f));
-            TouchUiFactory.Stretch(previewSurface.rectTransform, 2, 2, -2, -2);
-            previewSurface.raycastTarget = false;
             preview = factory.Image("Gallery Large Preview", previewSurface.transform, Color.clear);
             TouchUiFactory.Stretch(preview.rectTransform, 20, 54, -20, -20);
             preview.preserveAspect = true;
             preview.raycastTarget = false;
             previewPlaceholder = factory.RoundedImage("Gallery Preview Placeholder", previewSurface.transform,
-                theme.HomeDarkGlass).gameObject;
+                theme.TechPanelElevated).gameObject;
             TouchUiFactory.Anchor(previewPlaceholder.GetComponent<RectTransform>(), .5f, .5f, .5f, .5f,
                 -150, -64, 150, 64);
             var placeholderText = factory.Label("Gallery Preview Placeholder Text", previewPlaceholder.transform,
@@ -135,12 +129,9 @@ namespace TG.Control.Touch.UI.Pages
                 theme.Secondary, FontStyle.Bold, theme.HomeDarkAccent, TextAnchor.MiddleRight);
             TouchUiFactory.Anchor(previewCounter.rectTransform, .72f, 0, 1, 0, 0, 10, -20, 48);
 
-            var thumbnailFrame = factory.RoundedImage("Gallery Thumbnail Frame", root, theme.HomeDarkBorderSoft);
+            var thumbnailFrame = factory.TechPanel("Gallery Thumbnail", root, theme.TechBorderSoft,
+                theme.TechPanelSurface, out var thumbnailSurface);
             TouchUiFactory.Anchor(thumbnailFrame.rectTransform, 0, 0, 1, 0, 326, 0, -350, 158);
-            var thumbnailSurface = factory.RoundedImage("Gallery Thumbnail Surface", thumbnailFrame.transform,
-                theme.HomeDarkSurfaceElevated);
-            TouchUiFactory.Stretch(thumbnailSurface.rectTransform, 1, 1, -1, -1);
-            thumbnailSurface.raycastTarget = false;
             var thumbnailViewport = factory.Image("Gallery Thumbnail Viewport", thumbnailSurface.transform, Color.clear);
             TouchUiFactory.Stretch(thumbnailViewport.rectTransform, 14, 12, -14, -12);
             thumbnailViewport.gameObject.AddComponent<RectMask2D>();
@@ -159,12 +150,9 @@ namespace TG.Control.Touch.UI.Pages
             thumbnailScroll.vertical = false;
             thumbnailScroll.scrollSensitivity = 36;
 
-            var controlFrame = factory.RoundedImage("Gallery Control Frame", root, theme.HomeDarkBorderSoft);
+            var controlFrame = factory.TechPanel("Gallery Control", root, theme.TechBorderSoft,
+                theme.TechPanelElevated, out var controlSurface);
             TouchUiFactory.Anchor(controlFrame.rectTransform, 1, 0, 1, 1, -334, 0, 0, -112);
-            var controlSurface = factory.RoundedImage("Gallery Control Surface", controlFrame.transform,
-                theme.HomeDarkSurfaceElevated);
-            TouchUiFactory.Stretch(controlSurface.rectTransform, 1, 1, -1, -1);
-            controlSurface.raycastTarget = false;
             var statusCaption = factory.Label("Gallery Status Caption", controlSurface.transform, "大屏状态",
                 theme.Caption, FontStyle.Bold, theme.HomeDarkAccent, TextAnchor.MiddleLeft);
             TouchUiFactory.Anchor(statusCaption.rectTransform, 0, 1, 1, 1, 20, -36, -20, -12);
@@ -179,24 +167,23 @@ namespace TG.Control.Touch.UI.Pages
                 FontStyle.Normal, theme.Warning, TextAnchor.LowerLeft);
             TouchUiFactory.Anchor(feedback.rectTransform, 0, 0, 1, .48f, 20, 316, -20, 0);
 
-            displayButton = factory.TouchButton(controlSurface.transform, "投放到大屏", true, OnDisplay);
+            displayButton = factory.TechButton(controlSurface.transform, "投放到大屏", true, OnDisplay);
             TouchUiFactory.Anchor(displayButton.GetComponent<RectTransform>(), 0, 0, 1, 0,
                 20, 238, -20, 306);
-            previousButton = factory.TouchButton(controlSurface.transform, "上一张", false, OnPrevious);
+            previousButton = factory.TechButton(controlSurface.transform, "上一张", false, OnPrevious);
             TouchUiFactory.Anchor(previousButton.GetComponent<RectTransform>(), 0, 0, .5f, 0,
                 20, 164, -6, 224);
-            nextButton = factory.TouchButton(controlSurface.transform, "下一张", false, OnNext);
+            nextButton = factory.TechButton(controlSurface.transform, "下一张", false, OnNext);
             TouchUiFactory.Anchor(nextButton.GetComponent<RectTransform>(), .5f, 0, 1, 0,
                 6, 164, -20, 224);
-            slideshowButton = factory.TouchButton(controlSurface.transform, "开始轮播 · 8秒", false,
+            slideshowButton = factory.TechButton(controlSurface.transform, "开始轮播 · 8秒", false,
                 OnSlideshow);
             TouchUiFactory.Anchor(slideshowButton.GetComponent<RectTransform>(), 0, 0, 1, 0,
                 20, 90, -20, 150);
-            stopButton = factory.TouchButton(controlSurface.transform, "停止展示", false,
-                () => StopRequested?.Invoke());
+            stopButton = factory.TechButton(controlSurface.transform, "停止展示", false,
+                () => StopRequested?.Invoke(), true);
             TouchUiFactory.Anchor(stopButton.GetComponent<RectTransform>(), 0, 0, 1, 0,
                 20, 16, -20, 76);
-            ApplyDangerStyle(stopButton);
         }
 
         public void Render(TouchUiState state, Func<string, string> normalizeUrl)
@@ -241,7 +228,7 @@ namespace TG.Control.Touch.UI.Pages
 
         public void RefreshTheme()
         {
-            ApplyDangerStyle(stopButton);
+            // The gallery uses fixed structural blue tokens; status and interactions stay state-bound.
         }
 
         public void ShowFeedback(string message)
@@ -266,7 +253,7 @@ namespace TG.Control.Touch.UI.Pages
             {
                 var captured = module;
                 var surface = factory.RoundedImage("Gallery Module - " + module.name, moduleList,
-                    theme.HomeDarkGlass);
+                    theme.TechPanelSurface);
                 surface.gameObject.AddComponent<LayoutElement>().preferredHeight = 78;
                 var button = surface.gameObject.AddComponent<Button>();
                 button.targetGraphic = surface;
@@ -333,13 +320,14 @@ namespace TG.Control.Touch.UI.Pages
                 var capturedIndex = index;
                 var asset = selectedModule.galleryImages[index];
                 var frame = factory.RoundedImage("Gallery Thumbnail " + (index + 1), thumbnailList,
-                    theme.HomeDarkBorderSoft);
+                    theme.TechBorderSoft);
                 var element = frame.gameObject.AddComponent<LayoutElement>();
                 element.preferredWidth = 174;
                 element.minWidth = 174;
-                var image = factory.Image("Thumbnail Image", frame.transform, new Color(.015f, .035f, .08f, 1));
+                var image = factory.Image("Thumbnail Image", frame.transform, theme.TechPreviewSurface);
                 TouchUiFactory.Stretch(image.rectTransform, 3, 3, -3, -3);
                 image.preserveAspect = true;
+                image.raycastTarget = false;
                 var button = frame.gameObject.AddComponent<Button>();
                 button.targetGraphic = frame;
                 button.onClick.AddListener(() =>
@@ -397,7 +385,7 @@ namespace TG.Control.Touch.UI.Pages
                     StringComparison.OrdinalIgnoreCase);
                 var active = session != null && string.Equals(item.ModuleId, session.moduleId,
                     StringComparison.OrdinalIgnoreCase);
-                item.Surface.color = selected ? new Color(.025f, .28f, .62f, .82f) : theme.HomeDarkGlass;
+                item.Surface.color = selected ? theme.TechSelectionSurface : theme.TechPanelSurface;
                 item.Title.color = selected ? Color.white : theme.HomeDarkTextPrimary;
                 item.Count.text = (active ? "大屏展示中 · " : string.Empty) +
                                   (content?.modules?.FirstOrDefault(module => module.id == item.ModuleId)
@@ -415,7 +403,7 @@ namespace TG.Control.Touch.UI.Pages
                               string.Equals(session.moduleId, selectedModule.id, StringComparison.OrdinalIgnoreCase) &&
                               index == session.currentImageNumber - 1;
                 thumbnailSurfaces[index].color = showing ? theme.Success
-                    : selected ? theme.HomeDarkAccent : theme.HomeDarkBorderSoft;
+                    : selected ? theme.TechBorder : theme.TechBorderSoft;
             }
         }
 
@@ -501,13 +489,5 @@ namespace TG.Control.Touch.UI.Pages
                 StartSlideshowRequested?.Invoke();
         }
 
-        private void ApplyDangerStyle(Button button)
-        {
-            if (button == null) return;
-            var image = button.GetComponent<Image>();
-            if (image != null) image.color = new Color(theme.Error.r, theme.Error.g, theme.Error.b, .18f);
-            var label = button.GetComponentInChildren<Text>();
-            if (label != null) label.color = theme.Error;
-        }
     }
 }

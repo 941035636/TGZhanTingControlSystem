@@ -16,6 +16,17 @@ namespace TG.Control.Touch
             // Windows player render the fullscreen window at the display's native resolution.
             // Forcing a 1920x1080 framebuffer makes a 4K touch terminal upscale the entire UI.
             Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (!Application.isBatchMode && Display.main != null &&
+                Display.main.systemWidth > 0 && Display.main.systemHeight > 0 &&
+                (Screen.width != Display.main.systemWidth || Screen.height != Display.main.systemHeight))
+            {
+                // Player preferences can retain an older 1080p mode even when the current
+                // touch display is 4K. Request its actual desktop mode, not a fixed 4K size.
+                Screen.SetResolution(Display.main.systemWidth, Display.main.systemHeight,
+                    FullScreenMode.FullScreenWindow);
+            }
+#endif
             if (UnityEngine.Object.FindObjectOfType<TouchApiClient>() != null) return;
             var root = new GameObject("TG Touch Runtime");
             root.SetActive(false);

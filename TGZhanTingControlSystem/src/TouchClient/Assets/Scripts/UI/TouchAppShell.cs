@@ -33,6 +33,7 @@ namespace TG.Control.Touch.UI
         private bool homeDarkMode;
         private bool homeHallMode;
         private bool playbackHallMode;
+        private bool galleryHallMode;
 
         public Image Background => background;
         public RectTransform ContentRoot => contentHost.ContentRoot;
@@ -117,11 +118,12 @@ namespace TG.Control.Touch.UI
         public void Tick(DateTime now) => topBar.Tick(now);
 
         public void SetHomeDarkMode(bool enabled, bool revealHomeHall = false,
-            bool revealPlaybackHall = false)
+            bool revealPlaybackHall = false, bool revealGalleryHall = false)
         {
             homeDarkMode = enabled;
             homeHallMode = enabled && revealHomeHall;
             playbackHallMode = enabled && revealPlaybackHall;
+            galleryHallMode = enabled && revealGalleryHall;
             ApplyVisualMode();
         }
 
@@ -173,12 +175,13 @@ namespace TG.Control.Touch.UI
             background.color = homeDarkMode ? theme.HomeDarkBackground : theme.AppBackground;
             if (homeDarkBackground != null)
                 homeDarkBackground.gameObject.SetActive(homeDarkMode && homeDarkBackground.sprite != null);
-            veil.color = playbackHallMode ? theme.PlaybackBackdropVeil
+            veil.color = galleryHallMode ? theme.TechBackdropVeil
+                : playbackHallMode ? theme.PlaybackBackdropVeil
                 : homeHallMode ? theme.HomeHallBackdropVeil
                 : homeDarkMode ? theme.HomeDarkBackdropVeil : theme.BackdropVeil;
             ambientAccent.color = homeDarkMode
                 ? new Color(theme.HomeDarkAccent.r, theme.HomeDarkAccent.g, theme.HomeDarkAccent.b,
-                    homeHallMode ? .13f : playbackHallMode ? .11f : .08f)
+                    homeHallMode ? .13f : playbackHallMode || galleryHallMode ? .11f : .08f)
                 : new Color(theme.Primary.r, theme.Primary.g, theme.Primary.b, .035f);
             if (homeDarkMode)
             {
@@ -186,11 +189,13 @@ namespace TG.Control.Touch.UI
                 // double-line panel artwork competing with the exhibition photography.
                 chromeHeader.sprite = null;
                 chromeHeader.type = Image.Type.Simple;
-                chromeHeader.color = playbackHallMode ? theme.PlaybackHeader
+                chromeHeader.color = galleryHallMode ? theme.TechHeader
+                    : playbackHallMode ? theme.PlaybackHeader
                     : homeHallMode ? theme.HomeHallHeader : theme.HomeDarkHeader;
                 chromeNavigation.sprite = null;
                 chromeNavigation.type = Image.Type.Simple;
-                chromeNavigation.color = playbackHallMode ? theme.PlaybackNavigation
+                chromeNavigation.color = galleryHallMode ? theme.TechNavigation
+                    : playbackHallMode ? theme.PlaybackNavigation
                     : homeHallMode ? theme.HomeHallNavigation : theme.HomeDarkNavigation;
             }
             else
@@ -204,7 +209,8 @@ namespace TG.Control.Touch.UI
             }
             topBar?.SetHomeDarkMode(homeDarkMode);
             navigation?.SetHomeDarkMode(homeDarkMode);
-            contentHost?.SetHomeDarkMode(homeDarkMode, theme, homeHallMode, playbackHallMode);
+            contentHost?.SetHomeDarkMode(homeDarkMode, theme, homeHallMode, playbackHallMode,
+                galleryHallMode);
         }
 
         private void BuildExitConfirmation(Transform canvas)

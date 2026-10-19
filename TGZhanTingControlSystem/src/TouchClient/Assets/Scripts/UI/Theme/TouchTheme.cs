@@ -5,7 +5,8 @@ namespace TG.Control.Touch.UI.Theme
     /// <summary>Commercial TouchClient design tokens for the 1920x1080 runtime shell.</summary>
     public sealed class TouchTheme
     {
-        private static readonly string[] FontFamilies = { "Microsoft YaHei UI", "Microsoft YaHei", "Arial" };
+        private static readonly string[] FontFamilies =
+            { "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", "SimHei", "Noto Sans SC", "Arial" };
 
         // Light exhibition shell. Configurable server colors never replace these structural tokens.
         public Color AppBackground { get; } = ParseColor("#F5F8FC");
@@ -84,6 +85,26 @@ namespace TG.Control.Touch.UI.Theme
         public Color PlaybackGlass { get; } = new Color(.015f, .105f, .24f, .58f);
         public Color PlaybackBorder { get; } = new Color(.08f, .62f, 1f, .52f);
         public Color PlaybackBorderSoft { get; } = new Color(.16f, .62f, 1f, .30f);
+        // Shared technology-blue glass surfaces. Gallery adopts these first; other pages keep
+        // their accepted visual parameters until separately reviewed.
+        public Color TechBackdropVeil { get; } = new Color(.004f, .02f, .065f, .08f);
+        public Color TechHeader { get; } = new Color(.006f, .045f, .13f, .50f);
+        public Color TechNavigation { get; } = new Color(.006f, .05f, .14f, .58f);
+        public Color TechContentSurface { get; } = new Color(.008f, .06f, .16f, .24f);
+        public Color TechPanelSurface { get; } = new Color(.012f, .085f, .21f, .56f);
+        public Color TechPanelElevated { get; } = new Color(.012f, .09f, .22f, .68f);
+        public Color TechPreviewSurface { get; } = new Color(.009f, .055f, .14f, .66f);
+        public Color TechBorder { get; } = new Color(.12f, .66f, 1f, .54f);
+        public Color TechBorderSoft { get; } = new Color(.16f, .63f, 1f, .34f);
+        public Color TechSelectionSurface { get; } = new Color(.035f, .35f, .74f, .86f);
+        public Color TechPrimaryButton { get; } = ParseColor("#0878E9");
+        public Color TechPrimaryHover { get; } = ParseColor("#239AFF");
+        public Color TechPrimaryPressed { get; } = ParseColor("#075CBC");
+        public Color TechSecondaryButton { get; } = new Color(.055f, .27f, .55f, .88f);
+        public Color TechSecondaryHover { get; } = new Color(.075f, .38f, .70f, .94f);
+        public Color TechSecondaryPressed { get; } = new Color(.045f, .22f, .46f, .96f);
+        public Color TechDangerButton { get; } = new Color(.44f, .08f, .15f, .80f);
+        public Color TechDisabledButton { get; } = new Color(.24f, .34f, .48f, .82f);
         public Color HomeGlassContentTint { get; } = new Color(1f, 1f, 1f, .72f);
         public Color HomeGlassTitleTint { get; } = new Color(1f, 1f, 1f, .76f);
         public Color HomeGlassBottomTint { get; } = new Color(1f, 1f, 1f, .82f);

@@ -101,6 +101,45 @@ namespace TG.Control.Touch.UI.Components
             return button;
         }
 
+        /// <summary>A blue glass button for dark pages; retains the same UGUI event semantics.</summary>
+        public Button TechButton(Transform parent, string text, bool primary, UnityAction action,
+            bool danger = false)
+        {
+            var image = RoundedImage(text, parent, Color.white);
+            image.gameObject.name = (primary ? "Product Primary - " : "Product Secondary - ") + text;
+            var button = image.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(action);
+            var colors = button.colors;
+            colors.normalColor = danger ? theme.TechDangerButton
+                : primary ? theme.TechPrimaryButton : theme.TechSecondaryButton;
+            colors.highlightedColor = danger ? Color.Lerp(theme.TechDangerButton, theme.Error, .35f)
+                : primary ? theme.TechPrimaryHover : theme.TechSecondaryHover;
+            colors.pressedColor = danger ? theme.Error
+                : primary ? theme.TechPrimaryPressed : theme.TechSecondaryPressed;
+            colors.selectedColor = colors.highlightedColor;
+            colors.disabledColor = theme.TechDisabledButton;
+            colors.colorMultiplier = 1f;
+            colors.fadeDuration = .08f;
+            button.colors = colors;
+            var label = Label("Label", image.transform, text, theme.ButtonText, FontStyle.Bold,
+                Color.white, TextAnchor.MiddleCenter);
+            Stretch(label.rectTransform, 10, 4, -10, -4);
+            return button;
+        }
+
+        /// <summary>One restrained border and one translucent surface, with no raycast interception.</summary>
+        public Image TechPanel(string name, Transform parent, Color border, Color fill,
+            out Image surface, float borderWidth = 1f)
+        {
+            var frame = RoundedImage(name + " Frame", parent, border);
+            frame.raycastTarget = false;
+            surface = RoundedImage(name + " Surface", frame.transform, fill);
+            Stretch(surface.rectTransform, borderWidth, borderWidth, -borderWidth, -borderWidth);
+            surface.raycastTarget = false;
+            return frame;
+        }
+
         public InputField Input(Transform parent, string placeholder, int size, float height)
         {
             var image = RoundedImage("Route Name Input", parent, theme.InputBackground);
