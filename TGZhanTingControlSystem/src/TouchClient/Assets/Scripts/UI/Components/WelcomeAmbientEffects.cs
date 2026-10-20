@@ -12,10 +12,8 @@ namespace TG.Control.Touch.UI.Components
     [RequireComponent(typeof(CanvasRenderer))]
     public sealed class WelcomeAmbientEffects : MaskableGraphic
     {
-        // The welcome background is intentionally bright. These fixed pools are therefore
-        // large enough to read clearly from a 55-inch screen, while still remaining sparse.
-        private const int GlobeParticleCount = 34;
-        private const int StarCount = 42;
+        private const int GlobeParticleCount = 16;
+        private const int StarCount = 24;
 
         [Header("Effect switches")]
         [SerializeField] private bool effectsEnabled = true;
@@ -24,26 +22,25 @@ namespace TG.Control.Touch.UI.Components
         [SerializeField] private bool starTwinkleEnabled = true;
 
         [Header("Global")]
-        [SerializeField, Range(0f, 1.5f)] private float overallIntensity = 1.20f;
+        [SerializeField, Range(0f, 1.5f)] private float overallIntensity = .52f;
 
         [Header("Globe particles")]
-        [SerializeField, Range(.1f, 2f)] private float globeParticleSpeed = .84f;
-        [SerializeField, Range(.5f, 2f)] private float globeParticleSize = 1.24f;
-        [SerializeField, Range(0f, 1f)] private float globeParticleOpacity = .92f;
+        [SerializeField, Range(.1f, 2f)] private float globeParticleSpeed = .42f;
+        [SerializeField, Range(.5f, 2f)] private float globeParticleSize = .78f;
+        [SerializeField, Range(0f, 1f)] private float globeParticleOpacity = .44f;
 
         [Header("Base glow")]
-        [SerializeField, Range(1f, 10f)] private float baseBreathSeconds = 4f;
-        [SerializeField, Range(0f, 1f)] private float baseGlowOpacity = .72f;
+        [SerializeField, Range(1f, 10f)] private float baseBreathSeconds = 5f;
+        [SerializeField, Range(0f, 1f)] private float baseGlowOpacity = .24f;
 
         [Header("Stars")]
-        [SerializeField, Range(.1f, 2f)] private float starTwinkleSpeed = .78f;
-        [SerializeField, Range(.5f, 2f)] private float starSize = 1.28f;
-        [SerializeField, Range(0f, 1f)] private float starOpacity = .78f;
+        [SerializeField, Range(.1f, 2f)] private float starTwinkleSpeed = .46f;
+        [SerializeField, Range(.5f, 2f)] private float starSize = .72f;
+        [SerializeField, Range(0f, 1f)] private float starOpacity = .34f;
 
         private Particle[] globeParticles;
         private Particle[] stars;
         private Image baseGlow;
-        private readonly Image[] baseRipples = new Image[2];
         private Material runtimeMaterial;
         private float animationStartedAt;
         private bool initialized;
@@ -98,7 +95,7 @@ namespace TG.Control.Touch.UI.Components
             set => overallIntensity = Mathf.Clamp(value, 0f, 1.5f);
         }
 
-        public void Initialize(Sprite glowSprite, Sprite ringSprite)
+        public void Initialize(Sprite glowSprite)
         {
             if (initialized) return;
             initialized = true;
@@ -108,7 +105,7 @@ namespace TG.Control.Touch.UI.Components
 
             BuildParticleData();
             BuildMaterial();
-            BuildBaseVisuals(glowSprite, ringSprite);
+            BuildBaseVisuals(glowSprite);
             RefreshVisualState();
             SetAllDirty();
         }
@@ -163,14 +160,16 @@ namespace TG.Control.Touch.UI.Components
 
             for (var index = 0; index < globeParticles.Length; index++)
             {
+                var angle = Next(random, 0f, Mathf.PI * 2f);
+                var radius = Next(random, .98f, 1.18f);
                 globeParticles[index] = new Particle
                 {
-                    x = Next(random, .135f, .215f),
-                    y = Next(random, .165f, .252f),
+                    x = .5f + Mathf.Cos(angle) * Next(random, .118f, .145f) * radius,
+                    y = .465f + Mathf.Sin(angle) * Next(random, .185f, .225f) * radius,
                     phase = Next(random, 0f, Mathf.PI * 2f),
-                    speed = Next(random, .13f, .30f) * (index % 4 == 0 ? -1f : 1f),
-                    size = Next(random, 10f, 19f),
-                    opacity = Next(random, .62f, 1f)
+                    speed = Next(random, .34f, .62f),
+                    size = Next(random, 3.2f, 6.2f),
+                    opacity = Next(random, .45f, .90f)
                 };
             }
 
@@ -182,8 +181,8 @@ namespace TG.Control.Touch.UI.Components
                     y = Next(random, .64f, .965f),
                     phase = Next(random, 0f, Mathf.PI * 2f),
                     speed = Next(random, .35f, .86f),
-                    size = Next(random, 5.5f, 11f),
-                    opacity = Next(random, .45f, 1f)
+                    size = Next(random, 2.4f, 5.2f),
+                    opacity = Next(random, .35f, .82f)
                 };
             }
         }
@@ -205,18 +204,11 @@ namespace TG.Control.Touch.UI.Components
             material = runtimeMaterial;
         }
 
-        private void BuildBaseVisuals(Sprite glowSprite, Sprite ringSprite)
+        private void BuildBaseVisuals(Sprite glowSprite)
         {
             baseGlow = CreateImage("Welcome Base Breathing Glow", glowSprite,
                 new Color(.22f, .82f, 1f, 0f));
-            Anchor(baseGlow.rectTransform, -505f, -318f, 505f, -178f);
-
-            for (var index = 0; index < baseRipples.Length; index++)
-            {
-                baseRipples[index] = CreateImage("Welcome Base Diffusion Ring " + index, ringSprite,
-                    new Color(.29f, .88f, 1f, 0f));
-                Anchor(baseRipples[index].rectTransform, -580f, -340f, 580f, -156f);
-            }
+            Anchor(baseGlow.rectTransform, -410f, -286f, 410f, -202f);
         }
 
         private Image CreateImage(string objectName, Sprite sprite, Color tint)
@@ -235,53 +227,31 @@ namespace TG.Control.Touch.UI.Components
 
         private void PopulateStars(VertexHelper helper, Rect area, float elapsed)
         {
-            var color = new Color(.76f, .96f, 1f, 1f);
+            var color = new Color(.70f, .93f, 1f, 1f);
             for (var index = 0; index < stars.Length; index++)
             {
                 var particle = stars[index];
                 var wave = .5f + .5f * Mathf.Sin(particle.phase + elapsed * particle.speed * starTwinkleSpeed);
                 wave = Mathf.SmoothStep(.12f, 1f, wave);
-                color.a = particle.opacity * starOpacity * overallIntensity * (.24f + wave * .76f);
-                var size = particle.size * starSize * (.82f + wave * .36f);
-                var position = Point(area, particle.x, particle.y);
-                AddLightPoint(helper, position, size, color);
-
-                // Only the brighter peak of a star opens into a small cross. This preserves
-                // a calm sky while giving the visitor an obvious twinkle to notice.
-                if (wave > .82f)
-                {
-                    var glint = color;
-                    glint.a *= (wave - .82f) / .18f * .72f;
-                    AddStreak(helper, position, new Vector2(1f, 0f), size * 2.8f, size * .24f, glint);
-                    AddStreak(helper, position, new Vector2(0f, 1f), size * 2.8f, size * .24f, glint);
-                }
+                color.a = particle.opacity * starOpacity * overallIntensity * (.30f + wave * .70f);
+                var size = particle.size * starSize * (.88f + wave * .20f);
+                AddQuad(helper, Point(area, particle.x, particle.y), size, color);
             }
         }
 
         private void PopulateGlobeParticles(VertexHelper helper, Rect area, float elapsed)
         {
-            var color = new Color(.48f, .93f, 1f, 1f);
-            var center = Point(area, .5f, .465f);
+            var color = new Color(.48f, .88f, 1f, 1f);
             for (var index = 0; index < globeParticles.Length; index++)
             {
                 var particle = globeParticles[index];
-                var angle = particle.phase + elapsed * particle.speed * globeParticleSpeed;
-                var position = center + new Vector2(
-                    Mathf.Cos(angle) * area.width * particle.x,
-                    Mathf.Sin(angle) * area.height * particle.y);
-                var depth = .5f + .5f * Mathf.Sin(angle + particle.phase * .37f);
-                color.a = particle.opacity * globeParticleOpacity * overallIntensity * (.45f + depth * .55f);
-                var size = particle.size * globeParticleSize * (.88f + depth * .40f);
-                AddLightPoint(helper, position, size, color);
-
-                // A short, fading tail makes the orbit legible against the already detailed
-                // globe artwork without becoming the phase-two energy-ribbon effect.
-                var tangent = new Vector2(-Mathf.Sin(angle) * area.width * particle.x,
-                    Mathf.Cos(angle) * area.height * particle.y).normalized;
-                var tail = color;
-                tail.a *= .62f;
-                AddStreak(helper, position - tangent * size * 1.15f, tangent,
-                    size * 5.8f, size * .48f, tail);
+                var phase = particle.phase + elapsed * particle.speed * globeParticleSpeed;
+                var basePosition = Point(area, particle.x, particle.y);
+                var drift = new Vector2(Mathf.Sin(phase) * 7f, Mathf.Cos(phase * .73f) * 5f);
+                var shimmer = .5f + .5f * Mathf.Sin(phase * 1.27f);
+                color.a = particle.opacity * globeParticleOpacity * overallIntensity * (.38f + shimmer * .62f);
+                var size = particle.size * globeParticleSize * (.90f + shimmer * .16f);
+                AddQuad(helper, basePosition + drift, size, color);
             }
         }
 
@@ -295,17 +265,8 @@ namespace TG.Control.Touch.UI.Components
             var breath = .5f + .5f * Mathf.Sin(elapsed * Mathf.PI * 2f / period - Mathf.PI * .5f);
             breath = Mathf.SmoothStep(0f, 1f, breath);
             baseGlow.color = new Color(.22f, .82f, 1f,
-                baseGlowOpacity * overallIntensity * (.48f + breath * .52f));
-            baseGlow.rectTransform.localScale = new Vector3(1f + breath * .075f, 1f + breath * .21f, 1f);
-
-            for (var index = 0; index < baseRipples.Length; index++)
-            {
-                var ripple = baseRipples[index];
-                var cycle = Mathf.Repeat(elapsed / 5.2f + index * .5f, 1f);
-                var fade = 1f - Mathf.SmoothStep(.12f, 1f, cycle);
-                ripple.color = new Color(.29f, .88f, 1f, fade * .36f * overallIntensity);
-                ripple.rectTransform.localScale = new Vector3(.84f + cycle * .38f, .80f + cycle * .52f, 1f);
-            }
+                baseGlowOpacity * overallIntensity * (.56f + breath * .44f));
+            baseGlow.rectTransform.localScale = new Vector3(1f + breath * .025f, 1f + breath * .08f, 1f);
         }
 
         private void RefreshVisualState()
@@ -319,12 +280,6 @@ namespace TG.Control.Touch.UI.Components
             var visible = effectsEnabled && baseGlowEnabled;
             if (baseGlow != null && baseGlow.gameObject.activeSelf != visible)
                 baseGlow.gameObject.SetActive(visible);
-            for (var index = 0; index < baseRipples.Length; index++)
-            {
-                var ripple = baseRipples[index];
-                if (ripple != null && ripple.gameObject.activeSelf != visible)
-                    ripple.gameObject.SetActive(visible);
-            }
         }
 
         private static void AddQuad(VertexHelper helper, Vector2 center, float size, Color color)
@@ -344,42 +299,6 @@ namespace TG.Control.Touch.UI.Components
             vertex.uv0 = new Vector2(1f, 1f);
             helper.AddVert(vertex);
             vertex.position = new Vector3(center.x + half, center.y - half);
-            vertex.uv0 = new Vector2(1f, 0f);
-            helper.AddVert(vertex);
-
-            helper.AddTriangle(start, start + 1, start + 2);
-            helper.AddTriangle(start + 2, start + 3, start);
-        }
-
-        private static void AddLightPoint(VertexHelper helper, Vector2 center, float size, Color color)
-        {
-            // The enlarged low-alpha halo makes motion readable against the luminous stock
-            // background; the smaller core keeps the point crisp rather than foggy.
-            var halo = color;
-            halo.a *= .30f;
-            AddQuad(helper, center, size * 2.6f, halo);
-            AddQuad(helper, center, size, color);
-        }
-
-        private static void AddStreak(VertexHelper helper, Vector2 center, Vector2 direction,
-            float length, float thickness, Color color)
-        {
-            var halfLength = direction.normalized * (length * .5f);
-            var normal = new Vector2(-direction.y, direction.x).normalized * (thickness * .5f);
-            var start = helper.currentVertCount;
-            var vertex = UIVertex.simpleVert;
-            vertex.color = color;
-
-            vertex.position = center - halfLength - normal;
-            vertex.uv0 = new Vector2(0f, 0f);
-            helper.AddVert(vertex);
-            vertex.position = center - halfLength + normal;
-            vertex.uv0 = new Vector2(0f, 1f);
-            helper.AddVert(vertex);
-            vertex.position = center + halfLength + normal;
-            vertex.uv0 = new Vector2(1f, 1f);
-            helper.AddVert(vertex);
-            vertex.position = center + halfLength - normal;
             vertex.uv0 = new Vector2(1f, 0f);
             helper.AddVert(vertex);
 

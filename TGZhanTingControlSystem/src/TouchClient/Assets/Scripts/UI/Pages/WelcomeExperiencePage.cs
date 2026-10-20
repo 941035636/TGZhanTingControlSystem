@@ -18,6 +18,7 @@ namespace TG.Control.Touch.UI.Pages
     public sealed class WelcomeExperiencePage
     {
         private static Sprite defaultBackgroundSprite;
+        private static Sprite globeSprite;
         private static Sprite ringSprite;
         private static Sprite glowSprite;
         private static Sprite buttonSprite;
@@ -27,6 +28,7 @@ namespace TG.Control.Touch.UI.Pages
         private readonly TouchImageLoader imageLoader;
         private readonly GameObject root;
         private readonly Image background;
+        private readonly Image globe;
         private readonly WelcomeAmbientEffects ambientEffects;
         private Image brandLogo;
         private Text brandMarkText;
@@ -49,6 +51,7 @@ namespace TG.Control.Touch.UI.Pages
         private bool requesting;
         private bool completing;
         private float shownAt;
+        private float pressFeedbackStartedAt = -1f;
         private float pressFeedbackUntil;
         private int renderedSecond = -1;
 
@@ -72,10 +75,20 @@ namespace TG.Control.Touch.UI.Pages
             background.raycastTarget = false;
             root = background.gameObject;
 
+            globe = factory.Image("Standby Holographic Globe", root.transform, Color.white);
+            TouchUiFactory.Stretch(globe.rectTransform);
+            globe.sprite = LoadGlobe();
+            globe.type = Image.Type.Simple;
+            globe.preserveAspect = false;
+            // The source globe already contains a luminous edge. A small opacity reduction
+            // keeps the continents crisp without letting the halo overpower the headings.
+            globe.color = new Color(.94f, .97f, 1f, .93f);
+            globe.raycastTarget = false;
+
             var ambientLayer = factory.Rect("Welcome Ambient Effects", root.transform);
             TouchUiFactory.Stretch(ambientLayer);
             ambientEffects = ambientLayer.gameObject.AddComponent<WelcomeAmbientEffects>();
-            ambientEffects.Initialize(GetGlowSprite(), GetRingSprite());
+            ambientEffects.Initialize(GetGlowSprite());
 
             BuildTopBrand(factory);
 
@@ -85,24 +98,24 @@ namespace TG.Control.Touch.UI.Pages
             headingGroup.interactable = false;
             headingGroup.blocksRaycasts = false;
             var headingAccent = factory.Image("Standby Heading Accent", headings, new Color(.51f, .94f, 1f, .92f));
-            TouchUiFactory.Anchor(headingAccent.rectTransform, .5f, 1, .5f, 1, -44, -132, 44, -129);
+            TouchUiFactory.Anchor(headingAccent.rectTransform, .5f, 1, .5f, 1, -44, -115, 44, -112);
             headingAccent.raycastTarget = false;
             eyebrow = TopLabel(factory, headings, "展厅自动讲解系统", 24, FontStyle.Bold,
-                new Color(.88f, .96f, 1f, 1), 149, 42);
+                new Color(.88f, .96f, 1f, 1), 132, 40);
             title = TopLabel(factory, headings, "欢迎莅临智慧展厅", 76, FontStyle.Bold,
-                Color.white, 201, 91);
+                Color.white, 184, 88);
             AddShadow(title, new Color(0, .08f, .24f, .78f), new Vector2(0, -3));
             subtitle = TopLabel(factory, headings, "探索 · 体验 · 发现 · 共创未来", 28, FontStyle.Normal,
-                new Color(.88f, .96f, 1f, 1), 305, 54);
+                new Color(.88f, .96f, 1f, 1), 286, 50);
 
             BuildPulseRings(factory, theme);
             wakeGlow = factory.Image("Standby Touch Soft Glow", root.transform, new Color(.11f, .72f, 1f, .58f));
             wakeGlow.sprite = GetGlowSprite();
-            TouchUiFactory.Anchor(wakeGlow.rectTransform, .5f, .5f, .5f, .5f, -138, -433, 138, -157);
+            TouchUiFactory.Anchor(wakeGlow.rectTransform, .5f, .5f, .5f, .5f, -126, -421, 126, -169);
             wakeGlow.raycastTarget = false;
             wakeImage = factory.Image("Welcome Touch Action", root.transform, Color.white);
             wakeImage.sprite = GetButtonSprite();
-            TouchUiFactory.Anchor(wakeImage.rectTransform, .5f, .5f, .5f, .5f, -91, -386, 91, -204);
+            TouchUiFactory.Anchor(wakeImage.rectTransform, .5f, .5f, .5f, .5f, -86, -381, 86, -209);
             wakeButton = wakeImage.gameObject.AddComponent<Button>();
             wakeButton.targetGraphic = wakeImage;
             wakeButton.onClick.AddListener(RequestWelcome);
@@ -110,27 +123,30 @@ namespace TG.Control.Touch.UI.Pages
             colors.normalColor = Color.white;
             colors.highlightedColor = new Color(.88f, .96f, 1f, 1);
             colors.pressedColor = new Color(.64f, .84f, 1f, 1);
-            colors.disabledColor = new Color(.62f, .73f, .84f, .72f);
+            colors.disabledColor = new Color(.78f, .88f, 1f, .86f);
             colors.fadeDuration = .08f;
             wakeButton.colors = colors;
 
             var hand = factory.Image("Standby White Touch Gesture", wakeImage.transform, Color.white);
             hand.sprite = GetHandSprite();
-            TouchUiFactory.Anchor(hand.rectTransform, .5f, .5f, .5f, .5f, -48, -47, 48, 49);
+            TouchUiFactory.Anchor(hand.rectTransform, .5f, .5f, .5f, .5f, -43, -44, 43, 44);
             hand.raycastTarget = false;
+            AddShadow(hand, new Color(.0f, .18f, .55f, .46f), new Vector2(0, -2));
             var gestureRipple = factory.Image("Standby Gesture Ripple", wakeImage.transform,
-                new Color(1f, 1f, 1f, .92f));
+                new Color(.88f, .98f, 1f, .88f));
             gestureRipple.sprite = GetRingSprite();
-            TouchUiFactory.Anchor(gestureRipple.rectTransform, .5f, .5f, .5f, .5f, -19, 26, 19, 64);
+            TouchUiFactory.Anchor(gestureRipple.rectTransform, .5f, .5f, .5f, .5f, -17, 25, 17, 59);
             gestureRipple.raycastTarget = false;
 
-            caption = BottomLabel(factory, root.transform, string.Empty, 31, FontStyle.Normal,
-                Color.white, 167, 237);
-            caption.resizeTextMinSize = 20;
+            caption = BottomLabel(factory, root.transform, string.Empty, 32, FontStyle.Normal,
+                Color.white, 166, 238);
+            caption.resizeTextMinSize = 22;
             AddShadow(caption, new Color(0, .06f, .18f, .9f), new Vector2(0, -2));
-            status = BottomLabel(factory, root.transform, "轻触屏幕，开启智慧参观之旅", 24,
-                FontStyle.Bold, Color.white, 98, 145);
+            AddOutline(caption, new Color(0, .055f, .16f, .58f), new Vector2(1.5f, 1.5f));
+            status = BottomLabel(factory, root.transform, "轻触屏幕，开启智慧参观之旅", 27,
+                FontStyle.Bold, new Color(.94f, .985f, 1f, 1f), 88, 150);
             AddShadow(status, new Color(0, .08f, .22f, .88f), new Vector2(0, -2));
+            AddOutline(status, new Color(0, .055f, .16f, .68f), new Vector2(1.5f, 1.5f));
 
             homeFallbackButton = factory.TouchButton(root.transform, "进入讲解首页", false, Complete);
             TouchUiFactory.Anchor(homeFallbackButton.GetComponent<RectTransform>(), .5f, 0, .5f, 0,
@@ -187,6 +203,8 @@ namespace TG.Control.Touch.UI.Pages
             caption.text = string.Empty;
             status.text = "轻触屏幕，开启智慧参观之旅";
             shownAt = Time.unscaledTime;
+            pressFeedbackStartedAt = -1f;
+            pressFeedbackUntil = -1f;
             renderedSecond = -1;
             headingGroup.alpha = 0;
             SetPulseVisible(true);
@@ -263,7 +281,8 @@ namespace TG.Control.Touch.UI.Pages
         {
             if (requesting) return;
             requesting = true;
-            pressFeedbackUntil = Time.unscaledTime + .20f;
+            pressFeedbackStartedAt = Time.unscaledTime;
+            pressFeedbackUntil = pressFeedbackStartedAt + .24f;
             wakeButton.interactable = false;
             status.text = "正在连接LED播放端，准备欢迎语音…";
             WelcomeRequested?.Invoke();
@@ -309,13 +328,13 @@ namespace TG.Control.Touch.UI.Pages
 
         private void BuildPulseRings(TouchUiFactory factory, TouchTheme theme)
         {
-            for (var index = 0; index < 3; index++)
+            for (var index = 0; index < 2; index++)
             {
-                var alpha = .34f - index * .075f;
+                var alpha = .23f - index * .055f;
                 var ring = factory.Image("Welcome Touch Pulse " + index, root.transform,
                     new Color(.23f, .86f, 1f, alpha));
                 ring.sprite = GetRingSprite();
-                var radius = 101 + index * 11;
+                var radius = 97 + index * 14;
                 TouchUiFactory.Anchor(ring.rectTransform, .5f, .5f, .5f, .5f,
                     -radius, -295 - radius, radius, -295 + radius);
                 ring.raycastTarget = false;
@@ -386,18 +405,25 @@ namespace TG.Control.Touch.UI.Pages
             {
                 var elapsed = Time.unscaledTime - shownAt;
                 headingGroup.alpha = Mathf.Clamp01(elapsed / .75f);
-                var breath = 1f + Mathf.Sin(Time.unscaledTime * 1.7f) * .027f;
-                var pressed = Time.unscaledTime < pressFeedbackUntil ? .92f : 1f;
-                wakeImage.rectTransform.localScale = Vector3.one * breath * pressed;
+                var breathPhase = Time.unscaledTime * Mathf.PI * 2f / 4.8f;
+                var breathWave = Mathf.Sin(breathPhase);
+                var breath = 1f + breathWave * .018f;
+                var clickWave = 0f;
+                if (Time.unscaledTime < pressFeedbackUntil && pressFeedbackStartedAt >= 0f)
+                {
+                    var progress = Mathf.Clamp01((Time.unscaledTime - pressFeedbackStartedAt) / .24f);
+                    clickWave = Mathf.Sin(progress * Mathf.PI);
+                }
+                wakeImage.rectTransform.localScale = Vector3.one * breath * (1f - clickWave * .075f);
                 wakeGlow.color = new Color(.11f, .72f, 1f,
-                    .45f + Mathf.Sin(Time.unscaledTime * 1.7f) * .10f);
+                    .34f + breathWave * .065f + clickWave * .13f);
                 for (var index = 0; index < pulseRings.Count; index++)
                 {
-                    var phase = Time.unscaledTime * 1.35f - index * .65f;
-                    var scale = 1f + Mathf.Sin(phase) * .035f;
+                    var phase = Time.unscaledTime * Mathf.PI * 2f / 5.4f - index * 1.1f;
+                    var scale = 1f + Mathf.Sin(phase) * .025f + clickWave * .018f;
                     pulseRings[index].rectTransform.localScale = Vector3.one * scale;
                     pulseRings[index].color = new Color(.23f, .86f, 1f,
-                        (.32f - index * .07f) * (.82f + .18f * Mathf.Sin(phase)));
+                        (.22f - index * .055f) * (.80f + .20f * Mathf.Sin(phase)) + clickWave * .045f);
                 }
                 var now = DateTime.Now;
                 if (renderedSecond != now.Second)
@@ -464,20 +490,46 @@ namespace TG.Control.Touch.UI.Pages
             shadow.effectDistance = distance;
         }
 
+        private static void AddOutline(Graphic graphic, Color color, Vector2 distance)
+        {
+            var outline = graphic.gameObject.AddComponent<Outline>();
+            outline.effectColor = color;
+            outline.effectDistance = distance;
+        }
+
         private static Sprite LoadDefaultBackground()
         {
             if (defaultBackgroundSprite != null) return defaultBackgroundSprite;
-            var texture = Resources.Load<Texture2D>("Touch/standby-clean-background");
+            var texture = Resources.Load<Texture2D>(
+                "TGExhibitionUI/Unity_4K_Standby_Layers/01_Exhibition_Clean_Background_3840x2160");
             if (texture == null)
             {
-                Debug.LogError("Standby clean background is missing from Resources/Touch.");
-                return null;
+                Debug.LogError("Layered standby background is missing; using the legacy composite fallback.");
+                texture = Resources.Load<Texture2D>("Touch/standby-clean-background");
+                if (texture == null) return null;
             }
             defaultBackgroundSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                 new Vector2(.5f, .5f), 100);
-            defaultBackgroundSprite.name = "TG Standby Clean Background";
+            defaultBackgroundSprite.name = "TG Standby Layered Clean Background";
             defaultBackgroundSprite.hideFlags = HideFlags.HideAndDontSave;
             return defaultBackgroundSprite;
+        }
+
+        private static Sprite LoadGlobe()
+        {
+            if (globeSprite != null) return globeSprite;
+            var texture = Resources.Load<Texture2D>(
+                "TGExhibitionUI/Unity_4K_Standby_Layers/02_Holographic_Globe_Transparent_3840x2160");
+            if (texture == null)
+            {
+                Debug.LogError("Layered standby globe is missing from Resources.");
+                return null;
+            }
+            globeSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                new Vector2(.5f, .5f), 100);
+            globeSprite.name = "TG Standby Holographic Globe";
+            globeSprite.hideFlags = HideFlags.HideAndDontSave;
+            return globeSprite;
         }
 
         private static Sprite GetRingSprite()
@@ -541,7 +593,7 @@ namespace TG.Control.Touch.UI.Pages
         private static Sprite GetButtonSprite()
         {
             if (buttonSprite != null) return buttonSprite;
-            const int size = 128;
+            const int size = 256;
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
             {
                 name = "TG Standby Touch Button",
@@ -555,10 +607,13 @@ namespace TG.Control.Touch.UI.Pages
             for (var x = 0; x < size; x++)
             {
                 var radius = Vector2.Distance(new Vector2(x, y), new Vector2(center, center)) / center;
-                var color = Color.Lerp(new Color(.13f, .63f, 1f), new Color(.015f, .25f, .80f),
-                    Mathf.Clamp01(radius * radius));
-                var rim = Mathf.Exp(-Mathf.Pow((radius - .91f) / .025f, 2));
-                color = Color.Lerp(color, new Color(.37f, .91f, 1f), rim * .85f);
+                var radial = Mathf.Clamp01(radius * radius);
+                var color = Color.Lerp(new Color(.11f, .62f, 1f), new Color(.018f, .24f, .68f), radial);
+                var glassHighlight = Mathf.Clamp01((y / (float)size - .48f) * 1.25f) * (1f - radial) * .15f;
+                color = Color.Lerp(color, new Color(.42f, .90f, 1f), glassHighlight);
+                var innerRim = Mathf.Exp(-Mathf.Pow((radius - .79f) / .018f, 2)) * .22f;
+                var outerRim = Mathf.Exp(-Mathf.Pow((radius - .925f) / .018f, 2));
+                color = Color.Lerp(color, new Color(.37f, .91f, 1f), outerRim * .88f + innerRim);
                 color.a = Mathf.Clamp01((.99f - radius) * 45f);
                 pixels[y * size + x] = color;
             }
@@ -573,17 +628,19 @@ namespace TG.Control.Touch.UI.Pages
         private static Sprite GetHandSprite()
         {
             if (handSprite != null) return handSprite;
-            const int size = 128;
+            const int size = 192;
             var outline = new[]
             {
-                new Vector2(46, 12), new Vector2(77, 12), new Vector2(88, 20),
-                new Vector2(95, 36), new Vector2(98, 56), new Vector2(95, 65),
-                new Vector2(90, 69), new Vector2(85, 67), new Vector2(81, 72),
-                new Vector2(76, 73), new Vector2(71, 69), new Vector2(71, 97),
-                new Vector2(68, 104), new Vector2(61, 106), new Vector2(55, 102),
-                new Vector2(52, 96), new Vector2(52, 53), new Vector2(43, 63),
-                new Vector2(37, 66), new Vector2(31, 63), new Vector2(29, 57),
-                new Vector2(31, 49), new Vector2(39, 36), new Vector2(43, 20)
+                new Vector2(63, 20), new Vector2(113, 20), new Vector2(126, 28),
+                new Vector2(135, 42), new Vector2(139, 75), new Vector2(136, 87),
+                new Vector2(129, 92), new Vector2(121, 90), new Vector2(116, 98),
+                new Vector2(107, 101), new Vector2(98, 96), new Vector2(94, 104),
+                new Vector2(85, 107), new Vector2(77, 102), new Vector2(77, 151),
+                new Vector2(74, 162), new Vector2(66, 168), new Vector2(57, 165),
+                new Vector2(52, 157), new Vector2(52, 94), new Vector2(43, 105),
+                new Vector2(34, 109), new Vector2(25, 106), new Vector2(19, 98),
+                new Vector2(18, 88), new Vector2(22, 79), new Vector2(35, 61),
+                new Vector2(48, 37), new Vector2(56, 25)
             };
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
             {
@@ -597,11 +654,11 @@ namespace TG.Control.Touch.UI.Pages
             for (var x = 0; x < size; x++)
             {
                 var coverage = 0;
-                for (var sampleY = 0; sampleY < 2; sampleY++)
-                for (var sampleX = 0; sampleX < 2; sampleX++)
-                    if (InsidePolygon(new Vector2(x + .25f + sampleX * .5f,
-                            y + .25f + sampleY * .5f), outline)) coverage++;
-                pixels[y * size + x] = new Color(1, 1, 1, coverage * .25f);
+                for (var sampleY = 0; sampleY < 3; sampleY++)
+                for (var sampleX = 0; sampleX < 3; sampleX++)
+                    if (InsidePolygon(new Vector2(x + (sampleX + .5f) / 3f,
+                            y + (sampleY + .5f) / 3f), outline)) coverage++;
+                pixels[y * size + x] = new Color(1, 1, 1, coverage / 9f);
             }
             texture.SetPixels(pixels);
             texture.Apply(false, true);
