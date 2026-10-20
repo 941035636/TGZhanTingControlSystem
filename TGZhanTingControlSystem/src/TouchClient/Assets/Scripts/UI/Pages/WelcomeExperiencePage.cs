@@ -79,7 +79,10 @@ namespace TG.Control.Touch.UI.Pages
             TouchUiFactory.Stretch(globe.rectTransform);
             globe.sprite = LoadGlobe();
             globe.type = Image.Type.Simple;
-            globe.preserveAspect = false;
+            globe.preserveAspect = true;
+            // The transparent source artwork has an oval outer silhouette. Correct only
+            // this independent layer so the exhibition background keeps its proportions.
+            globe.rectTransform.localScale = new Vector3(1.12f, 1f, 1f);
             // The source globe already contains a luminous edge. A small opacity reduction
             // keeps the continents crisp without letting the halo overpower the headings.
             globe.color = new Color(.94f, .97f, 1f, .93f);
@@ -135,7 +138,8 @@ namespace TG.Control.Touch.UI.Pages
             var gestureRipple = factory.Image("Standby Gesture Ripple", wakeImage.transform,
                 new Color(.88f, .98f, 1f, .88f));
             gestureRipple.sprite = GetRingSprite();
-            TouchUiFactory.Anchor(gestureRipple.rectTransform, .5f, .5f, .5f, .5f, -17, 25, 17, 59);
+            // The hand sprite's fingertip sits 13 UI units left of its rect center.
+            TouchUiFactory.Anchor(gestureRipple.rectTransform, .5f, .5f, .5f, .5f, -30, 25, 4, 59);
             gestureRipple.raycastTarget = false;
 
             caption = BottomLabel(factory, root.transform, string.Empty, 32, FontStyle.Normal,
