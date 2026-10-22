@@ -797,6 +797,7 @@ namespace TG.Control.Touch
                 appShell.SetActiveSection(section);
             }
             if (changed && state == PageState.RouteEditor) routeEditorPage?.OnShown();
+            if (changed && state == PageState.ImageGallery) imageGalleryPage?.OnShown();
         }
 
         private void OnShellNavigationRequested(TouchShellSection section)

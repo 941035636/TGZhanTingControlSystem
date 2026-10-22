@@ -30,6 +30,7 @@ namespace TG.Control.Touch.UI.Pages
         private readonly RectTransform root;
         private readonly RectTransform moduleList;
         private readonly RectTransform thumbnailList;
+        private readonly ScrollRect thumbnailScroll;
         private readonly Image preview;
         private readonly GameObject previewPlaceholder;
         private readonly Text previewTitle;
@@ -42,6 +43,8 @@ namespace TG.Control.Touch.UI.Pages
         private readonly Button nextButton;
         private readonly Button slideshowButton;
         private readonly Button stopButton;
+        private readonly Button thumbnailScrollPreviousButton;
+        private readonly Button thumbnailScrollNextButton;
         private readonly List<ModuleItem> moduleItems = new List<ModuleItem>();
         private readonly List<Image> thumbnailSurfaces = new List<Image>();
 
@@ -52,6 +55,9 @@ namespace TG.Control.Touch.UI.Pages
         private long renderedContentVersion = long.MinValue;
         private bool previewDirtyByUser;
         private bool slideshowActive;
+
+        private const float ThumbnailWidth = 174f;
+        private const float ThumbnailSpacing = 12f;
 
         public RectTransform Root => root;
         public event Action<string, int> DisplayRequested;
@@ -133,22 +139,38 @@ namespace TG.Control.Touch.UI.Pages
                 theme.TechPanelSurface, out var thumbnailSurface);
             TouchUiFactory.Anchor(thumbnailFrame.rectTransform, 0, 0, 1, 0, 326, 0, -350, 158);
             var thumbnailViewport = factory.Image("Gallery Thumbnail Viewport", thumbnailSurface.transform, Color.clear);
-            TouchUiFactory.Stretch(thumbnailViewport.rectTransform, 14, 12, -14, -12);
+            TouchUiFactory.Stretch(thumbnailViewport.rectTransform, 76, 12, -76, -12);
             thumbnailViewport.gameObject.AddComponent<RectMask2D>();
             thumbnailList = factory.Rect("Gallery Thumbnail List", thumbnailViewport.transform);
             TouchUiFactory.Anchor(thumbnailList, 0, 0, 0, 1, 0, 0, 0, 0);
+            thumbnailList.pivot = new Vector2(0, .5f);
             var thumbnailLayout = thumbnailList.gameObject.AddComponent<HorizontalLayoutGroup>();
-            thumbnailLayout.spacing = 12;
+            thumbnailLayout.spacing = ThumbnailSpacing;
             thumbnailLayout.childControlWidth = false;
             thumbnailLayout.childControlHeight = true;
             thumbnailLayout.childForceExpandHeight = true;
             thumbnailList.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            var thumbnailScroll = thumbnailViewport.gameObject.AddComponent<ScrollRect>();
+            thumbnailScroll = thumbnailViewport.gameObject.AddComponent<ScrollRect>();
             thumbnailScroll.viewport = thumbnailViewport.rectTransform;
             thumbnailScroll.content = thumbnailList;
             thumbnailScroll.horizontal = true;
             thumbnailScroll.vertical = false;
             thumbnailScroll.scrollSensitivity = 36;
+            thumbnailScroll.movementType = ScrollRect.MovementType.Clamped;
+            thumbnailScroll.onValueChanged.AddListener(_ => UpdateThumbnailScrollButtons());
+
+            thumbnailScrollPreviousButton = factory.TechButton(thumbnailSurface.transform, "<", false,
+                () => ScrollThumbnails(-1));
+            TouchUiFactory.Anchor(thumbnailScrollPreviousButton.GetComponent<RectTransform>(), 0, 0, 0, 1,
+                14, 24, 64, -24);
+            StyleThumbnailScrollButton(thumbnailScrollPreviousButton);
+
+            thumbnailScrollNextButton = factory.TechButton(thumbnailSurface.transform, ">", false,
+                () => ScrollThumbnails(1));
+            TouchUiFactory.Anchor(thumbnailScrollNextButton.GetComponent<RectTransform>(), 1, 0, 1, 1,
+                -64, 24, -14, -24);
+            StyleThumbnailScrollButton(thumbnailScrollNextButton);
+            UpdateThumbnailScrollButtons();
 
             var controlFrame = factory.TechPanel("Gallery Control", root, theme.TechBorderSoft,
                 theme.TechPanelElevated, out var controlSurface);
@@ -229,6 +251,13 @@ namespace TG.Control.Touch.UI.Pages
         public void RefreshTheme()
         {
             // The gallery uses fixed structural blue tokens; status and interactions stay state-bound.
+        }
+
+        public void OnShown()
+        {
+            // Re-entering the page always presents the strip from its natural left edge. The preview
+            // selection remains server/user-driven and will scroll back into view when it changes.
+            ResetThumbnailScroll();
         }
 
         public void ShowFeedback(string message)
@@ -314,7 +343,11 @@ namespace TG.Control.Touch.UI.Pages
         {
             TouchUiFactory.Clear(thumbnailList);
             thumbnailSurfaces.Clear();
-            if (selectedModule?.galleryImages == null) return;
+            if (selectedModule?.galleryImages == null)
+            {
+                ResetThumbnailScroll();
+                return;
+            }
             for (var index = 0; index < selectedModule.galleryImages.Length; index++)
             {
                 var capturedIndex = index;
@@ -322,8 +355,8 @@ namespace TG.Control.Touch.UI.Pages
                 var frame = factory.RoundedImage("Gallery Thumbnail " + (index + 1), thumbnailList,
                     theme.TechBorderSoft);
                 var element = frame.gameObject.AddComponent<LayoutElement>();
-                element.preferredWidth = 174;
-                element.minWidth = 174;
+                element.preferredWidth = ThumbnailWidth;
+                element.minWidth = ThumbnailWidth;
                 var image = factory.Image("Thumbnail Image", frame.transform, theme.TechPreviewSurface);
                 TouchUiFactory.Stretch(image.rectTransform, 3, 3, -3, -3);
                 image.preserveAspect = true;
@@ -344,6 +377,7 @@ namespace TG.Control.Touch.UI.Pages
                 if (!string.IsNullOrWhiteSpace(asset?.url))
                     imageLoader.LoadContain(image, normalizeUrl(asset.url));
             }
+            ResetThumbnailScroll();
         }
 
         private void LoadPreview(Func<string, string> normalizeUrl)
@@ -367,6 +401,7 @@ namespace TG.Control.Touch.UI.Pages
                 ? selectedModule.name + " · 图片 " + (previewIndex + 1)
                 : asset.name;
             previewCounter.text = (previewIndex + 1) + " / " + images.Length;
+            EnsureThumbnailVisible(previewIndex);
             if (asset == null || string.IsNullOrWhiteSpace(asset.url)) return;
             var expectedModule = selectedModule.id;
             var expectedIndex = previewIndex;
@@ -375,6 +410,82 @@ namespace TG.Control.Touch.UI.Pages
                 if (selectedModule != null && selectedModule.id == expectedModule && previewIndex == expectedIndex)
                     previewPlaceholder.SetActive(!loaded);
             });
+        }
+
+        private void StyleThumbnailScrollButton(Button button)
+        {
+            var label = button.GetComponentInChildren<Text>();
+            if (label == null) return;
+            label.fontSize = 32;
+            label.fontStyle = FontStyle.Bold;
+            label.color = theme.HomeDarkTextPrimary;
+        }
+
+        private void ResetThumbnailScroll()
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(thumbnailList);
+            thumbnailScroll.StopMovement();
+            thumbnailScroll.horizontalNormalizedPosition = 0;
+            UpdateThumbnailScrollButtons();
+        }
+
+        private void ScrollThumbnails(int direction)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(thumbnailList);
+            var viewportWidth = thumbnailScroll.viewport.rect.width;
+            var scrollableWidth = Mathf.Max(0, thumbnailList.rect.width - viewportWidth);
+            if (scrollableWidth <= .5f)
+            {
+                UpdateThumbnailScrollButtons();
+                return;
+            }
+
+            var currentOffset = thumbnailScroll.horizontalNormalizedPosition * scrollableWidth;
+            var step = Mathf.Max((ThumbnailWidth + ThumbnailSpacing) * 2, viewportWidth * .65f);
+            var targetOffset = Mathf.Clamp(currentOffset + direction * step, 0, scrollableWidth);
+            thumbnailScroll.StopMovement();
+            thumbnailScroll.horizontalNormalizedPosition = targetOffset / scrollableWidth;
+            UpdateThumbnailScrollButtons();
+        }
+
+        private void EnsureThumbnailVisible(int index)
+        {
+            if (index < 0 || index >= thumbnailSurfaces.Count) return;
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(thumbnailList);
+            var viewportWidth = thumbnailScroll.viewport.rect.width;
+            var scrollableWidth = Mathf.Max(0, thumbnailList.rect.width - viewportWidth);
+            if (scrollableWidth <= .5f)
+            {
+                thumbnailScroll.horizontalNormalizedPosition = 0;
+                UpdateThumbnailScrollButtons();
+                return;
+            }
+
+            var currentOffset = thumbnailScroll.horizontalNormalizedPosition * scrollableWidth;
+            var itemStart = index * (ThumbnailWidth + ThumbnailSpacing);
+            var itemEnd = itemStart + ThumbnailWidth;
+            var targetOffset = currentOffset;
+            if (itemStart < currentOffset)
+                targetOffset = itemStart;
+            else if (itemEnd > currentOffset + viewportWidth)
+                targetOffset = itemEnd - viewportWidth;
+
+            thumbnailScroll.horizontalNormalizedPosition = Mathf.Clamp01(targetOffset / scrollableWidth);
+            UpdateThumbnailScrollButtons();
+        }
+
+        private void UpdateThumbnailScrollButtons()
+        {
+            if (thumbnailScrollPreviousButton == null || thumbnailScrollNextButton == null ||
+                thumbnailScroll == null) return;
+            var hasOverflow = thumbnailList.rect.width > thumbnailScroll.viewport.rect.width + .5f;
+            thumbnailScrollPreviousButton.interactable = hasOverflow &&
+                                                        thumbnailScroll.horizontalNormalizedPosition > .001f;
+            thumbnailScrollNextButton.interactable = hasOverflow &&
+                                                    thumbnailScroll.horizontalNormalizedPosition < .999f;
         }
 
         private void RenderModuleSelection(GallerySessionStatus session)
